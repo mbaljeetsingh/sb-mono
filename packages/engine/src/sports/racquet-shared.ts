@@ -19,7 +19,32 @@ export type RacquetEvent =
   | (BaseEvent & { type: "undo" })
   | (BaseEvent & { type: "game.end" })
   | (BaseEvent & { type: "sides.swap" })
-  | (BaseEvent & { type: "team.rename"; side: SideId; name: string });
+  | (BaseEvent & { type: "team.rename"; side: SideId; name: string })
+  | (BaseEvent & { type: "walkover"; winner: SideId })
+  | (BaseEvent & {
+      type: "retirement";
+      retiring: SideId;
+      reason?: string;
+    })
+  | (BaseEvent & {
+      type: "default";
+      defaulted: SideId;
+      reason?: string;
+    })
+  | (BaseEvent & {
+      type: "timeout.start";
+      side: SideId;
+      kind: "standard" | "medical" | "injury";
+    })
+  | (BaseEvent & { type: "timeout.end"; side: SideId })
+  | (BaseEvent & { type: "suspension.start"; reason?: string })
+  | (BaseEvent & { type: "suspension.end" })
+  | (BaseEvent & {
+      type: "score.correct";
+      games: GameScore[];
+      gamesWon: { a: number; b: number };
+      reason?: string;
+    });
 
 export type GameScore = { a: number; b: number };
 
@@ -36,6 +61,13 @@ export type RacquetState = BaseState & {
   isMatchPoint: boolean;
   names: { a: string; b: string };
   sidesSwapped: boolean;
+  /** How the match ended: 'normal' if scored to completion, or one of the
+   * terminal events. null while in progress. */
+  endReason: "normal" | "walkover" | "retirement" | "default" | null;
+  /** Set when a timeout is currently active. */
+  timeout: { side: SideId; kind: "standard" | "medical" | "injury" } | null;
+  /** Set while the match is suspended (rain, power, crowd, etc.). */
+  suspended: boolean;
 };
 
 /** Generic config shape for all racquet-family sports. Sports may extend with their own fields. */
@@ -67,6 +99,9 @@ export const initialRacquetState = (): RacquetState => ({
   isMatchPoint: false,
   names: { a: "Team A", b: "Team B" },
   sidesSwapped: false,
+  endReason: null,
+  timeout: null,
+  suspended: false,
 });
 
 /** Returns the side that has won the game, or null if neither has yet. */

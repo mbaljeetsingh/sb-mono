@@ -19,6 +19,103 @@ const start = (server: SideId = "A"): RacquetEvent =>
 const point = (side: SideId): RacquetEvent => ev("point", { side });
 const points = (sequence: SideId[]): RacquetEvent[] => sequence.map(point);
 
+describe("match-state events", () => {
+  it("walkover ends match with named winner", () => {
+    const s = reduce(
+      [start("A"), ev("walkover", { winner: "B" })],
+      badminton21,
+    );
+    expect(s.matchOver).toBe(true);
+    expect(s.winner).toBe("B");
+    expect(s.endReason).toBe("walkover");
+    expect(s.gamesWon).toEqual({ a: 0, b: 0 });
+  });
+
+  it("retirement awards win to the non-retiring side", () => {
+    const seq = [
+      start("A"),
+      point("A"),
+      point("A"),
+      ev("retirement", { retiring: "A" }),
+    ];
+    const s = reduce(seq, badminton21);
+    expect(s.matchOver).toBe(true);
+    expect(s.winner).toBe("B");
+    expect(s.endReason).toBe("retirement");
+  });
+
+  it("default awards win to the non-defaulted side", () => {
+    const s = reduce(
+      [start("A"), ev("default", { defaulted: "B" })],
+      badminton21,
+    );
+    expect(s.matchOver).toBe(true);
+    expect(s.winner).toBe("A");
+    expect(s.endReason).toBe("default");
+  });
+
+  it("timeout.start sets timeout state; timeout.end clears it", () => {
+    const seq: RacquetEvent[] = [
+      start("A"),
+      ev("timeout.start", { side: "A", kind: "standard" }),
+    ];
+    const mid = reduce(seq, badminton21);
+    expect(mid.timeout).toEqual({ side: "A", kind: "standard" });
+    const after = reduce(
+      [...seq, ev("timeout.end", { side: "A" })],
+      badminton21,
+    );
+    expect(after.timeout).toBeNull();
+  });
+
+  it("suspension flag toggles", () => {
+    const seq: RacquetEvent[] = [
+      start("A"),
+      ev("suspension.start", { reason: "rain" }),
+    ];
+    expect(reduce(seq, badminton21).suspended).toBe(true);
+    expect(reduce([...seq, ev("suspension.end")], badminton21).suspended).toBe(
+      false,
+    );
+  });
+
+  it("score.correct overwrites scores", () => {
+    const seq: RacquetEvent[] = [
+      start("A"),
+      ev("score.correct", {
+        games: [
+          { a: 21, b: 19 },
+          { a: 14, b: 11 },
+        ],
+        gamesWon: { a: 1, b: 0 },
+      }),
+    ];
+    const s = reduce(seq, badminton21);
+    expect(s.games).toEqual([
+      { a: 21, b: 19 },
+      { a: 14, b: 11 },
+    ]);
+    expect(s.gamesWon).toEqual({ a: 1, b: 0 });
+    expect(s.matchOver).toBe(false);
+  });
+
+  it("score.correct can declare match over by setting gamesWon to threshold", () => {
+    const seq: RacquetEvent[] = [
+      start("A"),
+      ev("score.correct", {
+        games: [
+          { a: 21, b: 19 },
+          { a: 21, b: 17 },
+        ],
+        gamesWon: { a: 2, b: 0 },
+      }),
+    ];
+    const s = reduce(seq, badminton21);
+    expect(s.matchOver).toBe(true);
+    expect(s.winner).toBe("A");
+  });
+});
+
 describe("badminton 21-point — basic scoring", () => {
   it("starts 0-0 with A serving from right court", () => {
     const s = reduce([start("A")], badminton21);

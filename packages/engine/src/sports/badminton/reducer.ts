@@ -75,6 +75,78 @@ function applyEvent(
       // No-op here; undo is handled at the event-list level via applyUndo().
       return state;
 
+    case "walkover":
+      return {
+        ...state,
+        matchOver: true,
+        winner: ev.winner,
+        endReason: "walkover",
+        betweenGames: false,
+        isGamePoint: false,
+        isMatchPoint: false,
+      };
+
+    case "retirement": {
+      // Retiring side loses; opponent wins.
+      if (state.matchOver) return state;
+      const winner: SideId = ev.retiring === "A" ? "B" : "A";
+      return {
+        ...state,
+        matchOver: true,
+        winner,
+        endReason: "retirement",
+        betweenGames: false,
+        isGamePoint: false,
+        isMatchPoint: false,
+      };
+    }
+
+    case "default": {
+      if (state.matchOver) return state;
+      const winner: SideId = ev.defaulted === "A" ? "B" : "A";
+      return {
+        ...state,
+        matchOver: true,
+        winner,
+        endReason: "default",
+        betweenGames: false,
+        isGamePoint: false,
+        isMatchPoint: false,
+      };
+    }
+
+    case "timeout.start":
+      if (state.matchOver) return state;
+      return { ...state, timeout: { side: ev.side, kind: ev.kind } };
+
+    case "timeout.end":
+      return { ...state, timeout: null };
+
+    case "suspension.start":
+      if (state.matchOver) return state;
+      return { ...state, suspended: true };
+
+    case "suspension.end":
+      return { ...state, suspended: false };
+
+    case "score.correct": {
+      // Authoritative reset of scores. Recompute winner/over flags.
+      const matchOver =
+        ev.gamesWon.a >= cfg.gamesToWin || ev.gamesWon.b >= cfg.gamesToWin;
+      return {
+        ...state,
+        games: ev.games.length > 0 ? [...ev.games] : [{ a: 0, b: 0 }],
+        gamesWon: { ...ev.gamesWon },
+        matchOver,
+        winner: matchOver ? (ev.gamesWon.a > ev.gamesWon.b ? "A" : "B") : null,
+        endReason: matchOver ? "normal" : null,
+        betweenGames: false,
+        isGamePoint: false,
+        isMatchPoint: false,
+        atInterval: false,
+      };
+    }
+
     default:
       return state;
   }
