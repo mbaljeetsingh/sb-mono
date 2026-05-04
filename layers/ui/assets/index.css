@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "@sb/layer-app-base/assets/theme.css";
-@plugin 'tw-animate-css';
+
+/* tw-animate-css can be re-enabled when shadcn-vue components need it.
+ * Theme animations (pulse-soft, glow-a, glow-b) are defined directly in
+ * @sb/layer-app-base/assets/theme.css so the plugin is currently optional. */
+/* @plugin 'tw-animate-css'; */
 
 /* shadcn-vue components.json points here; new components register their
  * styles via this file (or via @utility blocks generated alongside). */
