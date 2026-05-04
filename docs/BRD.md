@@ -4,8 +4,8 @@
 **Owner:** Baljeet Singh
 **Last updated:** 2026-05-04
 **Working name:** Scoreboard (public brand TBD before launch — likely Rally, Crest, or similar)
-**Repo:** `scoreboard` · `@scoreboard/*` packages
-**License:** MIT
+**Repo:** `sb-mono` · `@sb/*` packages
+**License:** MIT (locked — see Decision #2 in §12)
 
 ---
 
@@ -219,7 +219,19 @@ Decisions made and locked. Re-opening any of these requires explicit reason in t
 | 13 | **Player registration / brackets / payments are v3+** | Real product category that needs months of work; would derail the wedge |
 | 14 | **Network/academy platform is v3** | The real business, but earned only after v1 + v2 prove the product |
 | 15 | **Repo name is `scoreboard`, brand TBD** | Decoupled; package names are internal, brand is marketing |
-| 16 | Stack: Nuxt 3 + Supabase + Dexie + Capacitor (v2) | Fits existing skill set, OSS-friendly, scales to v3 |
+| 16 | Stack: Nuxt 4 + Supabase + Dexie + Capacitor (v2) | Aligned with np-mono; OSS-friendly; scales to v3 |
+| 17 | Doubles support is **v1**, not deferred | BWF doubles is half of real badminton matches; retrofit cost is high |
+| 18 | Match metadata (court, round, category, venue) is **v1** | Cheap to add; tournament grouping page is unusable without these |
+| 19 | Match-state events (walkover, retirement, time-out, suspension, score correction) are **v1** | Real matches have these; faking them produces misleading records |
+| 20 | Auto-generated match-card og:image is **v1** | Growth-critical; every shared link becomes free advertising |
+| 21 | WCAG 2.1 AA accessibility is **v1**, not nice-to-have | Risk mitigation + design discipline; not optional for a public web app |
+| 22 | Privacy policy + DPDP/GDPR compliance is **v1** | Required from day 1 for any app processing personal data |
+| 23 | Cookieless analytics (Plausible / Cloudflare) over PostHog/GA at v1 | Avoids cookie banner; respects user privacy; reduces legal surface |
+| 24 | Anonymous match retention: 30 days from last activity | Cost containment; matches Cricheroes-style "session" semantics |
+| 25 | Theme moderation: PR review for malicious code; CSP forbids external font/image loads in v1 | Security; reputation; reduces attack surface |
+| 26 | **Open source decision re-locked: MIT, full app + engine.** Not BSL, not closed, not partial. | Distribution > forking risk for a product this size; OSS purity protects v3 academy trust; monetization paths (SaaS, themes, Pro, academy) all work without closed code |
+| 27 | `@sb/engine` published to npm at v1 ship | Concretizes the OSS claim; enables Capacitor / Tauri / third-party builds against the same engine |
+| 28 | No closed-source / open-core split in v1 | All v1 features ship as MIT; gating happens via hosted services + accounts in v2, not via license |
 
 ## 13. Phase gates — explicit
 
