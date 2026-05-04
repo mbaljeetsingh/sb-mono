@@ -3,7 +3,8 @@ import { ulid } from "ulid";
 
 definePageMeta({ layout: false });
 
-const startMatch = () => navigateTo(`/m/${ulid()}/control`);
+const startMatch = () => navigateTo("/new");
+const logResult = () => navigateTo("/new/result");
 </script>
 
 <template>
@@ -39,6 +40,7 @@ const startMatch = () => navigateTo(`/m/${ulid()}/control`);
         <button
           type="button"
           class="h-12 px-6 rounded-md bg-transparent border-[1.5px] border-border-strong text-foreground font-semibold hover:bg-surface-2 transition-colors"
+          @click="logResult"
         >
           Log a result
         </button>
