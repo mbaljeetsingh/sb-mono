@@ -1,5 +1,5 @@
 {
-  "name": "scoreboard",
+  "name": "sb-mono",
   "version": "0.0.1",
   "private": true,
   "description": "Open-source live scorecards for racquet sports. Mobile-controlled, OBS-ready, theme-swappable.",
@@ -16,7 +16,8 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
-    "supabase:types": "supabase gen types typescript --local > packages/shared/src/types/supabase.ts"
+    "supabase:types": "supabase gen types typescript --local > packages/shared/src/types/supabase.ts",
+    "supabase:deploy": "./scripts/supabase-deploy.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
@@ -24,9 +25,26 @@
     "turbo": "^2.9.5",
     "typescript": "^5.6.3"
   },
-  "dependencies": {
-    "@vueuse/core": "^14.3.0",
-    "reka-ui": "^2.9.6",
-    "vue-sonner": "^2.0.9"
+  "pnpm": {
+    "overrides": {
+      "vue": "^3.5.27",
+      "@vue/runtime-core": "^3.5.27",
+      "@vue/runtime-dom": "^3.5.27",
+      "@vue/reactivity": "^3.5.27",
+      "@vue/shared": "^3.5.27",
+      "@vue/compiler-dom": "^3.5.27",
+      "@vue/compiler-core": "^3.5.27",
+      "@vue/compiler-sfc": "^3.5.27",
+      "@vue/server-renderer": "^3.5.27"
+    },
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "@parcel/watcher",
+      "core-js",
+      "esbuild",
+      "sharp",
+      "supabase",
+      "vue-demi"
+    ]
   }
 }
