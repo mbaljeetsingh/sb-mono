@@ -1,4 +1,4 @@
-// @scoreboard/engine — public API
+// @sb/engine — public API
 //
 // State is always computed by replaying events through the appropriate
 // sport-family reducer. Each sport-family lives under src/sports/<family>/.

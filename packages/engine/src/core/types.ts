@@ -1,4 +1,4 @@
-// @scoreboard/engine — core types shared across sport families.
+// @sb/engine — core types shared across sport families.
 //
 // Sport families:
 //   - racquet  : badminton, tennis, pickleball, table tennis, squash, volleyball

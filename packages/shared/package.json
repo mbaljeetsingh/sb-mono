@@ -1,5 +1,5 @@
 {
-  "name": "@scoreboard/shared",
+  "name": "@sb/shared",
   "version": "0.0.1",
   "description": "Shared types, sport configs, and Supabase types.",
   "license": "MIT",

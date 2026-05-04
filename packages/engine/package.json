@@ -1,5 +1,5 @@
 {
-  "name": "@scoreboard/engine",
+  "name": "@sb/engine",
   "version": "0.0.1",
   "description": "Pure TypeScript scoring engine. Sport-pluggable, event-sourced, fully tested.",
   "license": "MIT",
