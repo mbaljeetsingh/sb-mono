@@ -1,0 +1,38 @@
+// Shared types and constants for sb-mono. Re-export only from here.
+
+export type Database = unknown; // Replaced by `pnpm supabase:types` once schema lands.
+
+/** What sport family a match belongs to — determines which engine + UI to load. */
+export type SportFamily = "racquet" | "cricket";
+
+/** Match record persisted in Supabase. State is computed from the events relation. */
+export type MatchRecord = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  /** ULID. Owner is anonymous in v1 (browser-stored); user_id arrives with Pro. */
+  owner_id: string | null;
+  sport_family: SportFamily;
+  sport_preset: string;
+  /** Free-form sport config (e.g., RacquetConfig). Stored as JSONB in Postgres. */
+  config: Record<string, unknown>;
+  /** Theme ID applied at render time. */
+  theme_id: string;
+  /** Hex colors per side. */
+  colors: { a: string; b: string };
+  /** ms since epoch when the match was actually started; null until first event. */
+  started_at: number | null;
+};
+
+export type EventRecord = {
+  id: string;
+  match_id: string;
+  /** Originating device — used for offline-merge tie-breaks. */
+  device_id: string;
+  /** ms since epoch (Date.now() at write time). */
+  ts: number;
+  /** Discriminator — one of the sport-family event types. */
+  type: string;
+  /** Event-specific payload (everything except id, ts, type). */
+  payload: Record<string, unknown>;
+};

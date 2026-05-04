@@ -1,0 +1,27 @@
+{
+  "name": "scoreboard",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Open-source live scorecards for racquet sports. Mobile-controlled, OBS-ready, theme-swappable.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:reset": "supabase db reset",
+    "supabase:types": "supabase gen types typescript --local > packages/shared/src/types/supabase.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "supabase": "^2.90.0",
+    "turbo": "^2.9.5",
+    "typescript": "^5.6.3"
+  }
+}
