@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@import "@sb/layer-app-base/assets/theme.css";
+@plugin 'tw-animate-css';
+
+/* shadcn-vue components.json points here; new components register their
+ * styles via this file (or via @utility blocks generated alongside). */
+
+@source '../components/**/*.{vue,ts}';
+@source '../../app-base/components/**/*.{vue,ts}';
+
+/* Base body/HTML reset for app surfaces */
+html,
+body,
+#__nuxt {
+  height: 100%;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+}
+
+body {
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
+}
+
+/* Numeric (score) — tabular-nums always, used by .score-* utilities */
+.score {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 0.9;
+}
+
+.score-xs {
+  font-size: var(--score-xs);
+}
+.score-sm {
+  font-size: var(--score-sm);
+}
+.score-md {
+  font-size: var(--score-md);
+}
+.score-lg {
+  font-size: var(--score-lg);
+}
+.score-xl {
+  font-size: var(--score-xl);
+}
+
+/* Tap target minimum — Apple HIG 88×88px, Material 48dp */
+.tap-target {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+}
+.tap-zone {
+  min-width: 5.5rem;
+  min-height: 5.5rem;
+}

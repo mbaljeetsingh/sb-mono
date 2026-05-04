@@ -1,10 +1,23 @@
-// Nuxt 3 config for @scoreboard/app — the PWA that hosts control / overlay / scoreboard surfaces.
+// @sb/app — the operator-facing PWA hosting control / overlay / scoreboard surfaces.
+// Extends shared layers: app-base (theme, composables, stores) + ui (shadcn-vue primitives).
+
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineNuxtConfig({
-  modules: ["@nuxtjs/tailwindcss", "@vueuse/nuxt", "@pinia/nuxt"],
+  extends: ["../../layers/app-base", "../../layers/ui"],
+  modules: ["@nuxtjs/supabase", "shadcn-nuxt", "@vite-pwa/nuxt"],
   devtools: { enabled: true },
-  ssr: false, // SPA: matches/events live behind unique IDs; SSR adds zero value here.
+  // SPA mode — matches/events live behind unique IDs; SSR adds zero value here.
+  ssr: false,
   typescript: { strict: true, typeCheck: false },
+  css: ["@sb/layer-ui/assets/index.css"],
+  vite: {
+    plugins: [tailwindcss()],
+  },
+  shadcn: {
+    prefix: "Ui",
+    componentDir: "../../layers/ui/components/ui",
+  },
   app: {
     head: {
       title: "Scoreboard",
@@ -14,7 +27,7 @@ export default defineNuxtConfig({
           content:
             "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover",
         },
-        { name: "theme-color", content: "#0f172a" },
+        { name: "theme-color", content: "#3d6b4a" },
         { name: "mobile-web-app-capable", content: "yes" },
         { name: "apple-mobile-web-app-capable", content: "yes" },
         {
@@ -22,13 +35,29 @@ export default defineNuxtConfig({
           content: "black-translucent",
         },
       ],
+      link: [{ rel: "icon", type: "image/svg+xml", href: "/icon.svg" }],
     },
   },
-  runtimeConfig: {
-    public: {
-      supabaseUrl: process.env.NUXT_PUBLIC_SUPABASE_URL ?? "",
-      supabaseAnonKey: process.env.NUXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+  supabase: {
+    redirectOptions: { login: "/", callback: "/", exclude: ["/**"] },
+  },
+  pwa: {
+    registerType: "autoUpdate",
+    manifest: {
+      name: "Scoreboard",
+      short_name: "Scoreboard",
+      description: "Live scorecards for racquet sports.",
+      theme_color: "#3d6b4a",
+      background_color: "#f7f5ed",
+      display: "standalone",
+      orientation: "any",
+      icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
     },
+    workbox: {
+      navigateFallback: "/",
+      globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+    },
+    devOptions: { enabled: false },
   },
   compatibilityDate: "2024-10-01",
 });

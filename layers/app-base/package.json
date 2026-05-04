@@ -1,0 +1,21 @@
+{
+  "name": "@sb/layer-app-base",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Shared composables, stores, theme, and base nuxt config for sb-mono apps.",
+  "dependencies": {
+    "@sb/engine": "workspace:*",
+    "@sb/shared": "workspace:*",
+    "dexie": "^4.0.8",
+    "pinia": "^3.0.4",
+    "pinia-plugin-persistedstate": "^4.7.1",
+    "ulid": "^2.3.0",
+    "vue": "^3.5.27"
+  },
+  "devDependencies": {
+    "@pinia/nuxt": "^0.11.3",
+    "@vueuse/nuxt": "^14.2.1",
+    "tailwindcss": "^4.2.1"
+  }
+}

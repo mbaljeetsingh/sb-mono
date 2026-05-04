@@ -1,0 +1,127 @@
+/*
+ * Shared theme tokens for all sb-mono apps (apps/app, apps/web, future).
+ * Warm parchment background + court-green primary — racquet-sport identity.
+ * Each app's index.css @imports this; Tailwind v4 resolves @theme through @import.
+ *
+ * Two layers of color tokens:
+ *   - shadcn-vue chrome (--background, --primary, --ring, etc.) — app UI
+ *   - sb domain tokens (--color-team-a, --color-team-b, --color-score-*) — match data
+ *
+ * Themes (overlay/scoreboard HTML files) override --color-team-a/b only.
+ */
+
+@theme inline {
+  /* shadcn-vue chrome */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* sb domain tokens — match data */
+  --color-team-a: var(--team-a);
+  --color-team-a-foreground: var(--team-a-foreground);
+  --color-team-b: var(--team-b);
+  --color-team-b-foreground: var(--team-b-foreground);
+  --color-server-indicator: var(--server-indicator);
+  --color-game-point: var(--game-point);
+  --color-match-point: var(--match-point);
+
+  /* Radius scale */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Numeric (score) typography scale — tabular-nums, dedicated weights */
+  --font-numeric:
+    "Kalam", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --score-xs: 1.5rem; /* 24px — list items */
+  --score-sm: 2.5rem; /* 40px — dashboard previews */
+  --score-md: 3.75rem; /* 60px — control surface */
+  --score-lg: 5.625rem; /* 90px — overlay broadcast */
+  --score-xl: 8.125rem; /* 130px — filmable scoreboard hero */
+}
+
+:root {
+  /*
+   * Default theme — warm parchment background + deep court-green primary.
+   * Brand layers (e.g., layers/<academy-name> in v3) override these.
+   */
+  --radius: 0.75rem;
+
+  --background: #f7f5ed; /* warm parchment — slightly cooler than np-mono */
+  --foreground: #141413; /* near-black */
+  --card: #faf9f5; /* ivory */
+  --card-foreground: #141413;
+  --popover: #faf9f5;
+  --popover-foreground: #141413;
+  --primary: #3d6b4a; /* deep court green — racquet/tennis court reference */
+  --primary-foreground: #faf9f5;
+  --secondary: #e8e6dc; /* warm sand */
+  --secondary-foreground: #4d4c48;
+  --muted: #f0eee6; /* border cream */
+  --muted-foreground: #7d7464;
+  --accent: #e8e6dc;
+  --accent-foreground: #4d4c48;
+  --destructive: #b53333; /* error crimson */
+  --destructive-foreground: #faf9f5;
+  --border: #ece7d9;
+  --input: #dcd1bb;
+  --ring: #3d6b4a;
+
+  /* Default team colors — color-blind safe (red + blue) */
+  --team-a: #dc2626;
+  --team-a-foreground: #ffffff;
+  --team-b: #2563eb;
+  --team-b-foreground: #ffffff;
+  --server-indicator: var(--primary);
+  --game-point: #f5d76e; /* amber */
+  --match-point: #dc2626;
+}
+
+.dark {
+  --background: #0f0e0c;
+  --foreground: #faf9f5;
+  --card: #1a1815;
+  --card-foreground: #faf9f5;
+  --popover: #1a1815;
+  --popover-foreground: #faf9f5;
+  --primary: #52a36a; /* emerald — court green for dark mode */
+  --primary-foreground: #0f0e0c;
+  --secondary: #2a2520;
+  --secondary-foreground: #d4cfc4;
+  --muted: #2a2520;
+  --muted-foreground: #8a8478;
+  --accent: #2a2520;
+  --accent-foreground: #d4cfc4;
+  --destructive: #ef4444;
+  --destructive-foreground: #faf9f5;
+  --border: #2a2520;
+  --input: #2a2520;
+  --ring: #52a36a;
+
+  --team-a: #ef4444;
+  --team-b: #3b82f6;
+}
+
+/* Filmable scoreboard / overlay routes — full-bleed dark, no app chrome.
+ * Used by /m/[id]/scoreboard and /m/[id]/overlay layout. */
+.theme-filmable {
+  --background: #0a0908;
+  --foreground: #ffffff;
+}
