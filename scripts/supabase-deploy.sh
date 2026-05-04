@@ -1,47 +1,98 @@
-#!/usr/bin/env bash
-# scripts/supabase-deploy.sh — push local schema to a Supabase project.
+#!/bin/bash
+# scripts/supabase-deploy.sh — deploy schema + edge functions to Supabase.
 #
-# Usage:
-#   ./scripts/supabase-deploy.sh           # deploy migrations only
-#   ./scripts/supabase-deploy.sh --seed    # also re-seed (DANGEROUS in prod)
-#
-# Requires: SUPABASE_PROJECT_REF env var (or arg --project <ref>).
-# Requires: supabase CLI logged in (`supabase login`).
+# Mirrors np-mono's pattern: multi-project array, flag-driven selection.
+# v1: just one project (sb-mono). v3 will add per-academy projects to the
+# PROJECTS array so a single run pushes to all networks at once.
+set -e
 
-set -euo pipefail
+# ─────────── Project refs ───────────
+# Get refs from your Supabase dashboard once the projects exist:
+#   supabase projects create sb-mono --org-id <id>
+#   ↳ output includes the ref. Paste it here, replacing the placeholder.
+SB_REF="${SB_PROJECT_REF:-REPLACE_ME_AFTER_CREATING_PROJECT}"
+PROJECTS=("sb-mono:$SB_REF")
+# Future v3 example:
+# XPERIENCE_REF="..."
+# PROJECTS+=("xperience-academy:$XPERIENCE_REF")
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$REPO_ROOT"
+DEPLOY_DB=false
+DEPLOY_FUNCTIONS=false
+FUNCTION_NAMES=()
 
-PROJECT_REF="${SUPABASE_PROJECT_REF:-}"
-SEED="false"
+usage() {
+  echo "Usage: ./scripts/supabase-deploy.sh [--db] [--functions [name...]] [--all]"
+  echo ""
+  echo "  --db                   Push database migrations"
+  echo "  --functions [name...]  Deploy edge functions (all if no names given)"
+  echo "  --all                  Both db + all functions"
+  echo ""
+  echo "Examples:"
+  echo "  ./scripts/supabase-deploy.sh --db"
+  echo "  ./scripts/supabase-deploy.sh --functions update-subscription"
+  echo "  ./scripts/supabase-deploy.sh --all"
+  echo ""
+  echo "Project refs:"
+  for p in "${PROJECTS[@]}"; do
+    echo "  - ${p%%:*}: ${p##*:}"
+  done
+  exit 1
+}
+
+[[ $# -eq 0 ]] && usage
 
 while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --project) PROJECT_REF="$2"; shift 2 ;;
-    --seed)    SEED="true";       shift ;;
-    *) echo "unknown arg: $1" >&2; exit 1 ;;
+  case $1 in
+    --db) DEPLOY_DB=true; shift ;;
+    --all) DEPLOY_DB=true; DEPLOY_FUNCTIONS=true; shift ;;
+    --functions)
+      DEPLOY_FUNCTIONS=true
+      shift
+      while [[ $# -gt 0 && ! "$1" == --* ]]; do
+        FUNCTION_NAMES+=("$1")
+        shift
+      done
+      ;;
+    *) usage ;;
   esac
 done
 
-if [[ -z "$PROJECT_REF" ]]; then
-  echo "❌ Set SUPABASE_PROJECT_REF (or pass --project <ref>)" >&2
-  exit 1
-fi
+for project in "${PROJECTS[@]}"; do
+  name="${project%%:*}"
+  ref="${project##*:}"
 
-echo "→ linking sb-mono to project $PROJECT_REF"
-pnpm exec supabase link --project-ref "$PROJECT_REF"
-
-echo "→ pushing migrations"
-pnpm exec supabase db push
-
-if [[ "$SEED" == "true" ]]; then
-  echo "⚠  re-seeding remote database (DESTRUCTIVE)"
-  read -p "Type the project ref to confirm: " CONFIRM
-  if [[ "$CONFIRM" != "$PROJECT_REF" ]]; then
-    echo "❌ aborted"; exit 1
+  if [[ "$ref" == "REPLACE_ME_AFTER_CREATING_PROJECT" ]]; then
+    echo ""
+    echo "⚠  Project '$name' has no ref set."
+    echo "   Create it first: supabase projects create $name --org-id <id>"
+    echo "   Then either edit this script or export SB_PROJECT_REF=<ref>."
+    exit 1
   fi
-  pnpm exec supabase db reset --linked
-fi
 
-echo "✅ deploy complete"
+  echo ""
+  echo "========== $name ($ref) =========="
+
+  pnpm supabase link --project-ref "$ref"
+
+  if $DEPLOY_DB; then
+    echo "-> Pushing migrations..."
+    pnpm supabase db push
+  fi
+
+  if $DEPLOY_FUNCTIONS; then
+    if [ ${#FUNCTION_NAMES[@]} -eq 0 ]; then
+      echo "-> Deploying all edge functions..."
+      pnpm supabase functions deploy
+    else
+      for func_name in "${FUNCTION_NAMES[@]}"; do
+        echo "-> Deploying $func_name..."
+        pnpm supabase functions deploy "$func_name"
+      done
+    fi
+  fi
+
+  echo "✓ $name done"
+done
+
+echo ""
+echo "========== All projects deployed =========="
