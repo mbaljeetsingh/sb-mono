@@ -30,6 +30,19 @@ Scoreboard is an open-source, mobile-first live scorecard for racquet sports. Th
 | Tournament *grouping* (matches under a `/t/[id]` container) | ✅ | | | |
 | PWA install + service worker | ✅ | | | |
 | Anonymous matches (no account required) | ✅ | | | |
+| Doubles support (4 players per match, BWF service rotation) | ✅ | | | |
+| Match metadata (court number, round, category, scheduled time, venue) | ✅ | | | |
+| Multi-step undo + score correction (typo fix flow) | ✅ | | | |
+| Match-state events (walkover, retirement, default, time-out, suspension) | ✅ | | | |
+| Auto-generated match cards (og:image with live score) | ✅ | | | |
+| Privacy policy + DPDP / GDPR compliance | ✅ | | | |
+| Accessibility baseline (WCAG 2.1 AA, keyboard nav, screen reader, color-blind safe) | ✅ | | | |
+| Demo match on landing page (auto-scoring) | ✅ | | | |
+| Practice / trial mode (no match record) | ✅ | | | |
+| Theme manifest + contribution guide | ✅ | | | |
+| Error tracking (Sentry) + privacy-first analytics (Plausible) | ✅ | | | |
+| "Deploy to Netlify / Vercel" buttons + self-hosting docs | ✅ | | | |
+| Match lifecycle policy (24h auto-archive, 30d anonymous expiry) | ✅ | | | |
 | User accounts (Pro tier) | | ✅ | | |
 | Cloud match history | | ✅ | | |
 | Player profiles + lifetime stats | | ✅ | | |
@@ -300,6 +313,197 @@ type TournamentRecord = {
 | Server-side video composition | v4 | Heavy infra, unclear demand |
 | Native iOS/Android Expo apps | Likely never | Capacitor covers it |
 
+### 3.14 Doubles support (v1, must)
+
+Half of all real badminton matches are doubles. The data model and engine accommodate this from day one.
+
+**Match config additions:**
+```ts
+type RacquetConfig = {
+  // ...existing fields...
+  isDoubles: boolean              // false = singles, true = doubles
+}
+```
+
+**Match state additions:**
+```ts
+type RacquetState = {
+  // ...existing fields...
+  players: { a: [string, string?]; b: [string, string?] }  // two per side max
+  serverPlayer: 'a1' | 'a2' | 'b1' | 'b2' | null           // doubles only
+}
+```
+
+**Doubles scoring rules (BWF):**
+- Service alternates between partners *within* a team only when serve is regained
+- The serving team's score parity determines server court (right when even, left when odd)
+- The receiving partner who returns is fixed for that point — not tracked at v1, exposed at v2 if needed
+- Singles matches set `isDoubles: false` and `players: { a: [name], b: [name] }`
+
+**UI implications:**
+- Match-config form has "Singles / Doubles" toggle that swaps the player-name input fields (2 vs 4)
+- Themes render `players.a.join(' / ')` for doubles, `players.a[0]` for singles
+- Control surface is unchanged — tap zones still represent *teams* not players
+
+### 3.15 Match metadata for tournaments (v1)
+
+The `matches` table grows to support tournament context even when `tournament_id` is null:
+
+```ts
+type MatchRecord = {
+  // ...existing fields...
+  court_label: string | null      // e.g., "Court 3", "Centre Court"
+  round: string | null            // e.g., "R16", "QF", "SF", "F", "Group A"
+  category: string | null         // e.g., "Men's Singles U-15", "Mixed Doubles Open"
+  scheduled_at: number | null     // ms since epoch — separate from started_at
+  venue: string | null            // free-text, e.g., "Xperience Academy"
+}
+```
+
+These are optional; anonymous quick matches leave them null. Tournament-grouped matches use them to render readable list pages and overlays.
+
+### 3.16 Multi-step undo + score correction (v1)
+
+**Multi-step undo** is free with event-sourcing — the control surface exposes it explicitly:
+- Single tap on Undo button → undo last point
+- Long-press on Undo → opens "Recent events" sheet with up to 20 last events; user can undo to any prior state
+- Each undo emits an `undo` event for audit trail (the trim-and-replay pattern means `undo` is recorded as a meta-event)
+
+**Score correction (post-hoc):**
+- From the dashboard, "Correct score" opens a flow: shows current score, lets operator type the corrected score per game, emits a `score.correct` event with the new state
+- Replay treats `score.correct` as an authoritative reset to the named scores at the named point
+- Audit log shows who corrected what and when (in v1 just by `device_id`; in v2 by user account)
+
+### 3.17 Match-state events (v1)
+
+Events beyond plain scoring that real matches need. Each is its own event type so the engine and UI can handle it correctly.
+
+```ts
+type RacquetEvent =
+  // ...existing events...
+  | { type: 'walkover'; winner: SideId }                    // opponent didn't show
+  | { type: 'retirement'; retiring: SideId; reason?: string } // injury mid-match
+  | { type: 'default'; defaulted: SideId; reason?: string }   // disqualification
+  | { type: 'timeout.start'; side: SideId; kind: 'standard' | 'medical' | 'injury' }
+  | { type: 'timeout.end'; side: SideId }
+  | { type: 'suspension.start'; reason?: string }            // rain, power, crowd
+  | { type: 'suspension.end' }
+  | { type: 'score.correct'; games: GameScore[]; gamesWon: { a: number; b: number } }
+```
+
+The reducer treats `walkover`/`retirement`/`default` as terminal: `matchOver: true`, `winner` set per the event, no further events accepted.
+Timeouts and suspensions don't change scoring state; they exist for the overlay to display ("⏸ Timeout — A · 0:42 remaining") and for stats.
+
+### 3.18 Match cards / og:image (v1, growth-critical)
+
+When a scoreboard URL is shared on WhatsApp / Twitter / Facebook, the link preview must render **the actual current score as an image**, not a generic logo.
+
+**Implementation:**
+- Add a server route `/m/[id]/card.png` that renders an SVG of the match's current state (using Satori or `vercel/og` or similar) and rasterises to PNG
+- The match dashboard's `<head>` includes `<meta property="og:image" content="/m/[id]/card.png" />`
+- Cache aggressively — invalidate on any new event for that match (Supabase trigger calls a Netlify rebuild webhook, or just use ETag based on `events.length`)
+- Same approach for tournament pages (`/t/[id]/card.png`) — shows leaderboard or live ticker
+
+**Why it matters:**
+Cricheroes attributes a meaningful share of growth to share-preview-with-live-score. Every shared link is a free, contextual ad.
+
+### 3.19 Privacy & legal (v1, required for any public deployment)
+
+- **Privacy policy** at `/legal/privacy` linked in footer
+- **Terms of service** at `/legal/terms` linked in footer
+- **Data Protection Act (DPDP, India 2023)** compliance:
+  - Explicit consent at account creation (v2)
+  - Right to access / delete data
+  - Indian users' data stored in Supabase region with appropriate clauses
+- **GDPR (EU)** compliance:
+  - Cookie consent (or use cookieless analytics — see §3.21)
+  - Right to be forgotten
+  - Data Processing Agreement template for any team/academy admin
+- **Data retention policy:**
+  - Anonymous matches: 30 days from last activity, then deleted
+  - Account-owned matches: kept until user deletes
+  - Event logs retained for the lifetime of the match record
+- **No data sold or shared** with third parties beyond essential infrastructure (Supabase, hosting, payment processor)
+
+### 3.20 Accessibility (v1, non-negotiable)
+
+Target: **WCAG 2.1 AA** across all surfaces.
+
+- **Color contrast 4.5:1** for text, 3:1 for UI elements
+- **Color-blind safe defaults:** the default team colors use red + blue (distinguishable for protanopia/deuteranopia/tritanopia); themes that pair red+green must include a colorblind alternative
+- **Keyboard navigation** for all dashboard / config / result-entry forms with visible focus indicators (`:focus-visible`)
+- **Screen reader labels** on the control surface ("Team A score, 5 points, tap to add point")
+- **Reduced-motion** preference honored — score-change animations switch to instant transitions
+- **Text scaling** up to 200% without layout breakage
+- **Sufficient tap targets** on the control surface (≥ 88×88px per Apple HIG, ≥ 48dp per Material)
+- **No essential information conveyed by color alone** — server indicator combines color + icon + text
+
+### 3.21 Observability (v1)
+
+- **Error tracking:** Sentry (free tier 5k events/month). Captures unhandled exceptions, includes user device + browser context. No PII in default scope.
+- **Analytics:** Plausible or Cloudflare Web Analytics (cookieless; no banner needed). Track: page views per route, match-creation funnel, theme-picker usage. No identifiable user tracking on free tier.
+- **Performance monitoring:** Web Vitals reported to Plausible custom events. Alert on p75 LCP > 4s.
+- **Uptime:** UptimeRobot or BetterStack on `scoreboard.app` and the Supabase REST endpoint.
+
+### 3.22 Demo match + practice mode (v1)
+
+**Demo match (homepage):**
+A pre-seeded match at `/demo` (or auto-loaded on the homepage hero) that auto-scores points every 5 seconds in a deterministic loop. Visitors see a live, updating scoreboard the moment they land. No clicks, no signup, no copy needed — the product *is* the demo.
+
+**Practice mode:**
+`/practice` opens a transient match that's never written to Supabase, only kept in memory + localStorage. Operators can tap around the control surface, see the overlay update, get a feel for the product before committing to a real match. Discarded on tab close.
+
+### 3.23 Theme manifest + contribution model (v1)
+
+Each theme folder contains a `theme.manifest.json`:
+
+```json
+{
+  "id": "broadcast-classic",
+  "name": "Broadcast Classic",
+  "description": "ESPN/BWF-style lower-third for OBS overlay.",
+  "author": "Scoreboard core team",
+  "license": "MIT",
+  "version": "1.0.0",
+  "preview": "preview.png",
+  "supports": ["overlay", "scoreboard"],
+  "supportedSports": ["badminton", "tennis", "pickleball", "table-tennis"],
+  "bundleSizeBytes": 12450
+}
+```
+
+`packages/themes/CONTRIBUTING.md` walks contributors through:
+- Where to put files (`packages/themes/<id>/`)
+- How `data-bind` works
+- Bundle size limit (50KB per theme)
+- Preview screenshot at 1920×1080 transparent
+- Theme moderation: PRs are reviewed for malicious CSS/HTML before merge; CSP forbids external font/image loads in v1
+
+### 3.24 Match lifecycle policy (v1)
+
+- **Active match**: in-progress or last-event < 24 hours ago
+- **Stale match** (no events for 24h, not match.over): auto-archives — UI marks "abandoned"; operator can resume by clicking "Continue match"
+- **Anonymous match**: hard-deleted 30 days after last activity (cron job in Supabase Edge Function)
+- **Account-owned match (v2+)**: kept until user deletes
+
+This is essential for cost containment as anonymous matches accumulate.
+
+### 3.25 Self-hosting docs + deploy buttons (v1)
+
+The README ships with one-click deploy buttons:
+- "Deploy to Netlify"
+- "Deploy to Vercel"
+- "Deploy to Railway"
+
+Plus `docs/SELF_HOSTING.md` covering:
+- Supabase project creation (managed or self-hosted)
+- Environment variables (`NUXT_PUBLIC_SUPABASE_URL`, `NUXT_PUBLIC_SUPABASE_ANON_KEY`)
+- Custom domain setup
+- Theme customization
+- Migration application
+
+This makes the open-source claim real and material — a tournament organizer can run their own instance in 15 minutes.
+
 ## 4. v2 detailed requirements (preview, ~6 months post-v1)
 
 **Trigger gate:** v1 hits 100+ self-hosted deploys OR 500+ stars OR 3+ themes contributed.
@@ -385,10 +589,15 @@ The network owner pays a monthly subscription based on player count.
 ## 7. Open questions (to resolve before v1 ship)
 
 1. **Public brand name.** Decoupled from repo. Decide ~2 weeks before launch with a domain check.
-2. **Default match expiry on free tier.** 30 days? 90 days? Forever for anonymous? Affects Supabase storage cost.
+2. **Match expiry on free tier — confirmed.** 30 days for anonymous, kept-while-account-active for Pro. (See §3.24.)
 3. **Whether to ship a Capacitor stub at v1** (zero feature gain, but reserves the App Store name).
 4. **OBS / Streamlabs setup walkthrough** — interactive doc page or short YouTube videos? Probably YouTube, but who records them?
-5. **Demo match URL** for the home page CTA — pre-seeded match that any visitor can watch live (we'd auto-score it on a loop).
+5. **Demo match URL — confirmed in §3.22.** Pre-seeded auto-scoring match on landing page.
+6. **Privacy policy authorship.** Use a template (TermsFeed, Iubenda) or hand-write? Recommendation: template + lawyer review pre-launch (~$200 one-time).
+7. **Cron for stale-match cleanup.** Supabase Edge Function? Or external cron via cron-job.org? Recommendation: Supabase Edge Function, runs nightly.
+8. **og:image rendering — Satori vs Puppeteer vs static SVG.** Satori (used by `vercel/og`) is fastest; Puppeteer is heavyweight; static SVG is most flexible. Recommendation: Satori on Cloudflare Workers or Supabase Edge Functions.
+9. **Doubles partner UI — visible on overlay or hidden?** Tournament streams want both names; casual streams want just the team. Recommendation: theme-controlled via `data-bind="players.a.join(' / ')"` so themes choose.
+10. **Match-deletion abuse.** Anonymous matches can be deleted by anyone with the URL? Recommendation: anonymous matches editable only from the device that created them (browser-stored token); shared URLs are read-only for everyone else.
 
 ## 8. Appendix — competitive feature matrix
 
