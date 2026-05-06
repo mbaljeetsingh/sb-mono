@@ -13,3 +13,4 @@ coverage
 .turbo
 .vercel
 .netlify
+.playwright-mcp
