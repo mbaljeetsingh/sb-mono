@@ -21,3 +21,24 @@ export {
   reduce as reduceBadminton,
   applyUndo as applyBadmintonUndo,
 } from "./sports/badminton";
+
+// The badminton reducer implements generic rally scoring (points-per-game /
+// win-by / cap / games-to-win / interval) and is reused by every racquet
+// preset. Re-exported under a generic name so call sites don't lie about it.
+export {
+  reduce as reduceRacquet,
+  applyUndo as applyRacquetUndo,
+} from "./sports/badminton";
+
+// Sport-preset registry — single lookup: sport_preset → { config, reducer, sport, displayName }.
+export {
+  defaultPresetBySport,
+  getPreset,
+  pickleballClassic,
+  pickleballRally,
+  sportPresets,
+  tableTennis,
+  tennisBasic,
+  type RacquetPresetEntry,
+  type SportPresetId,
+} from "./registry";

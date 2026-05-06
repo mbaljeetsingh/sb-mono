@@ -7,6 +7,7 @@
   "dependencies": {
     "@sb/engine": "workspace:*",
     "@sb/shared": "workspace:*",
+    "@vueuse/core": "^14.2.1",
     "dexie": "^4.0.8",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",

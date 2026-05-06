@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useStorage } from "@vueuse/core";
 import { getTheme } from "@sb/themes";
 
 definePageMeta({ layout: false });
@@ -9,40 +10,22 @@ const themeId = computed(() =>
   String(route.query.theme ?? "broadcast-classic"),
 );
 
-// Resolve which match this dynamic URL points to. Watches localStorage so
-// the OBS source updates live as the operator binds different matches.
-const boundMatchId = ref<string | null>(null);
-
-const STORAGE_KEY = computed(() => `sb:dynamic:${dynamicId.value}`);
-
-const resolve = () => {
-  if (typeof localStorage === "undefined") return;
-  boundMatchId.value = localStorage.getItem(STORAGE_KEY.value);
-};
-
-onMounted(() => {
-  resolve();
-  window.addEventListener("storage", (e) => {
-    if (e.key === STORAGE_KEY.value) resolve();
-  });
-});
+// Reactive binding to the dynamic-URL row in localStorage. useStorage already
+// listens to storage events, so the OBS source on a different tab/laptop sees
+// the operator's swap automatically — no extra wiring needed.
+const boundMatchId = useStorage<string | null>(
+  computed(() => `sb:dynamic:${dynamicId.value}`),
+  null,
+);
 
 const matchIdRef = computed(() => boundMatchId.value ?? "");
 
 // Only set up state when a match is bound; otherwise show waiting screen.
 const { state, config } = useMatchState(matchIdRef as Ref<string>);
 
-const teamNames = ref({ a: "Team A", b: "Team B" });
-watchEffect(() => {
-  if (!boundMatchId.value || typeof localStorage === "undefined") return;
-  try {
-    const raw = localStorage.getItem(`sb:meta:${boundMatchId.value}`);
-    if (raw) {
-      const meta = JSON.parse(raw);
-      if (meta?.teamNames) teamNames.value = meta.teamNames;
-    }
-  } catch {}
-});
+// Use the shared loader so name fallback ("Team A" / "Team B") matches every
+// other surface and stays in sync when the dynamic-URL operator rebinds matches.
+const { teamNames } = useMatchMeta(matchIdRef as Ref<string>);
 
 const themeEntry = computed(() => getTheme(themeId.value, "overlay"));
 
@@ -60,7 +43,7 @@ useHead({
       :state="state"
       :config="config"
       :team-names="teamNames"
-      :meta="{ sportLabel: 'BADMINTON' }"
+      :meta="{ sportLabel: (config.sport ?? 'badminton').toUpperCase() }"
     />
     <div
       v-else

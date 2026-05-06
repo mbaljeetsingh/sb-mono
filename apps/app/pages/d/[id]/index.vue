@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useClipboard, useStorage } from "@vueuse/core";
+import { toast } from "vue-sonner";
+
 definePageMeta({ layout: false });
 
 const route = useRoute();
@@ -6,16 +9,12 @@ const dynamicId = computed(() => String(route.params.id ?? ""));
 
 // v1: dynamic URL bindings live in localStorage. v1.x will move to a
 // dynamic_urls table in Supabase per ARCHITECTURE.md §6.
-const STORAGE_KEY = computed(() => `sb:dynamic:${dynamicId.value}`);
-
-const boundMatchId = ref<string | null>(null);
-
-const load = () => {
-  if (typeof localStorage === "undefined") return;
-  boundMatchId.value = localStorage.getItem(STORAGE_KEY.value);
-};
-
-onMounted(load);
+// useStorage gives us cross-tab sync — operator binds on phone, OBS browser
+// source on the laptop swaps automatically.
+const boundMatchId = useStorage<string | null>(
+  computed(() => `sb:dynamic:${dynamicId.value}`),
+  null,
+);
 
 const dynamicUrl = computed(() => {
   if (typeof window === "undefined") return "";
@@ -53,18 +52,13 @@ const refreshRecent = () => {
 
 onMounted(refreshRecent);
 
+// useStorage auto-persists assignments — `null` clears the entry as expected.
 const bind = (matchId: string) => {
   boundMatchId.value = matchId;
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem(STORAGE_KEY.value, matchId);
-  }
 };
 
 const unbind = () => {
   boundMatchId.value = null;
-  if (typeof localStorage !== "undefined") {
-    localStorage.removeItem(STORAGE_KEY.value);
-  }
 };
 
 const boundTeamNames = computed(() => {
@@ -79,10 +73,10 @@ const boundTeamNames = computed(() => {
   }
 });
 
-const copy = async (text: string) => {
-  if (typeof navigator !== "undefined" && navigator.clipboard) {
-    await navigator.clipboard.writeText(text);
-  }
+const { copy: clipboardCopy } = useClipboard({ legacy: true });
+const copy = async (text: string, label = "URL") => {
+  await clipboardCopy(text);
+  toast.success(`${label} copied`);
 };
 </script>
 
@@ -118,7 +112,7 @@ const copy = async (text: string) => {
           <button
             type="button"
             class="px-3 h-8 rounded-md bg-white text-brand text-xs font-semibold"
-            @click="copy(overlayUrl)"
+            @click="copy(overlayUrl, 'Overlay URL')"
           >
             Copy
           </button>

@@ -1,30 +1,31 @@
 <script setup lang="ts">
+import { useClipboard, useStorage } from "@vueuse/core";
+import { toast } from "vue-sonner";
+
 definePageMeta({ layout: false });
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
 
-const meta = computed(() => {
-  if (typeof localStorage === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(`sb:meta:${matchId.value}`);
-    return raw
-      ? (JSON.parse(raw) as { teamNames: { a: string; b: string } })
-      : null;
-  } catch {
-    return null;
-  }
-});
+// Reactive read of match metadata via useStorage — same pattern every other
+// surface uses, no manual JSON.parse boilerplate.
+const meta = useStorage<{
+  teamNames?: { a: string; b: string };
+  sport?: string;
+  sportPreset?: string;
+} | null>(
+  computed(() => `sb:meta:${matchId.value}`),
+  null,
+);
 
-const result = computed(() => {
-  if (typeof localStorage === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(`sb:result:${matchId.value}`);
-    return raw ? (JSON.parse(raw) as { a: number; b: number }[]) : null;
-  } catch {
-    return null;
-  }
-});
+const sportLabel = computed(() =>
+  (meta.value?.sport ?? "badminton").toUpperCase(),
+);
+
+const result = useStorage<{ a: number; b: number }[] | null>(
+  computed(() => `sb:result:${matchId.value}`),
+  null,
+);
 
 const winner = computed(() => {
   if (!result.value) return null;
@@ -45,10 +46,10 @@ const shareUrl = computed(() => {
   return `${window.location.origin}/m/${matchId.value}/scoreboard`;
 });
 
-const copy = async (text: string) => {
-  if (typeof navigator !== "undefined" && navigator.clipboard) {
-    await navigator.clipboard.writeText(text);
-  }
+const { copy: clipboardCopy } = useClipboard({ legacy: true });
+const copy = async (text: string, label = "Link") => {
+  await clipboardCopy(text);
+  toast.success(`${label} copied`);
 };
 </script>
 
@@ -97,7 +98,7 @@ const copy = async (text: string) => {
           <span
             class="text-[10px] tracking-[0.16em] font-bold text-neutral-400"
           >
-            FINAL · BADMINTON · BO3
+            FINAL · {{ sportLabel }} · BO{{ result?.length ?? 3 }}
           </span>
           <span class="text-[10px] font-bold tracking-[0.16em] text-amber-400">
             ★ FINISHED
@@ -176,16 +177,16 @@ const copy = async (text: string) => {
         <button
           type="button"
           class="h-11 rounded-md bg-brand text-brand-foreground font-semibold inline-flex items-center justify-center gap-2 hover:bg-brand-hover"
-          @click="copy(shareUrl)"
+          @click="copy(shareUrl, 'Share link')"
         >
           📋 Copy share link
         </button>
         <button
           type="button"
           class="h-11 rounded-md bg-transparent text-foreground text-sm hover:bg-surface-2"
-          @click="navigateTo('/new/result')"
+          @click="navigateTo('/new')"
         >
-          Log another result
+          Start another match
         </button>
       </div>
     </main>

@@ -17,7 +17,10 @@
     "@sb/layer-ui": "workspace:*",
     "@sb/shared": "workspace:*",
     "@sb/themes": "workspace:*",
-    "browser-image-compression": "^2.0.2"
+    "@vueuse/core": "^14.2.1",
+    "browser-image-compression": "^2.0.2",
+    "lucide-vue-next": "^0.475.0",
+    "vue-sonner": "^2.0.9"
   },
   "devDependencies": {
     "@nuxtjs/supabase": "^2.0.4",

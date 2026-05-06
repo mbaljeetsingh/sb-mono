@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { useClipboard, useStorage } from "@vueuse/core";
+import { toast } from "vue-sonner";
 import { themes as themeRegistry, type ThemeSurface } from "@sb/themes";
 import ThemePickerSheet from "~/components/match/ThemePickerSheet.vue";
 
@@ -8,9 +10,8 @@ useSeoMeta({ title: "Match" });
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
-const { state, config } = useMatchState(matchId);
-
-const teamNames = ref({ a: "Priya / Anu", b: "Karan / Jay" });
+const { state, config, events } = useMatchState(matchId);
+const { teamNames } = useMatchMeta(matchId);
 
 const showAllUrls = ref(false);
 const baseUrl = computed(() => {
@@ -18,38 +19,29 @@ const baseUrl = computed(() => {
   return window.location.origin;
 });
 
-// Per-match theme selection. Persisted to localStorage so the overlay/scoreboard
-// pages and the URL builders can reflect the user's choice. DB persistence will
-// land with E1.11 (Supabase realtime sync) — until then, localStorage is the truth.
-const THEME_STORAGE_KEY = computed(() => `sb:theme:${matchId.value}`);
-const overlayTheme = ref<string>("broadcast-classic");
-const scoreboardTheme = ref<string>("filmable");
-const themeSheetOpen = ref(false);
-
-onMounted(() => {
-  if (typeof localStorage === "undefined") return;
-  try {
-    const raw = localStorage.getItem(THEME_STORAGE_KEY.value);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (typeof parsed?.overlay === "string")
-        overlayTheme.value = parsed.overlay;
-      if (typeof parsed?.scoreboard === "string")
-        scoreboardTheme.value = parsed.scoreboard;
-    }
-  } catch {}
+// Per-match theme selection — reactive useStorage ref auto-persists on every
+// change AND syncs across same-domain tabs. The overlay/scoreboard surfaces
+// pick up choices via `?theme=` in the URLs we build below.
+type ThemeChoice = { overlay: string; scoreboard: string };
+const themeChoice = useStorage<ThemeChoice>(
+  computed(() => `sb:theme:${matchId.value}`),
+  { overlay: "broadcast-classic", scoreboard: "filmable" },
+  undefined,
+  { mergeDefaults: true },
+);
+const overlayTheme = computed({
+  get: () => themeChoice.value.overlay,
+  set: (v) => {
+    themeChoice.value = { ...themeChoice.value, overlay: v };
+  },
 });
-
-const persistTheme = () => {
-  if (typeof localStorage === "undefined") return;
-  localStorage.setItem(
-    THEME_STORAGE_KEY.value,
-    JSON.stringify({
-      overlay: overlayTheme.value,
-      scoreboard: scoreboardTheme.value,
-    }),
-  );
-};
+const scoreboardTheme = computed({
+  get: () => themeChoice.value.scoreboard,
+  set: (v) => {
+    themeChoice.value = { ...themeChoice.value, scoreboard: v };
+  },
+});
+const themeSheetOpen = ref(false);
 
 const onPickTheme = ({
   surface,
@@ -60,7 +52,6 @@ const onPickTheme = ({
 }) => {
   if (surface === "overlay") overlayTheme.value = id;
   if (surface === "scoreboard") scoreboardTheme.value = id;
-  persistTheme();
 };
 
 const overlayThemeName = computed(
@@ -84,14 +75,14 @@ const score = (side: "a" | "b") => {
 
 const statusLabel = computed(() => {
   if (state.value.matchOver) return "Final";
-  if (state.value.events?.length === 0) return "Ready · 0 events";
+  if (events.value.length === 0) return "Ready · 0 events";
   return `Game ${state.value.games.length} · ${score("a")}–${score("b")}`;
 });
 
-const copy = async (text: string) => {
-  if (typeof navigator !== "undefined" && navigator.clipboard) {
-    await navigator.clipboard.writeText(text);
-  }
+const { copy: clipboardCopy } = useClipboard({ legacy: true });
+const copy = async (text: string, label = "URL") => {
+  await clipboardCopy(text);
+  toast.success(`${label} copied`);
 };
 
 const openControl = () => navigateTo(`/m/${matchId.value}/control`);
@@ -143,7 +134,12 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
               LIVE
             </span>
             <span class="text-sm text-fg-muted">
-              Badminton 21pt · BO3 · Doubles
+              {{ config.displayName }}
+              {{
+                config.gamesToWin > 1
+                  ? ` · BO${config.gamesToWin * 2 - 1}`
+                  : " · Single"
+              }}
             </span>
           </span>
           <span v-if="!state.matchOver" class="text-sm text-fg-subtle">
@@ -254,7 +250,7 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
           <button
             type="button"
             class="px-3 h-8 inline-flex items-center justify-center rounded-md bg-secondary text-secondary-foreground text-xs font-semibold hover:bg-surface-2"
-            @click="copy(urls.overlay)"
+            @click="copy(urls.overlay, 'Overlay URL')"
           >
             Copy URL
           </button>
@@ -311,7 +307,7 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
             <button
               type="button"
               class="text-fg-muted hover:text-foreground"
-              @click="copy(urls.control)"
+              @click="copy(urls.control, 'Control URL')"
               aria-label="Copy"
             >
               📋
@@ -338,7 +334,7 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
             <button
               type="button"
               class="text-fg-muted hover:text-foreground"
-              @click="copy(urls[label as keyof typeof urls])"
+              @click="copy(urls[label as keyof typeof urls], `${key} URL`)"
               aria-label="Copy"
             >
               📋

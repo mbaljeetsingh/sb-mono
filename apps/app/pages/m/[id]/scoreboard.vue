@@ -8,16 +8,15 @@ const matchId = computed(() => String(route.params.id ?? ""));
 const themeId = computed(() => String(route.query.theme ?? "filmable"));
 
 const { state, config } = useMatchState(matchId);
-
-const teamNames = ref({ a: "Priya / Anu", b: "Karan / Jay" });
-const meta = ref({
-  sportLabel: "BADMINTON",
-  courtLabel: "COURT 3",
-  round: "QF",
-  category: "MD U-19",
+const { teamNames } = useMatchMeta(matchId);
+const meta = computed(() => ({
+  sportLabel: (config.value.sport ?? "badminton").toUpperCase(),
+  courtLabel: null as string | null,
+  round: null as string | null,
+  category: null as string | null,
   venue: null as string | null,
   sponsorName: null as string | null,
-});
+}));
 
 const themeEntry = computed(() => getTheme(themeId.value, "scoreboard"));
 </script>

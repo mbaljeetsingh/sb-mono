@@ -1,12 +1,15 @@
 <script setup lang="ts">
+import { useStorage, useVibrate, useWakeLock } from "@vueuse/core";
+import { Rows3, Columns3 } from "lucide-vue-next";
 import {
   type RacquetConfig,
   type RacquetEvent,
   type SideId,
-  badminton15,
-  badminton21,
-  reduceBadminton,
-  applyBadmintonUndo,
+  type SportPresetId,
+  applyRacquetUndo,
+  getPreset,
+  reduceRacquet,
+  sportPresets,
 } from "@sb/engine";
 
 definePageMeta({ layout: false });
@@ -15,90 +18,57 @@ const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
 
 // Format = which points-per-game preset + how many games make a match.
-// Persisted to localStorage so undo / refresh preserves the chosen format.
-// Engine recomputes match-over from the event log on every reduce, so the
-// operator can flip these mid-match — including extending an in-progress
-// match from "single" to "best of 3".
+// Backed by VueUse useStorage — auto-syncs across same-domain tabs (operator
+// changes format on phone → laptop overlay sees it). Engine recomputes
+// match-over from the event log on every reduce, so flipping these mid-match
+// — including extending a single match into BO5 — is safe.
 //   gamesToWin = 1 → single match (first game decides).
 //   gamesToWin = 2 → best of 3 (first to 2 games wins).
 //   gamesToWin = 3 → best of 5, etc.
-type FormatPreset = "badminton-21" | "badminton-15";
-// 21-point is current BWF (since 2006). 15-point is the BWF 2027 proposal
-// (pending April 2026 vote, effective Jan 2027 if approved). Default = today's BWF.
-const formatPreset = ref<FormatPreset>("badminton-21");
-const gamesToWin = ref<number>(1);
+const { meta: matchMeta, teamNames: metaTeamNames } = useMatchMeta(matchId);
 
-const FORMAT_KEY = computed(() => `sb:format:${matchId.value}`);
-
-onMounted(() => {
-  if (typeof localStorage === "undefined") return;
-  try {
-    const raw = localStorage.getItem(FORMAT_KEY.value);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (
-        parsed?.preset === "badminton-15" ||
-        parsed?.preset === "badminton-21"
-      ) {
-        formatPreset.value = parsed.preset;
-      }
-      if (
-        typeof parsed?.gamesToWin === "number" &&
-        parsed.gamesToWin >= 1 &&
-        parsed.gamesToWin <= 6
-      ) {
-        gamesToWin.value = parsed.gamesToWin;
-      }
-    }
-  } catch {}
+// Initial preset = whatever /new wrote into sb:meta.sportPreset, or fall back
+// to badminton-21. Once stored, useStorage owns the value.
+const initialPreset = computed<SportPresetId>(() => {
+  const m = matchMeta.value.sportPreset;
+  return typeof m === "string" && m in sportPresets
+    ? (m as SportPresetId)
+    : "badminton-21";
 });
-
-const persistFormat = () => {
-  if (typeof localStorage === "undefined") return;
-  localStorage.setItem(
-    FORMAT_KEY.value,
-    JSON.stringify({
-      preset: formatPreset.value,
-      gamesToWin: gamesToWin.value,
-    }),
-  );
-};
+const formatPreset = useStorage<SportPresetId>(
+  computed(() => `sb:format:preset:${matchId.value}`),
+  initialPreset,
+);
+const gamesToWin = useStorage<number>(
+  computed(() => `sb:format:gamesToWin:${matchId.value}`),
+  computed(() => getPreset(initialPreset.value).config.gamesToWin),
+);
 
 const config = computed<RacquetConfig>(() => {
-  const base =
-    formatPreset.value === "badminton-15" ? badminton15 : badminton21;
+  const base = getPreset(formatPreset.value).config;
   return { ...base, gamesToWin: gamesToWin.value };
 });
+
+// Sport family of the active preset — used to choose which format options to show.
+const activeSport = computed(() => getPreset(formatPreset.value).sport);
+// Presets in the same sport family as the active preset, for the points-per-game
+// selector. Other sports usually have one preset (we just show the current one).
+const sportPresetOptions = computed(() =>
+  Object.values(sportPresets).filter((p) => p.sport === activeSport.value),
+);
 
 // Explicit navigation helper — using `${matchId.value}` instead of relying on
 // template-literal auto-unwrap inside @click expressions. Avoids any edge case
 // where the ref doesn't unwrap and we end up with a stale or wrong match id.
 const goToMatchHome = () => navigateTo(`/m/${matchId.value}`);
-const teamNames = ref({ a: "", b: "" });
-const isDoubles = ref(false);
-const players = ref({ a1: "", a2: "", b1: "", b2: "" });
 
-// Pick up team names + per-player + format from /new's localStorage stash.
-onMounted(() => {
-  if (typeof localStorage === "undefined") return;
-  try {
-    const raw = localStorage.getItem(`sb:meta:${matchId.value}`);
-    if (raw) {
-      const meta = JSON.parse(raw);
-      if (meta?.teamNames) teamNames.value = meta.teamNames;
-      if (typeof meta?.isDoubles === "boolean")
-        isDoubles.value = meta.isDoubles;
-      if (meta?.players) {
-        players.value = {
-          a1: meta.players.a1 ?? "",
-          a2: meta.players.a2 ?? "",
-          b1: meta.players.b1 ?? "",
-          b2: meta.players.b2 ?? "",
-        };
-      }
-    }
-  } catch {}
-});
+// Team names + doubles flag + per-player names come from useMatchMeta (which
+// is itself a useStorage-backed reactive read of `sb:meta:{matchId}`).
+const teamNames = computed(() => matchMeta.value.teamNames ?? { a: "", b: "" });
+const isDoubles = computed(() => matchMeta.value.isDoubles ?? false);
+const players = computed(
+  () => matchMeta.value.players ?? { a1: "", a2: "", b1: "", b2: "" },
+);
 
 const { events, append, replace } = useEvents(matchId);
 
@@ -112,7 +82,7 @@ onMounted(() => {
   }
 });
 
-const state = computed(() => reduceBadminton(events.value, config.value));
+const state = computed(() => reduceRacquet(events.value, config.value));
 
 const score = (side: SideId) => {
   const last = state.value.games[state.value.games.length - 1];
@@ -120,17 +90,18 @@ const score = (side: SideId) => {
   return side === "A" ? last.a : last.b;
 };
 
+// Haptic feedback via VueUse — short pulse on score, longer on undo.
+const { vibrate } = useVibrate();
+
 const onTap = (side: SideId) => {
   if (state.value.matchOver) return;
-  if (typeof navigator !== "undefined" && "vibrate" in navigator)
-    navigator.vibrate?.(10);
+  vibrate(10);
   append({ type: "point", side } as Omit<RacquetEvent, "id" | "ts">);
 };
 
 const onUndo = () => {
-  if (typeof navigator !== "undefined" && "vibrate" in navigator)
-    navigator.vibrate?.(20);
-  replace(applyBadmintonUndo(events.value));
+  vibrate(20);
+  replace(applyRacquetUndo(events.value));
 };
 
 const onReset = () => replace([]);
@@ -146,9 +117,26 @@ const gamesWon = computed(() => state.value.gamesWon);
 const seriesLabel = computed(() =>
   gamesToWin.value === 1 ? "Single" : `BO${gamesToWin.value * 2 - 1}`,
 );
-const presetLabel = computed(() =>
-  formatPreset.value === "badminton-15" ? "15 (2027)" : "BWF 21",
-);
+// Compact preset label ("BWF 21", "15 (2027)", "T 6", "PB 11", "TT 11") for the
+// chip in the format strip. Falls back to "P{N}" for unknown presets.
+const presetLabel = computed(() => {
+  switch (formatPreset.value) {
+    case "badminton-21":
+      return "BWF 21";
+    case "badminton-15":
+      return "15 (2027)";
+    case "tennis-basic":
+      return "Tennis · 6";
+    case "pickleball-classic":
+      return "PB 11";
+    case "pickleball-rally":
+      return "PB 21";
+    case "table-tennis":
+      return "TT 11";
+    default:
+      return `P${config.value.pointsPerGame}`;
+  }
+});
 
 const headerLabel = computed(() => {
   const cur = games.value.length;
@@ -165,7 +153,7 @@ const displayNameB = computed(() => teamNames.value.b?.trim() || "Player 2");
 // Per-player labels for the grid view.
 // Source order:
 //   1. Per-player fields persisted by /new (`players.a1` etc).
-//   2. Split joined `teamNames.a` ("Priya / Anu" → ["Priya", "Anu"]) — covers older
+//   2. Split joined `teamNames.a` ("Player 1 / Player 2" → ["Player 1", "Player 2"]) — covers older
 //      matches created before /new started writing the per-player split, plus the
 //      common case where the user typed a doubles team as one string.
 //   3. "Player N" placeholder fallback.
@@ -303,13 +291,31 @@ type SheetKind = "events" | "matchState" | "scoreCorrect" | "format" | null;
 const openSheet = ref<SheetKind>(null);
 const closeSheet = () => (openSheet.value = null);
 
-const setPreset = (preset: FormatPreset) => {
+// useStorage refs auto-persist on assignment — these helpers stay for clarity
+// at the call sites.
+const setPreset = (preset: SportPresetId) => {
   formatPreset.value = preset;
-  persistFormat();
+};
+
+// Court layout — operator picks based on where they sit relative to the court.
+//   'stacked'    — phone held portrait, Team A on top / Team B on bottom (default).
+//                  Each row splits left|right service courts.
+//   'sideBySide' — phone held landscape (or scorer at the umpire's chair), Team A
+//                  on the LEFT half / Team B on the RIGHT half, each splitting the
+//                  service courts top|bottom.
+//
+// useStorage gives us a reactive ref that auto-syncs to localStorage and across
+// same-domain tabs — flipping the toggle on the phone updates the laptop too.
+type ControlLayout = "stacked" | "sideBySide";
+const layout = useStorage<ControlLayout>(
+  computed(() => `sb:control-layout:${matchId.value}`),
+  "stacked",
+);
+const setLayout = (v: ControlLayout) => {
+  layout.value = v;
 };
 const setGamesToWin = (n: number) => {
   gamesToWin.value = n;
-  persistFormat();
 };
 
 // Long-press on Undo opens events sheet.
@@ -551,6 +557,29 @@ const applyScoreCorrect = () => {
           >
             {{ presetLabel }} · {{ seriesLabel }}
           </button>
+          <!-- Layout toggle. Click to flip between stacked (portrait, A above B)
+               and side-by-side (landscape / umpire-chair, A left of B). Title
+               attribute tells the operator what they'll get. -->
+          <button
+            type="button"
+            class="size-6 inline-flex items-center justify-center rounded-sm text-fg-muted hover:bg-surface-2 hover:text-foreground"
+            :title="
+              layout === 'stacked'
+                ? 'Switch to side-by-side (umpire view)'
+                : 'Switch to stacked (portrait phone)'
+            "
+            :aria-label="
+              layout === 'stacked'
+                ? 'Switch to side-by-side layout'
+                : 'Switch to stacked layout'
+            "
+            @click="setLayout(layout === 'stacked' ? 'sideBySide' : 'stacked')"
+          >
+            <component
+              :is="layout === 'stacked' ? Rows3 : Columns3"
+              class="size-3.5"
+            />
+          </button>
         </div>
       </div>
 
@@ -562,7 +591,8 @@ const applyScoreCorrect = () => {
            reaches inside the row, doesn't compound with the row's outer ring).
            Singles AND doubles use 2 cells per team (left court | right court). -->
       <div
-        class="m-2 flex flex-1 flex-col gap-px overflow-hidden rounded-lg bg-foreground/30 ring-1 ring-foreground/30"
+        class="m-2 flex flex-1 gap-px overflow-hidden rounded-lg bg-foreground/30 ring-1 ring-foreground/30"
+        :class="layout === 'sideBySide' ? 'flex-row' : 'flex-col'"
       >
         <!-- Team A row -->
         <div
@@ -608,13 +638,13 @@ const applyScoreCorrect = () => {
             </span>
           </div>
 
-          <!-- Cells. Content is vertically AND horizontally centered in the cell
-               (items-center justify-center). Pill rendered after the name in DOM,
-               so when serving the pill appears below the name and the centered
-               flex-col group naturally lifts the name up slightly to make room.
-               Singles: decorative center hairline (court split) drawn inside the
-               single cell so the operator still sees the left/right court divide. -->
-          <div class="flex flex-1">
+          <!-- Cells. Content is vertically AND horizontally centered in the cell.
+               Direction follows the outer layout: cells split left|right when the
+               teams are stacked, top|bottom when teams are side-by-side. -->
+          <div
+            class="flex flex-1"
+            :class="layout === 'sideBySide' ? 'flex-col' : 'flex-row'"
+          >
             <button
               v-for="(cell, idx) in cellsA"
               :key="cell.key"
@@ -622,7 +652,13 @@ const applyScoreCorrect = () => {
               :disabled="state.matchOver"
               :aria-label="`Tap to score for ${cell.label || 'team A'}`"
               class="relative flex flex-1 flex-col items-center justify-center gap-2 px-4 py-4 transition-[background-color] duration-150 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-65"
-              :class="[idx > 0 ? 'border-l border-team-a/20' : '']"
+              :class="[
+                idx > 0
+                  ? layout === 'sideBySide'
+                    ? 'border-t border-team-a/20'
+                    : 'border-l border-team-a/20'
+                  : '',
+              ]"
               @click="onTap('A')"
             >
               <span
@@ -697,7 +733,13 @@ const applyScoreCorrect = () => {
               :disabled="state.matchOver"
               :aria-label="`Tap to score for ${cell.label || 'team B'}`"
               class="relative flex flex-1 flex-col items-center justify-center gap-2 px-4 py-4 transition-[background-color] duration-150 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-65"
-              :class="[idx > 0 ? 'border-l border-team-b/20' : '']"
+              :class="[
+                idx > 0
+                  ? layout === 'sideBySide'
+                    ? 'border-t border-team-b/20'
+                    : 'border-l border-team-b/20'
+                  : '',
+              ]"
               @click="onTap('B')"
             >
               <span
@@ -1003,35 +1045,31 @@ const applyScoreCorrect = () => {
         >
           Points per game
         </div>
-        <div class="grid grid-cols-2 gap-2 mb-4">
+        <div
+          class="grid gap-2 mb-4"
+          :class="sportPresetOptions.length > 1 ? 'grid-cols-2' : 'grid-cols-1'"
+        >
           <button
+            v-for="p in sportPresetOptions"
+            :key="p.id"
             type="button"
-            class="h-11 rounded-md border-[1.5px] text-sm font-semibold transition-colors"
+            class="h-11 rounded-md border-[1.5px] text-sm font-semibold transition-colors px-3"
             :class="
-              formatPreset === 'badminton-21'
+              formatPreset === p.id
                 ? 'border-foreground bg-foreground text-background'
                 : 'border-border bg-surface text-foreground hover:bg-surface-2'
             "
-            @click="setPreset('badminton-21')"
+            @click="setPreset(p.id)"
           >
-            21 · BWF
+            {{ p.config.pointsPerGame }} · {{ p.displayName }}
             <span class="block text-[10px] font-medium opacity-60 mt-0.5">
-              cap 30 · interval 11
-            </span>
-          </button>
-          <button
-            type="button"
-            class="h-11 rounded-md border-[1.5px] text-sm font-semibold transition-colors"
-            :class="
-              formatPreset === 'badminton-15'
-                ? 'border-foreground bg-foreground text-background'
-                : 'border-border bg-surface text-foreground hover:bg-surface-2'
-            "
-            @click="setPreset('badminton-15')"
-          >
-            15 (2027)
-            <span class="block text-[10px] font-medium opacity-60 mt-0.5">
-              proposal · cap 21 · interval 8
+              {{
+                p.config.cap
+                  ? `cap ${p.config.cap}`
+                  : `win-by ${p.config.winBy}`
+              }}{{
+                p.config.intervalAt ? ` · interval ${p.config.intervalAt}` : ""
+              }}
             </span>
           </button>
         </div>

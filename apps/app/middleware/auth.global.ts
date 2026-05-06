@@ -5,7 +5,7 @@
 //     Anyone can land on /, click Start a match, score, and share the URL. Sign-in is
 //     OPTIONAL and unlocks history, ownership, premium features.
 //   - auth pages themselves
-//   - viewer surfaces (/m/*/scoreboard, /m/*/overlay, /d/*/overlay, /t/*/overlay)
+//   - viewer surfaces (/m/*/scoreboard, /m/*/overlay, /d/*/overlay)
 // Pages requiring sign-in (today): /profile. Future: /history, /admin, etc.
 //
 // Per-route permission gates: set `definePageMeta({ requiredPermission: 'match.create' })` on a page.
@@ -19,7 +19,6 @@ const PUBLIC_PREFIXES = [
   "/auth/", // signin / signup / forgot / reset / callback
   "/m/", // match hub + control + scoreboard + overlay (free scorer)
   "/d/", // dynamic-URL bindings (operator pre-publishes a stable overlay link)
-  "/t/", // tournament hub + overlay
 ];
 
 // Anonymous-OK paths. The scorer is free — anyone can score without signing up.
@@ -27,7 +26,7 @@ const PUBLIC_PREFIXES = [
 const PUBLIC_EXACT = new Set<string>(["/", "/new"]);
 
 // Suffix-based public surfaces — the viewer-facing routes broadcasters and audience hit.
-// e.g. /m/abc/scoreboard, /m/abc/overlay, /t/abc/overlay, /d/abc/overlay
+// e.g. /m/abc/scoreboard, /m/abc/overlay, /d/abc/overlay
 const PUBLIC_SUFFIXES = ["/scoreboard", "/overlay"];
 
 const isPublicRoute = (path: string): boolean => {

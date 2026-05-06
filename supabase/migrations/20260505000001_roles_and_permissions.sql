@@ -120,6 +120,19 @@ CREATE POLICY "auth_admin_reads_user_roles" ON public.user_roles
     TO supabase_auth_admin
     USING (true);
 
+-- role_permissions is RLS-enabled with a permissive SELECT for authenticated.
+-- The data isn't user-specific (it's the static role→permission grant matrix),
+-- but we don't want anon clients enumerating it via PostgREST either.
+-- authorize() and get_my_permissions() are SECURITY DEFINER so they bypass RLS,
+-- so locking the table down doesn't break those code paths.
+ALTER TABLE public.role_permissions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "role_permissions_read_authenticated" ON public.role_permissions;
+CREATE POLICY "role_permissions_read_authenticated" ON public.role_permissions
+    FOR SELECT
+    TO authenticated
+    USING (true);
+
 
 -- authorize(): RLS helper. Reads user_role from JWT claim, checks role_permissions.
 CREATE OR REPLACE FUNCTION public.authorize(requested_permission app_permission)
