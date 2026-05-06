@@ -13,7 +13,7 @@
     "components": "@sb/layer-ui/components",
     "composables": "@sb/layer-app-base/composables",
     "utils": "@sb/layer-ui/lib/utils",
-    "ui": "layers/ui/components/ui",
+    "ui": "@sb/layer-ui/components/ui",
     "lib": "@sb/layer-ui/lib"
   },
   "iconLibrary": "lucide"

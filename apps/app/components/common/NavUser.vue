@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { LogOut, User as UserIcon, ShieldCheck } from "lucide-vue-next";
+import { Button } from "@sb/layer-ui/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,9 +31,9 @@ const role = computed(() => userStore.userRole);
 <template>
   <DropdownMenu>
     <DropdownMenuTrigger as-child>
-      <button
-        type="button"
-        class="inline-flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      <Button
+        variant="ghost"
+        class="h-auto gap-2 rounded-full p-1"
         aria-label="Account menu"
       >
         <UserAvatar
@@ -41,7 +42,7 @@ const role = computed(() => userStore.userRole);
           :src="profile?.avatar_url"
           :size="32"
         />
-      </button>
+      </Button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" class="w-56">
       <DropdownMenuLabel>

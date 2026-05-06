@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useClipboard, useStorage } from "@vueuse/core";
+import { ChevronDown, ChevronUp, Clipboard, Settings } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import { themes as themeRegistry, type ThemeSurface } from "@sb/themes";
-import ThemePickerSheet from "~/components/match/ThemePickerSheet.vue";
+import { Button } from "@sb/layer-ui/components/ui/button";
+import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
 
 // Uses default layout (AppHeader at top, max-w-6xl content wrapper).
 useSeoMeta({ title: "Match" });
@@ -96,15 +98,15 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
       <span class="text-[13px] font-semibold text-fg-subtle">
         Match · {{ matchId.slice(0, 8) }}…
       </span>
-      <button
-        type="button"
-        class="size-9 rounded-md text-foreground/40 cursor-not-allowed inline-flex items-center justify-center"
+      <Button
+        variant="ghost"
+        size="icon"
         aria-label="Settings (coming in v1.x)"
         title="Match settings (court, round, category, venue) — coming in v1.x"
         disabled
       >
-        ⚙
-      </button>
+        <Settings class="size-4" />
+      </Button>
     </div>
 
     <!-- Hero status card -->
@@ -208,13 +210,14 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
         Get set up
       </div>
       <div class="flex flex-col gap-2">
-        <button
+        <Button
           type="button"
-          class="p-3 bg-surface border border-border rounded-md flex gap-3 items-center text-left hover:bg-surface-2 transition-colors"
+          variant="outline"
+          class="h-auto justify-start gap-3 p-3 text-left whitespace-normal"
           @click="openControl"
         >
           <span
-            class="size-7 rounded-full bg-surface-2 text-fg-muted inline-flex items-center justify-center text-[13px] font-bold flex-shrink-0"
+            class="size-7 rounded-full bg-surface-2 text-fg-muted inline-flex items-center justify-center text-[13px] font-bold shrink-0"
           >
             1
           </span>
@@ -222,16 +225,16 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
             <span class="block text-sm font-semibold"
               >Score from your phone</span
             >
-            <span class="block text-xs text-fg-muted mt-0.5"
+            <span class="block text-xs text-fg-muted mt-0.5 font-normal"
               >Open Control on this device</span
             >
           </span>
           <span
-            class="px-3 h-8 inline-flex items-center justify-center rounded-md bg-brand text-brand-foreground text-xs font-semibold"
+            class="px-3 h-8 inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-semibold"
           >
             Open Control
           </span>
-        </button>
+        </Button>
 
         <div
           class="p-3 bg-surface border border-border rounded-md flex gap-3 items-center"
@@ -247,13 +250,14 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
               >Paste URL into a Browser source</span
             >
           </span>
-          <button
+          <Button
             type="button"
-            class="px-3 h-8 inline-flex items-center justify-center rounded-md bg-secondary text-secondary-foreground text-xs font-semibold hover:bg-surface-2"
+            variant="secondary"
+            size="sm"
             @click="copy(urls.overlay, 'Overlay URL')"
           >
             Copy URL
-          </button>
+          </Button>
         </div>
 
         <a
@@ -284,14 +288,15 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
 
     <!-- All URLs disclosure -->
     <div class="px-4 pb-4">
-      <button
+      <Button
         type="button"
-        class="w-full p-3 bg-surface-2 rounded-md flex justify-between items-center text-foreground text-[13px] font-medium hover:brightness-95"
+        variant="secondary"
+        class="w-full justify-between font-medium"
         @click="showAllUrls = !showAllUrls"
       >
         <span>Show all URLs &amp; QR codes</span>
-        <span>{{ showAllUrls ? "▴" : "▾" }}</span>
-      </button>
+        <component :is="showAllUrls ? ChevronUp : ChevronDown" class="size-4" />
+      </Button>
       <div v-if="showAllUrls" class="mt-2.5 flex flex-col gap-2">
         <div class="p-3 bg-surface border border-warning rounded-md">
           <div class="flex justify-between items-center mb-1">
@@ -304,14 +309,15 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
                 >Sensitive</span
               >
             </span>
-            <button
+            <Button
               type="button"
-              class="text-fg-muted hover:text-foreground"
-              @click="copy(urls.control, 'Control URL')"
+              variant="ghost"
+              size="icon-sm"
               aria-label="Copy"
+              @click="copy(urls.control, 'Control URL')"
             >
-              📋
-            </button>
+              <Clipboard class="size-4" />
+            </Button>
           </div>
           <div class="font-mono text-[11px] text-fg-muted break-all">
             {{ urls.control }}
@@ -331,14 +337,15 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
         >
           <div class="flex justify-between items-center mb-1">
             <span class="text-[13px] font-semibold">{{ key }}</span>
-            <button
+            <Button
               type="button"
-              class="text-fg-muted hover:text-foreground"
-              @click="copy(urls[label as keyof typeof urls], `${key} URL`)"
+              variant="ghost"
+              size="icon-sm"
               aria-label="Copy"
+              @click="copy(urls[label as keyof typeof urls], `${key} URL`)"
             >
-              📋
-            </button>
+              <Clipboard class="size-4" />
+            </Button>
           </div>
           <div class="font-mono text-[11px] text-fg-muted break-all">
             {{ urls[label as keyof typeof urls] }}
@@ -360,9 +367,10 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
         Look &amp; feel
       </div>
       <div class="grid grid-cols-2 gap-2">
-        <button
+        <Button
           type="button"
-          class="p-3 bg-surface border border-border rounded-md text-left flex flex-col gap-1.5 hover:bg-surface-2"
+          variant="outline"
+          class="h-auto flex-col items-stretch gap-1.5 p-3 text-left whitespace-normal"
           @click="themeSheetOpen = true"
         >
           <span class="flex justify-between items-center">
@@ -376,14 +384,15 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
           <span class="block text-sm font-semibold">{{
             overlayThemeName
           }}</span>
-          <span class="block text-[10px] text-fg-subtle">
+          <span class="block text-[10px] text-fg-subtle font-normal">
             Scoreboard: {{ scoreboardThemeName }}
           </span>
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="outline"
           disabled
-          class="p-3 bg-surface border border-border rounded-md text-left flex flex-col gap-1.5 opacity-60 cursor-not-allowed"
+          class="h-auto flex-col items-stretch gap-1.5 p-3 text-left whitespace-normal"
           title="Custom team colors land in v1.x"
         >
           <span class="flex justify-between items-center">
@@ -399,11 +408,11 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
             <span class="size-3.5 rounded-sm bg-team-b" />
             Red / Blue
           </span>
-        </button>
+        </Button>
       </div>
     </div>
 
-    <ThemePickerSheet
+    <ThemePickerDialog
       v-model:open="themeSheetOpen"
       :overlay-theme="overlayTheme"
       :scoreboard-theme="scoreboardTheme"

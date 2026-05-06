@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { useStorage, useVibrate, useWakeLock } from "@vueuse/core";
-import { Rows3, Columns3 } from "lucide-vue-next";
+import {
+  ArrowLeft,
+  Columns3,
+  Minus,
+  MoreHorizontal,
+  Plus,
+  Rows3,
+  Undo2,
+} from "lucide-vue-next";
 import {
   type RacquetConfig,
   type RacquetEvent,
@@ -11,6 +19,9 @@ import {
   reduceRacquet,
   sportPresets,
 } from "@sb/engine";
+import { Button } from "@sb/layer-ui/components/ui/button";
+import { Input } from "@sb/layer-ui/components/ui/input";
+import { Label } from "@sb/layer-ui/components/ui/label";
 
 definePageMeta({ layout: false });
 
@@ -472,27 +483,27 @@ const applyScoreCorrect = () => {
       <header
         class="h-12 flex-shrink-0 px-3 flex items-center justify-between border-b border-border"
       >
-        <button
-          type="button"
-          class="size-11 rounded-md text-fg-muted hover:bg-surface-2 hover:text-foreground text-xl"
+        <Button
+          variant="ghost"
+          size="icon"
           aria-label="Back"
           @click="goToMatchHome()"
         >
-          ←
-        </button>
+          <ArrowLeft class="size-4" />
+        </Button>
         <span
           class="text-[11px] font-semibold tracking-wider text-fg-muted uppercase"
         >
           {{ headerLabel }}
         </span>
-        <button
-          type="button"
-          class="size-11 rounded-md text-fg-muted hover:bg-surface-2 hover:text-foreground text-xl"
+        <Button
+          variant="ghost"
+          size="icon"
           aria-label="More"
           @click="openSheet = 'matchState'"
         >
-          ⋯
-        </button>
+          <MoreHorizontal class="size-4" />
+        </Button>
       </header>
 
       <!-- Active timeout banner -->
@@ -504,13 +515,14 @@ const applyScoreCorrect = () => {
           >⏸ TIMEOUT · TEAM {{ state.timeout.side }} ·
           {{ state.timeout.kind }}</span
         >
-        <button
-          type="button"
-          class="text-xs font-semibold underline"
+        <Button
+          variant="link"
+          size="sm"
+          class="h-auto p-0 text-warning"
           @click="onClearTimeout"
         >
           End
-        </button>
+        </Button>
       </div>
 
       <!-- Suspension banner -->
@@ -550,19 +562,20 @@ const applyScoreCorrect = () => {
           >
             INTERVAL
           </span>
-          <button
-            type="button"
-            class="text-[11px] text-fg-muted hover:text-foreground underline-offset-2 hover:underline"
+          <Button
+            variant="link"
+            size="sm"
+            class="h-auto p-0 text-[11px] text-fg-muted hover:text-foreground"
             @click="openSheet = 'format'"
           >
             {{ presetLabel }} · {{ seriesLabel }}
-          </button>
+          </Button>
           <!-- Layout toggle. Click to flip between stacked (portrait, A above B)
-               and side-by-side (landscape / umpire-chair, A left of B). Title
-               attribute tells the operator what they'll get. -->
-          <button
-            type="button"
-            class="size-6 inline-flex items-center justify-center rounded-sm text-fg-muted hover:bg-surface-2 hover:text-foreground"
+               and side-by-side (landscape / umpire-chair, A left of B). -->
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            class="size-6"
             :title="
               layout === 'stacked'
                 ? 'Switch to side-by-side (umpire view)'
@@ -579,7 +592,7 @@ const applyScoreCorrect = () => {
               :is="layout === 'stacked' ? Rows3 : Columns3"
               class="size-3.5"
             />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -766,23 +779,21 @@ const applyScoreCorrect = () => {
       <footer
         class="h-14 flex-shrink-0 px-3 flex items-center justify-between border-t border-border"
       >
-        <button
-          type="button"
-          class="h-9 px-3 rounded-md border border-border bg-surface text-foreground text-sm font-medium hover:bg-surface-2 select-none"
+        <Button
+          variant="outline"
+          size="sm"
+          class="select-none"
           @pointerdown="onUndoPointerDown"
           @pointerup="onUndoPointerUp"
           @pointerleave="onUndoPointerUp"
         >
-          ↶ Undo
-        </button>
+          <Undo2 class="size-4" />
+          Undo
+        </Button>
         <span class="text-[11px] text-fg-subtle">long-press for events</span>
-        <button
-          type="button"
-          class="h-9 px-3 rounded-md border border-border bg-surface text-foreground text-sm font-medium hover:bg-surface-2"
-          @click="openSheet = 'matchState'"
-        >
+        <Button variant="outline" size="sm" @click="openSheet = 'matchState'">
           Events
-        </button>
+        </Button>
       </footer>
 
       <!-- Match-over modal -->
@@ -818,20 +829,16 @@ const applyScoreCorrect = () => {
             <span>{{ gamesWon.b }}</span>
           </div>
           <div class="flex flex-col gap-2">
-            <button
-              type="button"
-              class="h-12 w-full rounded-md bg-brand text-brand-foreground font-semibold hover:bg-brand-hover transition-colors"
+            <Button
+              size="lg"
+              class="h-12 w-full font-semibold"
               @click="onReset"
             >
               New match
-            </button>
-            <button
-              type="button"
-              class="h-9 w-full rounded-md text-foreground text-sm hover:bg-surface-2"
-              @click="goToMatchHome()"
-            >
+            </Button>
+            <Button variant="ghost" class="w-full" @click="goToMatchHome()">
               Back to dashboard
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -866,14 +873,16 @@ const applyScoreCorrect = () => {
               {{ e.ago }}
             </div>
             <div class="flex-1 text-sm">{{ e.label }}</div>
-            <button
+            <Button
               v-if="!e.isSystem"
-              type="button"
-              class="text-team-a text-sm font-semibold"
+              variant="ghost"
+              size="icon-sm"
+              class="text-team-a"
+              aria-label="Undo to here"
               @click="undoTo(e.idx)"
             >
-              ↶
-            </button>
+              <Undo2 class="size-4" />
+            </Button>
           </div>
           <div
             v-if="recentEvents.length === 0"
@@ -885,16 +894,12 @@ const applyScoreCorrect = () => {
         <div
           class="flex justify-between gap-2 mt-3 pt-3 border-t border-border"
         >
-          <button
-            type="button"
-            class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
-            @click="openScoreCorrect"
-          >
+          <Button variant="outline" size="sm" @click="openScoreCorrect">
             Score correction →
-          </button>
-          <button
-            type="button"
-            class="h-9 px-3 rounded-md bg-team-a text-team-a-foreground text-sm font-semibold inline-flex items-center gap-1"
+          </Button>
+          <Button
+            size="sm"
+            class="bg-team-a text-team-a-foreground hover:bg-team-a/90"
             @click="
               () => {
                 onUndo();
@@ -902,8 +907,9 @@ const applyScoreCorrect = () => {
               }
             "
           >
-            ↶ Undo last
-          </button>
+            <Undo2 class="size-4" />
+            Undo last
+          </Button>
         </div>
       </div>
 
@@ -924,36 +930,36 @@ const applyScoreCorrect = () => {
           Pause
         </div>
         <div class="grid grid-cols-2 gap-2 mb-3">
-          <button
-            type="button"
-            class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
+          <Button
+            variant="outline"
+            size="sm"
             @click="onTimeout('A', 'standard')"
           >
             ⏸ Timeout · A
-          </button>
-          <button
-            type="button"
-            class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             @click="onTimeout('B', 'standard')"
           >
             ⏸ Timeout · B
-          </button>
+          </Button>
         </div>
         <div class="grid grid-cols-2 gap-2 mb-5">
-          <button
-            type="button"
-            class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
+          <Button
+            variant="outline"
+            size="sm"
             @click="onTimeout('A', 'medical')"
           >
             + Medical · A
-          </button>
-          <button
-            type="button"
-            class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             @click="onTimeout('B', 'medical')"
           >
             + Medical · B
-          </button>
+          </Button>
         </div>
 
         <div
@@ -962,71 +968,72 @@ const applyScoreCorrect = () => {
           End match
         </div>
         <div class="flex flex-col gap-2 mb-3">
-          <button
-            type="button"
-            class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
+          <Button
+            variant="outline"
+            class="h-auto justify-start gap-3 p-3 whitespace-normal"
             @click="onWalkover('A')"
           >
             <span class="text-team-a text-lg">⚑</span>
-            <span class="flex-1">
+            <span class="flex-1 text-left">
               <span class="block text-sm font-semibold">Walkover · A wins</span>
-              <span class="block text-[11px] text-fg-subtle"
+              <span class="block text-[11px] text-fg-subtle font-normal"
                 >B didn't show</span
               >
             </span>
             <span>›</span>
-          </button>
-          <button
-            type="button"
-            class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
+          </Button>
+          <Button
+            variant="outline"
+            class="h-auto justify-start gap-3 p-3 whitespace-normal"
             @click="onWalkover('B')"
           >
             <span class="text-team-b text-lg">⚑</span>
-            <span class="flex-1">
+            <span class="flex-1 text-left">
               <span class="block text-sm font-semibold">Walkover · B wins</span>
-              <span class="block text-[11px] text-fg-subtle"
+              <span class="block text-[11px] text-fg-subtle font-normal"
                 >A didn't show</span
               >
             </span>
             <span>›</span>
-          </button>
-          <button
-            type="button"
-            class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
+          </Button>
+          <Button
+            variant="outline"
+            class="h-auto justify-start gap-3 p-3 whitespace-normal"
             @click="onRetirement('A')"
           >
             <span class="text-team-a text-lg">✕</span>
-            <span class="flex-1">
+            <span class="flex-1 text-left">
               <span class="block text-sm font-semibold">Retirement · A</span>
-              <span class="block text-[11px] text-fg-subtle"
+              <span class="block text-[11px] text-fg-subtle font-normal"
                 >A injured · B wins</span
               >
             </span>
             <span>›</span>
-          </button>
-          <button
-            type="button"
-            class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
+          </Button>
+          <Button
+            variant="outline"
+            class="h-auto justify-start gap-3 p-3 whitespace-normal"
             @click="onRetirement('B')"
           >
             <span class="text-team-b text-lg">✕</span>
-            <span class="flex-1">
+            <span class="flex-1 text-left">
               <span class="block text-sm font-semibold">Retirement · B</span>
-              <span class="block text-[11px] text-fg-subtle"
+              <span class="block text-[11px] text-fg-subtle font-normal"
                 >B injured · A wins</span
               >
             </span>
             <span>›</span>
-          </button>
+          </Button>
         </div>
 
-        <button
-          type="button"
-          class="w-full h-9 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2 mt-2"
+        <Button
+          variant="outline"
+          size="sm"
+          class="w-full mt-2"
           @click="openScoreCorrect"
         >
           Score correction…
-        </button>
+        </Button>
       </div>
 
       <!-- Format sheet — change target points / series mid-match. -->
@@ -1049,19 +1056,21 @@ const applyScoreCorrect = () => {
           class="grid gap-2 mb-4"
           :class="sportPresetOptions.length > 1 ? 'grid-cols-2' : 'grid-cols-1'"
         >
-          <button
+          <Button
             v-for="p in sportPresetOptions"
             :key="p.id"
-            type="button"
-            class="h-11 rounded-md border-[1.5px] text-sm font-semibold transition-colors px-3"
+            variant="outline"
+            class="h-11 flex-col gap-0 px-3 whitespace-normal"
             :class="
               formatPreset === p.id
-                ? 'border-foreground bg-foreground text-background'
-                : 'border-border bg-surface text-foreground hover:bg-surface-2'
+                ? 'bg-foreground text-background hover:bg-foreground/90 border-foreground'
+                : ''
             "
             @click="setPreset(p.id)"
           >
-            {{ p.config.pointsPerGame }} · {{ p.displayName }}
+            <span class="text-sm font-semibold">
+              {{ p.config.pointsPerGame }} · {{ p.displayName }}
+            </span>
             <span class="block text-[10px] font-medium opacity-60 mt-0.5">
               {{
                 p.config.cap
@@ -1071,7 +1080,7 @@ const applyScoreCorrect = () => {
                 p.config.intervalAt ? ` · interval ${p.config.intervalAt}` : ""
               }}
             </span>
-          </button>
+          </Button>
         </div>
 
         <div
@@ -1080,42 +1089,42 @@ const applyScoreCorrect = () => {
           Match length
         </div>
         <div class="grid grid-cols-2 gap-2 mb-2">
-          <button
-            type="button"
-            class="h-11 rounded-md border-[1.5px] text-sm font-semibold transition-colors"
+          <Button
+            variant="outline"
+            class="h-11 font-semibold"
             :class="
               gamesToWin === 1
-                ? 'border-foreground bg-foreground text-background'
-                : 'border-border bg-surface text-foreground hover:bg-surface-2'
+                ? 'bg-foreground text-background hover:bg-foreground/90 border-foreground'
+                : ''
             "
             @click="setGamesToWin(1)"
           >
             Single match
-          </button>
-          <button
-            type="button"
-            class="h-11 rounded-md border-[1.5px] text-sm font-semibold transition-colors"
+          </Button>
+          <Button
+            variant="outline"
+            class="h-11 font-semibold"
             :class="
               gamesToWin >= 2
-                ? 'border-foreground bg-foreground text-background'
-                : 'border-border bg-surface text-foreground hover:bg-surface-2'
+                ? 'bg-foreground text-background hover:bg-foreground/90 border-foreground'
+                : ''
             "
             @click="setGamesToWin(gamesToWin >= 2 ? gamesToWin : 2)"
           >
             Best of {{ gamesToWin >= 2 ? gamesToWin * 2 - 1 : 3 }}
-          </button>
+          </Button>
         </div>
         <!-- Best-of stepper, visible only when 'best-of' is selected. -->
         <div v-if="gamesToWin >= 2" class="flex items-center gap-3 mb-2 px-1">
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="icon"
             aria-label="Decrease best-of"
-            class="size-9 rounded-md border border-border bg-surface text-foreground font-semibold hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="gamesToWin <= 2"
             @click="setGamesToWin(Math.max(2, gamesToWin - 1))"
           >
-            −
-          </button>
+            <Minus class="size-4" />
+          </Button>
           <div class="flex-1 text-center">
             <span class="text-base font-semibold text-foreground">
               Best of {{ gamesToWin * 2 - 1 }}
@@ -1124,24 +1133,20 @@ const applyScoreCorrect = () => {
               first to {{ gamesToWin }} games
             </span>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="icon"
             aria-label="Increase best-of"
-            class="size-9 rounded-md border border-border bg-surface text-foreground font-semibold hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="gamesToWin >= 6"
             @click="setGamesToWin(Math.min(6, gamesToWin + 1))"
           >
-            +
-          </button>
+            <Plus class="size-4" />
+          </Button>
         </div>
 
-        <button
-          type="button"
-          class="w-full h-9 rounded-md text-sm font-medium text-fg-muted hover:bg-surface-2 mt-3"
-          @click="closeSheet"
-        >
+        <Button variant="ghost" class="w-full mt-3" @click="closeSheet">
           Done
-        </button>
+        </Button>
       </div>
 
       <!-- Score correction modal -->
@@ -1168,60 +1173,55 @@ const applyScoreCorrect = () => {
             <div class="w-8 text-[11px] font-semibold text-fg-subtle">
               G{{ i + 1 }}
             </div>
-            <input
+            <Input
               v-model="g.a"
               type="number"
               inputmode="numeric"
-              class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums bg-surface border border-border-strong rounded-md outline-none focus-visible:border-ring"
+              class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
             />
             <span class="text-fg-muted">—</span>
-            <input
+            <Input
               v-model="g.b"
               type="number"
               inputmode="numeric"
-              class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums bg-surface border border-border-strong rounded-md outline-none focus-visible:border-ring"
+              class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
             />
           </div>
         </div>
 
-        <div
+        <Label
           class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
         >
           Games won
-        </div>
+        </Label>
         <div class="flex gap-2 mb-4">
-          <input
+          <Input
             v-model.number="correctGamesWon.a"
             type="number"
             inputmode="numeric"
             min="0"
-            class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums bg-surface border border-border-strong rounded-md outline-none focus-visible:border-ring"
+            class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
           />
           <span class="text-fg-muted self-center">vs</span>
-          <input
+          <Input
             v-model.number="correctGamesWon.b"
             type="number"
             inputmode="numeric"
             min="0"
-            class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums bg-surface border border-border-strong rounded-md outline-none focus-visible:border-ring"
+            class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
           />
         </div>
 
         <div class="flex gap-2">
-          <button
-            type="button"
-            class="flex-1 h-10 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
-            @click="closeSheet"
-          >
+          <Button variant="outline" class="flex-1 h-10" @click="closeSheet">
             Cancel
-          </button>
-          <button
-            type="button"
-            class="flex-[2] h-10 rounded-md bg-brand text-brand-foreground text-sm font-semibold hover:bg-brand-hover"
+          </Button>
+          <Button
+            class="flex-[2] h-10 font-semibold"
             @click="applyScoreCorrect"
           >
             Apply correction
-          </button>
+          </Button>
         </div>
       </div>
     </div>

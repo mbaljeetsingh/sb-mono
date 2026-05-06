@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { Play } from "lucide-vue-next";
+import { Button } from "@sb/layer-ui/components/ui/button";
+
 definePageMeta({ layout: false });
 
 const route = useRoute();
@@ -47,20 +50,11 @@ const reason = computed(() => {
     </p>
 
     <div class="flex flex-col gap-2 w-full max-w-xs">
-      <button
-        type="button"
-        class="h-11 rounded-md bg-brand text-brand-foreground font-semibold hover:bg-brand-hover transition-colors inline-flex items-center justify-center gap-2"
-        @click="navigateTo('/new')"
-      >
-        ▶ Start a new match
-      </button>
-      <button
-        type="button"
-        class="h-9 rounded-md bg-transparent text-foreground text-sm hover:bg-surface-2"
-        @click="navigateTo('/')"
-      >
-        Go to home
-      </button>
+      <Button size="lg" class="h-11 font-semibold" @click="navigateTo('/new')">
+        <Play class="size-4" />
+        Start a new match
+      </Button>
+      <Button variant="ghost" @click="navigateTo('/')">Go to home</Button>
     </div>
 
     <div class="absolute bottom-8 text-[11px] text-fg-subtle">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useStorage } from "@vueuse/core";
+import { Minus, Play, Plus } from "lucide-vue-next";
 import { ulid } from "ulid";
 import {
   type SportPresetId,
@@ -7,6 +8,14 @@ import {
   sportPresets,
 } from "@sb/engine";
 import { type ThemeSurface, themes as themeRegistry } from "@sb/themes";
+import { Button } from "@sb/layer-ui/components/ui/button";
+import { Input } from "@sb/layer-ui/components/ui/input";
+import { Label } from "@sb/layer-ui/components/ui/label";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@sb/layer-ui/components/ui/toggle-group";
+import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
 
 // Uses default layout (AppHeader). Keep the page contents focused on the form.
 useSeoMeta({ title: "New match" });
@@ -99,21 +108,24 @@ const presetsInSport = computed(() =>
 
 // Theme picker. Operator chooses overlay (OBS) + scoreboard (TV) themes here so
 // the URLs minted on /m/[id] already carry `?theme=...`. They can change the
-// choice afterwards from the match hub. Themes self-declare which surface they
-// support via `manifest.supports`; we group them accordingly.
-const overlayThemes = computed(() =>
-  Object.values(themeRegistry).filter((t) =>
-    t.manifest.supports.includes("overlay"),
-  ),
-);
-const scoreboardThemes = computed(() =>
-  Object.values(themeRegistry).filter((t) =>
-    t.manifest.supports.includes("scoreboard"),
-  ),
-);
+// choice afterwards from the match hub. UI lives in ThemePickerDialog (with
+// live previews); we just keep the chosen ids here.
 const overlayTheme = ref<string>("broadcast-classic");
 const scoreboardTheme = ref<string>("filmable");
-const setTheme = (surface: ThemeSurface, id: string) => {
+const themeDialogOpen = ref(false);
+const overlayThemeName = computed(
+  () => themeRegistry[overlayTheme.value]?.manifest.name ?? "—",
+);
+const scoreboardThemeName = computed(
+  () => themeRegistry[scoreboardTheme.value]?.manifest.name ?? "—",
+);
+const onPickTheme = ({
+  surface,
+  id,
+}: {
+  surface: ThemeSurface;
+  id: string;
+}) => {
   if (surface === "overlay") overlayTheme.value = id;
   else scoreboardTheme.value = id;
 };
@@ -183,24 +195,30 @@ const createMatch = () => navigateTo(`/m/${matchId.value}`);
       >
         Sport
       </div>
-      <div class="grid grid-cols-2 gap-2 mb-6">
-        <button
+      <!-- Sport picker — 2×2 grid of large card-style tiles. We override
+           ToggleGroup's default `w-fit + flex` with `w-full + grid` so the
+           tiles span the page and lay out as cards (not a connected ribbon
+           segmented control like the smaller toggle groups below). -->
+      <ToggleGroup
+        type="single"
+        :model-value="sport"
+        variant="outline"
+        class="grid grid-cols-2 gap-2 mb-6 w-full"
+        @update:model-value="
+          (v) => {
+            if (v) sport = v as typeof sport;
+          }
+        "
+      >
+        <ToggleGroupItem
           v-for="s in sports"
           :key="s.id"
-          type="button"
+          :value="s.id"
           :disabled="!s.enabled"
           :title="s.enabled ? '' : `${s.label} ships in v1.x`"
-          class="p-3.5 rounded-md text-left flex flex-col gap-2 min-h-[84px] border-[1.5px] transition-colors"
-          :class="
-            !s.enabled
-              ? 'bg-surface text-foreground/40 border-border opacity-60 cursor-not-allowed'
-              : sport === s.id
-                ? 'bg-foreground text-background border-foreground'
-                : 'bg-surface text-foreground border-border hover:bg-surface-2'
-          "
-          @click="s.enabled && (sport = s.id)"
+          class="h-auto min-h-[120px] flex-col items-start gap-2.5 p-4 whitespace-normal"
         >
-          <span class="text-2xl leading-none">
+          <span class="text-4xl leading-none">
             {{
               s.id === "badminton"
                 ? "🏸"
@@ -211,69 +229,63 @@ const createMatch = () => navigateTo(`/m/${matchId.value}`);
                     : "🏓"
             }}
           </span>
-          <span>
-            <span class="block font-semibold text-[15px]">{{ s.label }}</span>
-            <span class="block text-[11px] mt-0.5 opacity-70">{{
-              s.preset
-            }}</span>
+          <span class="block w-full text-left">
+            <span class="block font-semibold text-base">{{ s.label }}</span>
+            <span class="block text-xs mt-0.5 opacity-70">{{ s.preset }}</span>
           </span>
-        </button>
-      </div>
+        </ToggleGroupItem>
+      </ToggleGroup>
 
       <!-- Type: Singles / Doubles -->
-      <div
+      <Label
         class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
       >
         Type
-      </div>
-      <div class="flex p-1 bg-surface-2 rounded-md gap-0.5 mb-6">
-        <button
-          type="button"
-          class="flex-1 py-2.5 rounded-sm text-sm transition-all"
-          :class="
-            !isDoubles
-              ? 'bg-surface font-semibold shadow-sm'
-              : 'bg-transparent font-medium text-foreground/70'
-          "
-          @click="isDoubles = false"
+      </Label>
+      <ToggleGroup
+        type="single"
+        :model-value="isDoubles ? 'doubles' : 'singles'"
+        variant="outline"
+        class="w-full mb-6"
+        @update:model-value="
+          (v) => {
+            if (v) isDoubles = v === 'doubles';
+          }
+        "
+      >
+        <ToggleGroupItem value="singles" class="flex-1"
+          >Singles</ToggleGroupItem
         >
-          Singles
-        </button>
-        <button
-          type="button"
-          class="flex-1 py-2.5 rounded-sm text-sm transition-all"
-          :class="
-            isDoubles
-              ? 'bg-surface font-semibold shadow-sm'
-              : 'bg-transparent font-medium text-foreground/70'
-          "
-          @click="isDoubles = true"
+        <ToggleGroupItem value="doubles" class="flex-1"
+          >Doubles</ToggleGroupItem
         >
-          Doubles
-        </button>
-      </div>
+      </ToggleGroup>
 
       <!-- Points per game — preset toggle within the active sport. Hidden for sports
            that ship a single preset (tennis, table tennis); shown only when the user
            has a real choice (badminton 21/15, pickleball classic/rally). -->
       <template v-if="presetsInSport.length > 1">
-        <div
+        <Label
           class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
         >
           Points per game
-        </div>
-        <div class="flex p-1 bg-surface-2 rounded-md gap-0.5 mb-6">
-          <button
+        </Label>
+        <ToggleGroup
+          type="single"
+          :model-value="formatPreset"
+          variant="outline"
+          class="w-full mb-6"
+          @update:model-value="
+            (v) => {
+              if (v) formatPreset = v as typeof formatPreset;
+            }
+          "
+        >
+          <ToggleGroupItem
             v-for="p in presetsInSport"
             :key="p.id"
-            type="button"
-            class="flex-1 py-2.5 rounded-sm text-sm transition-all"
-            :class="
-              formatPreset === p.id
-                ? 'bg-surface font-semibold shadow-sm'
-                : 'bg-transparent font-medium text-foreground/70'
-            "
-            @click="formatPreset = p.id"
+            :value="p.id"
+            class="flex-1"
           >
             {{ p.config.pointsPerGame }}
             <span class="opacity-60 ml-0.5">{{
@@ -285,56 +297,49 @@ const createMatch = () => navigateTo(`/m/${matchId.value}`);
                     ? "rally"
                     : "classic"
             }}</span>
-          </button>
-        </div>
+          </ToggleGroupItem>
+        </ToggleGroup>
       </template>
 
       <!-- Match length: single game OR best-of-N. Default = single. -->
-      <div
+      <Label
         class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
       >
         Match length
-      </div>
-      <div class="flex p-1 bg-surface-2 rounded-md gap-0.5 mb-2">
-        <button
-          type="button"
-          class="flex-1 py-2.5 rounded-sm text-sm transition-all"
-          :class="
-            matchLength === 'single'
-              ? 'bg-surface font-semibold shadow-sm'
-              : 'bg-transparent font-medium text-foreground/70'
-          "
-          @click="matchLength = 'single'"
+      </Label>
+      <ToggleGroup
+        type="single"
+        :model-value="matchLength"
+        variant="outline"
+        class="w-full mb-2"
+        @update:model-value="
+          (v) => {
+            if (v) matchLength = v as typeof matchLength;
+          }
+        "
+      >
+        <ToggleGroupItem value="single" class="flex-1"
+          >Single match</ToggleGroupItem
         >
-          Single match
-        </button>
-        <button
-          type="button"
-          class="flex-1 py-2.5 rounded-sm text-sm transition-all"
-          :class="
-            matchLength === 'best-of'
-              ? 'bg-surface font-semibold shadow-sm'
-              : 'bg-transparent font-medium text-foreground/70'
-          "
-          @click="matchLength = 'best-of'"
+        <ToggleGroupItem value="best-of" class="flex-1"
+          >Best of N</ToggleGroupItem
         >
-          Best of N
-        </button>
-      </div>
+      </ToggleGroup>
       <!-- Best-of-N stepper, visible only when 'best-of' is selected. -->
       <div
         v-if="matchLength === 'best-of'"
         class="flex items-center gap-3 mb-6 px-1"
       >
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="icon"
           aria-label="Decrease best-of"
-          class="size-9 rounded-md border border-border-strong bg-surface text-foreground font-semibold hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
           :disabled="bestOfN <= 3"
           @click="decBestOf"
         >
-          −
-        </button>
+          <Minus class="size-4" />
+        </Button>
         <div class="flex-1 text-center">
           <span class="text-base font-semibold text-foreground">
             Best of {{ bestOfN }}
@@ -343,129 +348,138 @@ const createMatch = () => navigateTo(`/m/${matchId.value}`);
             first to {{ gamesToWin }} {{ gamesToWin === 1 ? "game" : "games" }}
           </span>
         </div>
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="icon"
           aria-label="Increase best-of"
-          class="size-9 rounded-md border border-border-strong bg-surface text-foreground font-semibold hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
           :disabled="bestOfN >= 11"
           @click="incBestOf"
         >
-          +
-        </button>
+          <Plus class="size-4" />
+        </Button>
       </div>
       <div v-else class="mb-6" />
 
       <!-- Team A -->
-      <div
+      <Label
+        for="team-a-p1"
         class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
       >
         Team A
-      </div>
-      <input
+      </Label>
+      <Input
+        id="team-a-p1"
         v-model="teamA.p1"
         type="text"
         placeholder="Player 1"
-        class="w-full h-11 px-3.5 bg-surface border border-border-strong rounded-md text-[15px] text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+        class="h-11"
       />
-      <input
+      <Input
         v-if="isDoubles"
         v-model="teamA.p2"
         type="text"
         placeholder="Player 2 (doubles)"
-        class="w-full h-11 px-3.5 mt-2 bg-surface border border-border-strong rounded-md text-[15px] text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+        class="h-11 mt-2"
       />
 
       <!-- Team B -->
-      <div
+      <Label
+        for="team-b-p1"
         class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mt-4 mb-2"
       >
         Team B
-      </div>
-      <input
+      </Label>
+      <Input
+        id="team-b-p1"
         v-model="teamB.p1"
         type="text"
         placeholder="Player 1"
-        class="w-full h-11 px-3.5 bg-surface border border-border-strong rounded-md text-[15px] text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+        class="h-11"
       />
-      <input
+      <Input
         v-if="isDoubles"
         v-model="teamB.p2"
         type="text"
         placeholder="Player 2 (doubles)"
-        class="w-full h-11 px-3.5 mt-2 bg-surface border border-border-strong rounded-md text-[15px] text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+        class="h-11 mt-2"
       />
 
-      <!-- Themes — pick the look operators see in OBS (overlay) and on the
-           venue TV (scoreboard). Both URLs minted by /m/[id] include ?theme=…
-           so the choice is portable. Hub picker can override per-match. -->
+      <!-- Look & feel — same card layout as /m/[id]'s hub so the operator
+           sees the same shape twice (creation + later edits). Theme card
+           opens the preview dialog. Colors card is a placeholder until v1.x
+           lands custom team colors. -->
       <div
-        class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mt-6 mb-2"
+        class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mt-6 mb-2.5"
       >
-        Overlay theme
-        <span class="font-normal text-fg-subtle">· OBS source</span>
-      </div>
-      <div class="grid grid-cols-2 gap-2 mb-4">
-        <button
-          v-for="t in overlayThemes"
-          :key="t.manifest.id"
-          type="button"
-          class="p-3 rounded-md text-left border-[1.5px] transition-colors"
-          :class="
-            overlayTheme === t.manifest.id
-              ? 'bg-foreground text-background border-foreground'
-              : 'bg-surface text-foreground border-border hover:bg-surface-2'
-          "
-          @click="setTheme('overlay', t.manifest.id)"
-        >
-          <span class="block font-semibold text-[14px]">{{
-            t.manifest.name
-          }}</span>
-          <span class="block text-[11px] mt-0.5 opacity-70 line-clamp-2">{{
-            t.manifest.description
-          }}</span>
-        </button>
-      </div>
-
-      <div
-        class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
-      >
-        Scoreboard theme
-        <span class="font-normal text-fg-subtle">· venue TV / share</span>
+        Look &amp; feel
       </div>
       <div class="grid grid-cols-2 gap-2">
-        <button
-          v-for="t in scoreboardThemes"
-          :key="t.manifest.id"
+        <Button
           type="button"
-          class="p-3 rounded-md text-left border-[1.5px] transition-colors"
-          :class="
-            scoreboardTheme === t.manifest.id
-              ? 'bg-foreground text-background border-foreground'
-              : 'bg-surface text-foreground border-border hover:bg-surface-2'
-          "
-          @click="setTheme('scoreboard', t.manifest.id)"
+          variant="outline"
+          class="h-auto flex-col items-stretch gap-1.5 p-3 text-left whitespace-normal"
+          @click="themeDialogOpen = true"
         >
-          <span class="block font-semibold text-[14px]">{{
-            t.manifest.name
+          <span class="flex justify-between items-center">
+            <span
+              class="text-[11px] text-fg-subtle tracking-wide uppercase font-semibold"
+            >
+              🎨 Theme
+            </span>
+            <span class="text-fg-subtle">›</span>
+          </span>
+          <span class="block text-sm font-semibold">{{
+            overlayThemeName
           }}</span>
-          <span class="block text-[11px] mt-0.5 opacity-70 line-clamp-2">{{
-            t.manifest.description
-          }}</span>
-        </button>
+          <span class="block text-[10px] text-fg-subtle">
+            Scoreboard: {{ scoreboardThemeName }}
+          </span>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled
+          class="h-auto flex-col items-stretch gap-1.5 p-3 text-left whitespace-normal"
+          title="Custom team colors land in v1.x"
+        >
+          <span class="flex justify-between items-center">
+            <span
+              class="text-[11px] text-fg-subtle tracking-wide uppercase font-semibold"
+            >
+              🖌 Colors
+            </span>
+            <span class="text-fg-subtle">soon</span>
+          </span>
+          <span class="text-sm font-semibold inline-flex items-center gap-1.5">
+            <span class="size-3.5 rounded-sm bg-team-a" />
+            <span class="size-3.5 rounded-sm bg-team-b" />
+            Red / Blue
+          </span>
+        </Button>
       </div>
     </main>
+
+    <ThemePickerDialog
+      v-model:open="themeDialogOpen"
+      :overlay-theme="overlayTheme"
+      :scoreboard-theme="scoreboardTheme"
+      @pick="onPickTheme"
+    />
 
     <!-- Bottom CTA -->
     <footer
       class="fixed bottom-0 inset-x-0 px-4 py-4 pb-8 bg-background border-t border-border"
     >
-      <button
+      <Button
         type="button"
-        class="w-full h-12 rounded-md bg-brand text-brand-foreground font-semibold hover:bg-brand-hover transition-colors inline-flex items-center justify-center gap-2"
+        size="lg"
+        class="w-full h-12 text-base font-semibold"
         @click="createMatch"
       >
-        ▶ Create match
-      </button>
+        <Play class="size-4" />
+        Create match
+      </Button>
     </footer>
   </div>
 </template>

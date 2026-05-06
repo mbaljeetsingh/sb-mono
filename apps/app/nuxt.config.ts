@@ -1,12 +1,20 @@
 // @sb/app — the operator-facing PWA hosting control / overlay / scoreboard surfaces.
 // Extends shared layers: app-base (theme, composables, stores) + ui (shadcn-vue primitives).
 
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineNuxtConfig({
   extends: ["../../layers/app-base", "../../layers/ui"],
   modules: ["@nuxtjs/supabase", "shadcn-nuxt", "@vite-pwa/nuxt"],
   devtools: { enabled: true },
+  // Some shadcn-vue components in `layers/ui` import via the bare path
+  // `layers/ui/components/ui/...` (a quirk of the shadcn-vue --cwd behavior
+  // when the components live inside a Nuxt layer). Map that to the real
+  // filesystem path so we don't have to edit the generated component files.
+  alias: {
+    "layers/ui": fileURLToPath(new URL("../../layers/ui", import.meta.url)),
+  },
   // SPA mode — matches/events live behind unique IDs; SSR adds zero value here.
   ssr: false,
   typescript: { strict: true, typeCheck: false },

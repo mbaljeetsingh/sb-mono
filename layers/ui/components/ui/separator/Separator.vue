@@ -21,7 +21,8 @@ const delegatedProps = reactiveOmit(props, "class")
     v-bind="delegatedProps"
     :class="
       cn(
-        'bg-border shrink-0 data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px',
+        'bg-border shrink-0',
+        props.orientation === 'vertical' ? 'w-px h-full' : 'h-px w-full',
         props.class,
       )
     "

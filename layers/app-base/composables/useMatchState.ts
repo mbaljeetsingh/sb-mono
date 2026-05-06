@@ -11,25 +11,36 @@
 
 import { computed, onMounted, type Ref } from "vue";
 import { useStorage } from "@vueuse/core";
-import { type RacquetEvent, getPreset, sportPresets } from "@sb/engine";
-
-type FormatRecord = { preset?: string; gamesToWin?: number };
+import {
+  type RacquetEvent,
+  type SportPresetId,
+  getPreset,
+  sportPresets,
+} from "@sb/engine";
 
 export function useMatchState(matchId: Ref<string>) {
   const { events, append, replace } = useEvents(matchId);
   const { meta } = useMatchMeta(matchId);
 
-  // Per-match format overrides (written by control surface format sheet).
-  // Empty by default; preset/gamesToWin fall through to meta + preset defaults.
-  const formatKey = computed(() => `sb:format:${matchId.value}`);
-  const format = useStorage<FormatRecord>(formatKey, {} as FormatRecord);
+  // Per-match format overrides — split into two storage keys so each side of
+  // the control format sheet (preset toggle, BO stepper) can write
+  // independently. /new and control.vue use these same keys, so all surfaces
+  // stay in sync.
+  const presetStorage = useStorage<SportPresetId | null>(
+    computed(() => `sb:format:preset:${matchId.value}`),
+    null,
+  );
+  const gamesToWinStorage = useStorage<number | null>(
+    computed(() => `sb:format:gamesToWin:${matchId.value}`),
+    null,
+  );
 
   // Resolution order for the active preset:
-  //   1. format override (`sb:format.preset`) — operator's mid-match choice.
+  //   1. explicit format override — operator's mid-match choice.
   //   2. match metadata (`sb:meta.sportPreset`) — what /new wrote at creation.
   //   3. badminton-21 fallback.
   const presetId = computed<string>(() => {
-    const fromFormat = format.value.preset;
+    const fromFormat = presetStorage.value;
     if (typeof fromFormat === "string" && fromFormat in sportPresets)
       return fromFormat;
     const fromMeta = meta.value.sportPreset;
@@ -40,10 +51,10 @@ export function useMatchState(matchId: Ref<string>) {
   const preset = computed(() => getPreset(presetId.value));
 
   // Match length override — falls back to the preset's natural gamesToWin
-  // (table tennis = 3, badminton = 2, etc.) if not explicitly set.
+  // (table tennis = 3, badminton = 2, etc.) only when the user hasn't picked.
   const config = computed(() => {
     const base = preset.value.config;
-    const override = format.value.gamesToWin;
+    const override = gamesToWinStorage.value;
     if (typeof override === "number" && override >= 1) {
       return { ...base, gamesToWin: override };
     }

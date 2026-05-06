@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useClipboard, useStorage } from "@vueuse/core";
+import { Clipboard, X } from "lucide-vue-next";
 import { toast } from "vue-sonner";
+import { Button } from "@sb/layer-ui/components/ui/button";
 
 definePageMeta({ layout: false });
 
@@ -60,14 +62,14 @@ const copy = async (text: string, label = "Link") => {
     <header class="px-4 pt-16 pb-2 flex items-center justify-between">
       <span class="size-9" />
       <span class="font-semibold">Saved</span>
-      <button
-        type="button"
-        class="size-9 rounded-md hover:bg-surface-2 inline-flex items-center justify-center"
+      <Button
+        variant="ghost"
+        size="icon"
         aria-label="Close"
         @click="navigateTo('/')"
       >
-        ✕
-      </button>
+        <X class="size-4" />
+      </Button>
     </header>
 
     <main class="flex-1 px-6 pt-6 text-center">
@@ -174,20 +176,17 @@ const copy = async (text: string, label = "Link") => {
       </div>
 
       <div class="flex flex-col gap-2 max-w-md mx-auto">
-        <button
-          type="button"
-          class="h-11 rounded-md bg-brand text-brand-foreground font-semibold inline-flex items-center justify-center gap-2 hover:bg-brand-hover"
+        <Button
+          size="lg"
+          class="h-11 font-semibold"
           @click="copy(shareUrl, 'Share link')"
         >
-          📋 Copy share link
-        </button>
-        <button
-          type="button"
-          class="h-11 rounded-md bg-transparent text-foreground text-sm hover:bg-surface-2"
-          @click="navigateTo('/new')"
-        >
+          <Clipboard class="size-4" />
+          Copy share link
+        </Button>
+        <Button variant="ghost" class="h-11" @click="navigateTo('/new')">
           Start another match
-        </button>
+        </Button>
       </div>
     </main>
   </div>

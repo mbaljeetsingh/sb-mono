@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useClipboard, useStorage } from "@vueuse/core";
+import { ArrowLeft } from "lucide-vue-next";
 import { toast } from "vue-sonner";
+import { Button } from "@sb/layer-ui/components/ui/button";
 
 definePageMeta({ layout: false });
 
@@ -83,14 +85,14 @@ const copy = async (text: string, label = "URL") => {
 <template>
   <div class="min-h-screen bg-background text-foreground font-sans">
     <header class="px-4 pt-16 pb-2 flex items-center justify-between">
-      <button
-        type="button"
-        class="size-9 rounded-md hover:bg-surface-2 inline-flex items-center justify-center"
+      <Button
+        variant="ghost"
+        size="icon"
         aria-label="Back"
         @click="navigateTo('/')"
       >
-        ←
-      </button>
+        <ArrowLeft class="size-4" />
+      </Button>
       <span class="font-semibold">Dynamic URL</span>
       <span class="size-9" />
     </header>
@@ -109,13 +111,14 @@ const copy = async (text: string, label = "URL") => {
         </div>
         <div class="font-mono text-sm mt-1.5 break-all">{{ overlayUrl }}</div>
         <div class="flex gap-2 mt-3 items-center">
-          <button
+          <Button
             type="button"
-            class="px-3 h-8 rounded-md bg-white text-brand text-xs font-semibold"
+            size="sm"
+            class="bg-white text-brand hover:bg-white/90"
             @click="copy(overlayUrl, 'Overlay URL')"
           >
             Copy
-          </button>
+          </Button>
           <span class="text-[11px] opacity-85 font-mono"
             >paste once into OBS</span
           >
@@ -145,13 +148,15 @@ const copy = async (text: string, label = "URL") => {
               ID: {{ boundMatchId.slice(0, 12) }}…
             </div>
           </div>
-          <button
+          <Button
             type="button"
-            class="text-brand text-xs font-semibold"
+            variant="link"
+            size="sm"
+            class="text-brand"
             @click="unbind"
           >
             Unbind
-          </button>
+          </Button>
         </div>
       </div>
       <div
@@ -179,14 +184,19 @@ const copy = async (text: string, label = "URL") => {
               {{ m.id.slice(0, 8) }}…
             </span>
           </div>
-          <button
+          <Button
             type="button"
-            class="px-3 h-8 rounded-md bg-secondary text-secondary-foreground text-xs font-semibold hover:bg-surface-2"
-            :class="{ 'bg-brand text-brand-foreground': boundMatchId === m.id }"
+            size="sm"
+            variant="secondary"
+            :class="
+              boundMatchId === m.id
+                ? 'bg-foreground text-background hover:bg-foreground/90'
+                : ''
+            "
             @click="bind(m.id)"
           >
             {{ boundMatchId === m.id ? "Bound" : "Bind" }}
-          </button>
+          </Button>
         </div>
         <div
           v-if="recent.length === 0"
