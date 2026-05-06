@@ -51,6 +51,7 @@ Phase gates from BRD §13 control progression. Don't start phase N+1 until phase
 | **E1.23 · Deploy buttons + self-hosting docs** | Netlify / Vercel one-click buttons in README, `docs/SELF_HOSTING.md`. | 1 day |
 | **E1.24 · Launch landing page** | About, GitHub link, contributors, change-log. | 1 day |
 | **E1.25 · Public domain + production deploy** | Pick brand domain, configure SSL, point at Netlify, hosted Supabase project + migrate. | 1 day |
+| **E1.26 · Pre-match toss UI** | Proper "who serves first?" flow before the first rally — pick serving side and (for doubles) starting server / receiver courts on `/new` or first mount of `/control`. Today control auto-bootstraps `serverSide: A` and exposes only a 0-0 swap fallback; a toss step replaces the implicit default. Engine already accepts `serverSide` on `match.start`, so this is UI + storage only. | 1 day |
 
 **Phase 1 gate (G1) → unlocks Phase 2 only when:** 100+ self-hosted deploys OR 500+ GitHub stars OR 3+ themes contributed.
 

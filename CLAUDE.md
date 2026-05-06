@@ -46,12 +46,50 @@ When you do update, do it in the same commit as the code, and keep the entry con
 
 ## Coding conventions
 
+### Component & UI
 - **No shadcn `Ui` prefix.** Components are in `layers/ui/components/ui/<name>/index.ts` and imported explicitly: `import { Button } from "@sb/layer-ui/components/ui/button"`.
-- **Limit Nuxt component auto-imports** to `apps/app/components/**`. Layer UI is explicit. Composables / Nuxt framework imports (`useRoute`, `definePageMeta`, `useSeoMeta`, `useSupabaseClient`) stay auto-imported — they're framework standard.
-- **Layouts:** `apps/app/layouts/default.vue` is the app shell with header. `auth.vue` is the signin/signup carousel layout. Pages that should render bare (`/m/*/scoreboard`, `/m/*/overlay`, `/m/*/control`, `/d/*/overlay`, `/t/*/overlay`) opt out via `definePageMeta({ layout: false })`.
+- **Use shadcn primitives over raw HTML.** If a `Button`, `Input`, `Label`, `ToggleGroup`, `Dialog`, etc. exists in `layers/ui`, prefer it over a styled `<button>`/`<input>`. Exceptions: full-area tap zones with custom geometry (the score cells in `control.vue`) and decorative elements with no semantic role (slide-indicator dots).
+- **Use shadcn defaults.** Don't override `variant`/`size` with custom Tailwind classes for selected states; use the component's built-in active state. The only exception is when the component lacks a "selected" variant and we explicitly need one — prefer `ToggleGroup` over hand-rolled toggle pairs.
+- **Icons from `lucide-vue-next`** — no inline SVGs, no emoji-as-icon. Imported explicitly per-file.
+
+### Imports & state
+- **All imports explicit** for VueUse composables (`useStorage`, `useClipboard`, `useVibrate`, `useWakeLock`, `useElementSize`), `vue-sonner`, `lucide-vue-next`, and shadcn components. Auto-imports are flaky during HMR and break SSR; the cost of one explicit `import` line is nothing.
+- **Auto-imports are limited** to `apps/app/components/**`, plus Nuxt framework standards (`useRoute`, `definePageMeta`, `useSeoMeta`, `useSupabaseClient`, `navigateTo`, `useHead`, `computed`, `ref`, `onMounted`, `watch`, `watchEffect`).
+- **Use VueUse, not raw browser APIs.** `useStorage` over `localStorage.getItem/setItem`. `useClipboard({ legacy: true })` over `navigator.clipboard.writeText`. `useVibrate` over `navigator.vibrate`. `useWakeLock` over the wake-lock API. `useElementSize` over manual `ResizeObserver`. The legacy clipboard fallback matters for HTTP captive portals + in-app webviews.
+- **`useStorage` defaults must be plain values, not computeds.** It writes back to apply `mergeDefaults`, which errors on readonly computeds. Pass the literal default; if you need a meta-driven seed, write it from the source (e.g. `/new` writing to the same key) so storage is populated before the consumer mounts.
+- **Reactive storage keys.** `useStorage(computed(() => \`sb:meta:\${id.value}\`), default)` — the composable swaps which entry it reads/writes when the key changes. Use this whenever the matchId/dynamicId is reactive.
+
+### Vue conventions
+- **Composition API + `<script setup lang="ts">` only.** Organize: imports → composables → props/emits → refs/computed → watchers → lifecycle → helpers.
+- **Naming:** PascalCase components, camelCase variables, `use` prefix for composables, `is`/`has` prefix for booleans.
+- **`import type`** for type-only imports.
+- **Don't add new dependencies without explicit user approval.** Adding a tiny utility from npm is rarely worth the lockfile churn — write it inline or extract a helper.
+
+### shadcn-vue maintenance
+- **Never edit files in `layers/ui/` by hand.** Update via `pnpm shadcn:update` (full regen) or `pnpm shadcn:patches-only` (re-apply local patches). Local customizations live in `scripts/shadcn/patches.json`; add a patch entry rather than editing the component.
+- **Adding a single component:** `pnpm dlx shadcn-vue@2.4.0 add <name>` then run `pnpm shadcn:patches-only` if needed. The components.json `ui` alias is `@sb/layer-ui/components/ui`, so generated files use the workspace path natively.
+- **`apps/app/lib/utils.ts`** must exist as a re-export of `cn` from `@sb/layer-ui/lib/utils` — shadcn-vue components in the layer resolve `@/lib/utils` via Nuxt's app-root alias.
+
+### Layouts & auth
+- **Layouts:** `apps/app/layouts/default.vue` is the app shell with header. `auth.vue` is the signin/signup carousel layout. Pages that should render bare (`/m/*/scoreboard`, `/m/*/overlay`, `/m/*/control`, `/d/*/overlay`) opt out via `definePageMeta({ layout: false })`. **Toaster + TooltipProvider live in `app.vue`**, not the default layout, so layoutless pages get them too.
 - **Auth model — Option A.** Anonymous-OK scoring is the default. RLS allows `owner_id IS NULL` matches with permissive insert/update for both `anon` and `authenticated`. Per-match URL is the only access protection for anonymous matches; per-match write tokens (E2.8) come in Phase 2 for delegated scoring.
-- **Engine config** lives in `packages/engine/src/sports/badminton/config.ts`. Two presets ship: `badminton21` (BWF, default) and `badminton15` (classic). Format selection persists per-match via `localStorage:sb:format:{matchId}`.
+
+### Engine & sync
+- **Engine config** is in `packages/engine/src/registry.ts` — every shipped preset (badminton-21, badminton-15, tennis-basic, pickleball-classic, pickleball-rally, table-tennis) maps to `{ config, reducer, sport, displayName }`. Adding a sport in the racquet family = one entry. New family = sibling reducer + entries.
+- **Per-match storage keys** (single source of truth — these are the contract between `/new`, `useMatchState`, `control.vue`, overlay, scoreboard):
+  - `sb:meta:{matchId}` — sport, sportPreset, isDoubles, teamNames, players (`useMatchMeta`)
+  - `sb:format:preset:{matchId}` — chosen `SportPresetId` (e.g. "badminton-15")
+  - `sb:format:gamesToWin:{matchId}` — match length (1 = single, 2 = BO3, 3 = BO5…)
+  - `sb:theme:{matchId}` — `{ overlay, scoreboard }` chosen theme ids
+  - `sb:control-layout:{matchId}` — `'stacked' | 'sideBySide'`
+  - `sb:result:{matchId}` — final-result entry (saved.vue)
+  - `sb:dynamic:{dynamicId}` — currently bound match for `/d/{id}` URLs
+- **Theme resolution order** in overlay/scoreboard surfaces: `?theme=` query param → `sb:theme:{id}.{surface}` → hardcoded baseline (`broadcast-classic` / `filmable`).
 - **Event sync.** `useEvents` writes locally first (localStorage + BroadcastChannel for same-device cross-tab) then to Supabase, and subscribes to Realtime INSERT + DELETE for cross-device sync. Match rows are created lazily on first event with `owner_id` from current auth state.
+
+### Pre-merge validation
+- **Always run `pnpm --filter @sb/engine test`** after engine or registry changes — 29 tests cover the BWF rule set + match-state events.
+- **Boot the dev server and click the surface** for any UI change. Type checks and tests verify code correctness, not feature correctness.
 
 ## When in doubt
 

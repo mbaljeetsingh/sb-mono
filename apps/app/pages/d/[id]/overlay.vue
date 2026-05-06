@@ -6,9 +6,6 @@ definePageMeta({ layout: false });
 
 const route = useRoute();
 const dynamicId = computed(() => String(route.params.id ?? ""));
-const themeId = computed(() =>
-  String(route.query.theme ?? "broadcast-classic"),
-);
 
 // Reactive binding to the dynamic-URL row in localStorage. useStorage already
 // listens to storage events, so the OBS source on a different tab/laptop sees
@@ -26,6 +23,21 @@ const { state, config } = useMatchState(matchIdRef as Ref<string>);
 // Use the shared loader so name fallback ("Team A" / "Team B") matches every
 // other surface and stays in sync when the dynamic-URL operator rebinds matches.
 const { teamNames } = useMatchMeta(matchIdRef as Ref<string>);
+
+// Theme: ?theme= query param wins, then the bound match's stored choice
+// (sb:theme:{matchId}.overlay), then hardcoded baseline.
+const themeChoice = useStorage(
+  computed(() =>
+    matchIdRef.value ? `sb:theme:${matchIdRef.value}` : "sb:theme:__none__",
+  ),
+  { overlay: "broadcast-classic", scoreboard: "filmable" },
+);
+const themeId = computed(
+  () =>
+    String(route.query.theme ?? "") ||
+    themeChoice.value.overlay ||
+    "broadcast-classic",
+);
 
 const themeEntry = computed(() => getTheme(themeId.value, "overlay"));
 

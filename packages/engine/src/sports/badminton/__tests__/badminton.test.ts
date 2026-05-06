@@ -335,3 +335,132 @@ describe("team rename and sides swap", () => {
     expect(s2.sidesSwapped).toBe(false);
   });
 });
+
+// ─── BWF court geometry — server court flips, doubles partner rotation ────────
+//
+// Direct tests for the rules pasted from BWF:
+//   1. Server's court alternates by their own score (even=right, odd=left).
+//   2. Receiver stands diagonal to server (their right court when server's
+//      right; their left court when server's left).
+//   3. Service shifts to receiving team when they win.
+//   4. Doubles ONLY: serving team's partners swap courts on each "won on
+//      serve" point. Receiving team's partners NEVER swap on a single point;
+//      whoever happens to be in the appropriate court at the moment service
+//      shifts becomes the new server.
+
+describe("badminton — server court rules (singles + doubles)", () => {
+  it("server's court flips on every point won on serve (even score → right)", () => {
+    let s = reduce([start("A")], badminton21);
+    expect(s.serverCourt).toBe("right"); // 0-0 → right
+
+    s = reduce([start("A"), point("A")], badminton21);
+    expect(s.serverCourt).toBe("left"); // 1-0 → left (A's score odd)
+
+    s = reduce([start("A"), point("A"), point("A")], badminton21);
+    expect(s.serverCourt).toBe("right"); // 2-0 → right
+
+    s = reduce([start("A"), point("A"), point("A"), point("A")], badminton21);
+    expect(s.serverCourt).toBe("left"); // 3-0 → left
+  });
+
+  it("on service shift, new server's court is determined by THEIR score", () => {
+    // 0-0: A serves from right.
+    // B wins → service shifts to B. B's score is now 1 (odd) → B serves from LEFT.
+    let s = reduce([start("A"), point("B")], badminton21);
+    expect(s.servingSide).toBe("B");
+    expect(s.serverCourt).toBe("left");
+
+    // A then wins back. A's score is 1 (odd) → A serves from LEFT.
+    s = reduce([start("A"), point("B"), point("A")], badminton21);
+    expect(s.servingSide).toBe("A");
+    expect(s.serverCourt).toBe("left");
+
+    // B then wins back. B's score = 2 (even) → B serves from RIGHT.
+    // Sequence: B, A, B → score 1-2, B serves with score 2 (even).
+    s = reduce([start("A"), point("B"), point("A"), point("B")], badminton21);
+    expect(s.servingSide).toBe("B");
+    expect(s.serverCourt).toBe("right");
+  });
+});
+
+describe("badminton doubles — partner rotation (BWF Law 8)", () => {
+  it("starts with both teams' slot-1 in the right service court", () => {
+    const s = reduce([start("A")], badminton21);
+    expect(s.partnerOnRight).toEqual({ a: 1, b: 1 });
+  });
+
+  it("serving team swaps partners on a point won on serve; receiving team does NOT swap", () => {
+    // A serves from right (0-0). A wins the rally — A's partners swap (slot 1
+    // moves to left, slot 2 to right). Team B was receiving and DID NOT win,
+    // so their partner positions stay put.
+    const s = reduce([start("A"), point("A")], badminton21);
+    expect(s.partnerOnRight.a).toBe(2); // A swapped
+    expect(s.partnerOnRight.b).toBe(1); // B unchanged
+    expect(s.servingSide).toBe("A");
+    expect(s.serverCourt).toBe("left"); // A's score 1, odd
+  });
+
+  it("receiving team winning a point does NOT swap either team's partners", () => {
+    // 0-0: A serves. B wins → service shifts to B. NEITHER team swaps.
+    // Result: B is now server with score 1 (odd, so left court). A's partners
+    // stay {a: 1}, B's partners stay {b: 1}.
+    const s = reduce([start("A"), point("B")], badminton21);
+    expect(s.partnerOnRight).toEqual({ a: 1, b: 1 });
+    expect(s.servingSide).toBe("B");
+    expect(s.serverCourt).toBe("left");
+  });
+
+  it("multi-point rally: only the team that wins on serve swaps", () => {
+    // Sequence:
+    //   0-0  A serves right; A wins   → partnerOnRight.a flips to 2 (A swaps)
+    //   1-0  A serves left;  A wins   → partnerOnRight.a flips back to 1
+    //   2-0  A serves right; B wins   → service shifts; NO swap
+    //   2-1  B serves left;  B wins   → partnerOnRight.b flips to 2 (B swaps)
+    //   2-2  B serves right; A wins   → service shifts; NO swap
+    const seq = [
+      start("A"),
+      point("A"), // A wins on serve
+      point("A"), // A wins on serve
+      point("B"), // B wins on receive (service shift)
+      point("B"), // B wins on serve
+      point("A"), // A wins on receive (service shift)
+    ];
+    const s = reduce(seq, badminton21);
+    expect(s.games[0]).toEqual({ a: 3, b: 2 });
+    expect(s.servingSide).toBe("A"); // last winner
+    // After 3 A-points: 0,1,2,3 ⇒ flipped on points 1 and 2 (won on serve),
+    // not on point 3 (won as receiver). a starts at 1, flips to 2 (point 1),
+    // flips back to 1 (point 2), unchanged for point 3 → a = 1.
+    expect(s.partnerOnRight.a).toBe(1);
+    // B started at 1, didn't flip on point 3 (won on receive), flipped to 2
+    // on point 4 (won on serve), didn't flip on point 5 (won on receive) → b = 2.
+    expect(s.partnerOnRight.b).toBe(2);
+    // A's score is 3 (odd) → server in left court.
+    expect(s.serverCourt).toBe("left");
+  });
+
+  it("partner positions reset to {a:1, b:1} at the start of a new game", () => {
+    // Win game 1 with several "won on serve" points so a flips a few times.
+    const game1: SideId[] = [];
+    for (let i = 0; i < 21; i++) game1.push("A");
+    const s = reduce([start("A"), ...points(game1)], badminton21);
+    // Just before game.end, A had been winning on serve repeatedly.
+    // After the game ends and game 2 starts (auto-bootstrap on next point):
+    const s2 = reduce([start("A"), ...points([...game1, "B"])], badminton21);
+    expect(s2.gamesWon.a).toBe(1);
+    expect(s2.games.length).toBe(2);
+    expect(s2.partnerOnRight).toEqual({ a: 1, b: 1 });
+  });
+});
+
+describe("badminton — undo round-trips partnerOnRight + serverCourt", () => {
+  it("undoing a 'won on serve' point reverts the partner swap", () => {
+    const before = reduce([start("A")], badminton21);
+    const after = reduce([start("A"), point("A")], badminton21);
+    expect(after.partnerOnRight.a).toBe(2);
+    const undone = reduce(applyUndo([start("A"), point("A")]), badminton21);
+    expect(undone.partnerOnRight.a).toBe(before.partnerOnRight.a); // back to 1
+    expect(undone.serverCourt).toBe(before.serverCourt); // back to right
+    expect(undone.servingSide).toBe(before.servingSide); // still A
+  });
+});

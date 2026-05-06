@@ -38,21 +38,17 @@ const matchId = computed(() => String(route.params.id ?? ""));
 //   gamesToWin = 3 → best of 5, etc.
 const { meta: matchMeta, teamNames: metaTeamNames } = useMatchMeta(matchId);
 
-// Initial preset = whatever /new wrote into sb:meta.sportPreset, or fall back
-// to badminton-21. Once stored, useStorage owns the value.
-const initialPreset = computed<SportPresetId>(() => {
-  const m = matchMeta.value.sportPreset;
-  return typeof m === "string" && m in sportPresets
-    ? (m as SportPresetId)
-    : "badminton-21";
-});
+// useStorage defaults must be plain values (not computeds) — it tries to
+// write back during init to apply mergeDefaults, which fails on readonly
+// computeds. /new writes both keys at match creation; the literal fallbacks
+// only fire if the user lands here without going through /new.
 const formatPreset = useStorage<SportPresetId>(
   computed(() => `sb:format:preset:${matchId.value}`),
-  initialPreset,
+  "badminton-21",
 );
 const gamesToWin = useStorage<number>(
   computed(() => `sb:format:gamesToWin:${matchId.value}`),
-  computed(() => getPreset(initialPreset.value).config.gamesToWin),
+  1,
 );
 
 const config = computed<RacquetConfig>(() => {
@@ -94,6 +90,27 @@ onMounted(() => {
 });
 
 const state = computed(() => reduceRacquet(events.value, config.value));
+
+// Starting-server swap. Only valid before the first rally — once a point is
+// scored, server identity is derived by the reducer from the event log, so we
+// shouldn't rewrite history. Gate strictly on "only the bootstrap match.start
+// exists." Replaces the existing match.start (clear + append) so the event log
+// stays clean and Supabase reflects the swap.
+const canSwapStartingServer = computed(
+  () => events.value.length === 1 && events.value[0]?.type === "match.start",
+);
+const swapStartingServer = () => {
+  const first = events.value[0];
+  if (!first || first.type !== "match.start") return;
+  const opposite: SideId = first.serverSide === "A" ? "B" : "A";
+  vibrate(10);
+  replace([]);
+  append({
+    type: "match.start",
+    serverSide: opposite,
+    serverCourt: "right",
+  } as Omit<RacquetEvent, "id" | "ts">);
+};
 
 const score = (side: SideId) => {
   const last = state.value.games[state.value.games.length - 1];
@@ -228,12 +245,13 @@ const cellsForTeam = (team: "A" | "B"): CellInfo[] => {
     // The other cell is empty (no label) but still tappable.
     const name = team === "A" ? displayNameA.value : displayNameB.value;
     const serverCourt = state.value.serverCourt;
-    const isServingTeam = state.value.servingSide === team;
-    const activeCourt: "left" | "right" = isServingTeam
-      ? serverCourt
-      : serverCourt === "left"
-        ? "right"
-        : "left";
+    // BWF: at 0-0 server is in their right court, receiver stands in THEIR
+    // OWN right court (the diagonal — both teams' right courts sit on
+    // opposite sides of the overall court because the teams face each other).
+    // So the receiver's court matches the server's court name. With Team A
+    // rendered reversed and Team B normal, this correctly puts the players
+    // on opposite screen sides (visually diagonal).
+    const activeCourt: "left" | "right" = serverCourt;
     return [
       {
         key: `${teamKey}-left`,
@@ -300,7 +318,23 @@ onUnmounted(() => wakeLock.release());
 // ─────────── Sheets ───────────
 type SheetKind = "events" | "matchState" | "scoreCorrect" | "format" | null;
 const openSheet = ref<SheetKind>(null);
-const closeSheet = () => (openSheet.value = null);
+const closeSheet = () => {
+  openSheet.value = null;
+  confirmReset.value = false;
+};
+
+// Two-tap confirm for the destructive "reset match" action in the match-state
+// sheet. First tap arms it, second tap fires. Auto-disarms when the sheet closes.
+const confirmReset = ref(false);
+const onResetTap = () => {
+  if (!confirmReset.value) {
+    confirmReset.value = true;
+    return;
+  }
+  vibrate(20);
+  onReset();
+  closeSheet();
+};
 
 // useStorage refs auto-persist on assignment — these helpers stay for clarity
 // at the call sites.
@@ -562,6 +596,16 @@ const applyScoreCorrect = () => {
           >
             INTERVAL
           </span>
+          <!-- Pre-rally starting-server swap. Disappears once any point is scored. -->
+          <Button
+            v-if="canSwapStartingServer"
+            variant="outline"
+            size="sm"
+            class="h-6 px-2 text-[10px] font-bold tracking-wider uppercase"
+            @click="swapStartingServer"
+          >
+            {{ state.servingSide }} serves · swap
+          </Button>
           <Button
             variant="link"
             size="sm"
@@ -656,7 +700,9 @@ const applyScoreCorrect = () => {
                teams are stacked, top|bottom when teams are side-by-side. -->
           <div
             class="flex flex-1"
-            :class="layout === 'sideBySide' ? 'flex-col' : 'flex-row'"
+            :class="
+              layout === 'sideBySide' ? 'flex-col-reverse' : 'flex-row-reverse'
+            "
           >
             <button
               v-for="(cell, idx) in cellsA"
@@ -666,7 +712,13 @@ const applyScoreCorrect = () => {
               :aria-label="`Tap to score for ${cell.label || 'team A'}`"
               class="relative flex flex-1 flex-col items-center justify-center gap-2 px-4 py-4 transition-[background-color] duration-150 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-65"
               :class="[
-                idx > 0
+                // Both layouts reverse so the right service court (cells[1])
+                // is visually first (screen-LEFT in stacked, TOP in
+                // side-by-side). idx 0 is therefore the visually-SECOND cell;
+                // the centerline divider lives on its leading edge:
+                //   stacked     → border-l (left edge of the right-side cell)
+                //   sideBySide  → border-t (top edge of the bottom cell)
+                idx === 0
                   ? layout === 'sideBySide'
                     ? 'border-t border-team-a/20'
                     : 'border-l border-team-a/20'
@@ -693,10 +745,14 @@ const applyScoreCorrect = () => {
           </div>
         </div>
 
-        <!-- Team B row — same shape, mirrored colors. -->
+        <!-- Team B row — mirrors Team A's colors. In stacked view the column
+             is `flex-col-reverse` so the score header anchors to the BOTTOM
+             (Team B's "back of court" in a top-down layout, mirroring Team A
+             at the top). Side-by-side keeps the header on top. -->
         <div
-          class="relative flex flex-1 flex-col bg-team-b-soft transition-shadow duration-200"
+          class="relative flex flex-1 bg-team-b-soft transition-shadow duration-200"
           :class="[
+            layout === 'sideBySide' ? 'flex-col' : 'flex-col-reverse',
             isGlowing === 'B'
               ? 'shadow-[inset_0_0_0_3px_var(--color-team-b)] animate-glow-b'
               : lastPointWinner === 'B' && !state.matchOver
@@ -705,7 +761,12 @@ const applyScoreCorrect = () => {
           ]"
         >
           <div
-            class="flex items-center justify-center gap-3 border-b border-team-b/20 px-3 py-2.5"
+            class="flex items-center justify-center gap-3 px-3 py-2.5"
+            :class="
+              layout === 'sideBySide'
+                ? 'border-b border-team-b/20'
+                : 'border-t border-team-b/20'
+            "
           >
             <span
               class="text-[10px] font-bold uppercase tracking-[0.08em] text-team-b"
@@ -736,9 +797,19 @@ const applyScoreCorrect = () => {
             </span>
           </div>
 
-          <!-- Team B cells. Same layout convention as team A — items-center
-               justify-center; pill renders after the name. -->
-          <div class="flex flex-1">
+          <!-- Team B cells. In a top-down BWF court view, B is shown from
+               BWF's perspective without mirroring — B's left court reads as
+               screen-LEFT, right court as screen-RIGHT. So in stacked mode
+               we use the natural `flex-row` (no reverse). When B serves with
+               an odd score they're in their LEFT court (screen-left bottom);
+               with an even score they're in their RIGHT court (screen-right
+               bottom). Either way the SERVES pill lands on the matching cell
+               diagonally opposite to A's server. Side-by-side keeps the
+               column reversed for symmetry with Team A. -->
+          <div
+            class="flex flex-1"
+            :class="layout === 'sideBySide' ? 'flex-col' : 'flex-row'"
+          >
             <button
               v-for="(cell, idx) in cellsB"
               :key="cell.key"
@@ -747,6 +818,10 @@ const applyScoreCorrect = () => {
               :aria-label="`Tap to score for ${cell.label || 'team B'}`"
               class="relative flex flex-1 flex-col items-center justify-center gap-2 px-4 py-4 transition-[background-color] duration-150 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-65"
               :class="[
+                // Centerline divider sits between the two cells. Both layouts
+                // are non-reversed for Team B (left court first, right second),
+                // so idx 1 is always the visually-second cell — its leading
+                // edge is the centerline.
                 idx > 0
                   ? layout === 'sideBySide'
                     ? 'border-t border-team-b/20'
@@ -1034,6 +1109,29 @@ const applyScoreCorrect = () => {
         >
           Score correction…
         </Button>
+
+        <!-- Danger zone. Two-tap confirm so a stray tap can't wipe a live match. -->
+        <div
+          class="mt-5 pt-4 border-t border-dashed border-border flex flex-col gap-2"
+        >
+          <div
+            class="text-[11px] font-bold tracking-wider uppercase text-danger"
+          >
+            Danger
+          </div>
+          <Button
+            :variant="confirmReset ? 'destructive' : 'outline'"
+            size="sm"
+            class="w-full"
+            @click="onResetTap"
+          >
+            {{
+              confirmReset
+                ? "Tap again to confirm — clears all events"
+                : "Reset match to 0–0"
+            }}
+          </Button>
+        </div>
       </div>
 
       <!-- Format sheet — change target points / series mid-match. -->

@@ -5,7 +5,19 @@ definePageMeta({ layout: false });
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
-const themeId = computed(() => String(route.query.theme ?? "filmable"));
+
+// Same resolution order as the overlay surface — query string wins, stored
+// choice next, hardcoded fallback last.
+const themeChoice = useStorage(
+  computed(() => `sb:theme:${matchId.value}`),
+  { overlay: "broadcast-classic", scoreboard: "filmable" },
+);
+const themeId = computed(
+  () =>
+    String(route.query.theme ?? "") ||
+    themeChoice.value.scoreboard ||
+    "filmable",
+);
 
 const { state, config } = useMatchState(matchId);
 const { teamNames } = useMatchMeta(matchId);

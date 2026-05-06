@@ -63,17 +63,14 @@ const unbind = () => {
   boundMatchId.value = null;
 };
 
-const boundTeamNames = computed(() => {
-  if (!boundMatchId.value || typeof localStorage === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(`sb:meta:${boundMatchId.value}`);
-    if (!raw) return null;
-    const meta = JSON.parse(raw);
-    return meta?.teamNames as { a: string; b: string } | null;
-  } catch {
-    return null;
-  }
-});
+// Reactive meta of the bound match — useMatchMeta swaps which storage entry
+// it reads when the bound id changes, so the "Now showing" pane updates
+// without manual JSON.parse boilerplate.
+const boundMatchIdRef = computed(() => boundMatchId.value ?? "");
+const { meta: boundMeta } = useMatchMeta(boundMatchIdRef as Ref<string>);
+const boundTeamNames = computed(() =>
+  boundMatchId.value ? (boundMeta.value.teamNames ?? null) : null,
+);
 
 const { copy: clipboardCopy } = useClipboard({ legacy: true });
 const copy = async (text: string, label = "URL") => {

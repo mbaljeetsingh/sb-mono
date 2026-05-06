@@ -206,7 +206,14 @@ export function useEvents(matchId: Ref<string>) {
   // ─── Lifecycle ────────────────────────────────────────────────────────────
 
   const subscribeRealtime = () => {
-    realtimeChannel?.unsubscribe();
+    // Fully remove the prior channel — `unsubscribe()` alone leaves the named
+    // channel registered, so `supabase.channel(name)` returns the same already-
+    // subscribed instance and `.on()` then errors with "cannot add
+    // postgres_changes callbacks after subscribe()".
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
     realtimeChannel = supabase
       .channel(`match:${matchId.value}`)
       .on(
@@ -283,8 +290,10 @@ export function useEvents(matchId: Ref<string>) {
   onUnmounted(() => {
     channel?.close();
     channel = null;
-    realtimeChannel?.unsubscribe();
-    realtimeChannel = null;
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
   });
 
   // Re-init on matchId change.

@@ -5,8 +5,20 @@ definePageMeta({ layout: false });
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
-const themeId = computed(() =>
-  String(route.query.theme ?? "broadcast-classic"),
+
+// Theme resolution order: ?theme= query param (per-link override) →
+// `sb:theme:{id}.overlay` (the choice the operator made on /m/[id] or /new) →
+// hardcoded fallback. Means a fresh /m/{id}/overlay link without query string
+// still honors the chosen theme.
+const themeChoice = useStorage(
+  computed(() => `sb:theme:${matchId.value}`),
+  { overlay: "broadcast-classic", scoreboard: "filmable" },
+);
+const themeId = computed(
+  () =>
+    String(route.query.theme ?? "") ||
+    themeChoice.value.overlay ||
+    "broadcast-classic",
 );
 
 const { state, config } = useMatchState(matchId);
