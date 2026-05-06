@@ -9,7 +9,8 @@
  * :root holds actual values; .dark overrides for dark mode.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Kalam:wght@400;700&display=swap");
+/* Font import lives in @sb/layer-ui/assets/index.css so it sits at the top of the
+ * combined stylesheet (postcss requires @import before all other rules). */
 
 @theme inline {
   /* shadcn-vue chrome — utilities like bg-background, text-foreground, etc. */

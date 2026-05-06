@@ -1,3 +1,7 @@
+/* CSS @import rules must precede every other rule (besides @charset / empty @layer).
+ * The font import has to sit at the very top of the combined stylesheet, otherwise
+ * postcss flattens tailwindcss + theme.css ahead of it and complains. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Kalam:wght@400;700&display=swap");
 @import "tailwindcss";
 @import "@sb/layer-app-base/assets/theme.css";
 

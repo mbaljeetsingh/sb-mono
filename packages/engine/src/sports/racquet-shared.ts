@@ -68,6 +68,25 @@ export type RacquetState = BaseState & {
   timeout: { side: SideId; kind: "standard" | "medical" | "injury" } | null;
   /** Set while the match is suspended (rain, power, crowd, etc.). */
   suspended: boolean;
+  /**
+   * Doubles partner tracking (BWF Law 8). Identifies which slot (1 or 2) of each team
+   * is currently in their RIGHT service court. The other slot is in the left court.
+   *
+   * Initial: both teams have slot 1 in the right court (slot 1 of the receiving team
+   * is the initial receiver, sitting in the diagonal — which is their right court).
+   *
+   * Update on point: if the scoring side was the serving side ("won on serve"), the
+   * two partners on that team swap courts (toggle the team's flag). Otherwise, no
+   * change — the receiving team gains service but doesn't swap. The current server's
+   * identity is then derived: in `serverCourt === 'right'`, the slot equal to
+   * `partnerOnRight[team]` is serving; in `'left'`, the OTHER slot is serving.
+   *
+   * Reset to `{ a: 1, b: 1 }` at the start of each new game.
+   *
+   * Singles: this field is set but ignored — the only player on each side is always
+   * "in" both courts conceptually.
+   */
+  partnerOnRight: { a: 1 | 2; b: 1 | 2 };
 };
 
 /** Generic config shape for all racquet-family sports. Sports may extend with their own fields. */
@@ -102,6 +121,7 @@ export const initialRacquetState = (): RacquetState => ({
   endReason: null,
   timeout: null,
   suspended: false,
+  partnerOnRight: { a: 1, b: 1 },
 });
 
 /** Returns the side that has won the game, or null if neither has yet. */

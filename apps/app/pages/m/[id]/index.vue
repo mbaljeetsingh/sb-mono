@@ -1,5 +1,10 @@
 <script setup lang="ts">
-definePageMeta({ layout: false });
+import { computed, onMounted, ref, watch } from "vue";
+import { themes as themeRegistry, type ThemeSurface } from "@sb/themes";
+import ThemePickerSheet from "~/components/match/ThemePickerSheet.vue";
+
+// Uses default layout (AppHeader at top, max-w-6xl content wrapper).
+useSeoMeta({ title: "Match" });
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
@@ -13,10 +18,63 @@ const baseUrl = computed(() => {
   return window.location.origin;
 });
 
+// Per-match theme selection. Persisted to localStorage so the overlay/scoreboard
+// pages and the URL builders can reflect the user's choice. DB persistence will
+// land with E1.11 (Supabase realtime sync) — until then, localStorage is the truth.
+const THEME_STORAGE_KEY = computed(() => `sb:theme:${matchId.value}`);
+const overlayTheme = ref<string>("broadcast-classic");
+const scoreboardTheme = ref<string>("filmable");
+const themeSheetOpen = ref(false);
+
+onMounted(() => {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const raw = localStorage.getItem(THEME_STORAGE_KEY.value);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed?.overlay === "string")
+        overlayTheme.value = parsed.overlay;
+      if (typeof parsed?.scoreboard === "string")
+        scoreboardTheme.value = parsed.scoreboard;
+    }
+  } catch {}
+});
+
+const persistTheme = () => {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(
+    THEME_STORAGE_KEY.value,
+    JSON.stringify({
+      overlay: overlayTheme.value,
+      scoreboard: scoreboardTheme.value,
+    }),
+  );
+};
+
+const onPickTheme = ({
+  surface,
+  id,
+}: {
+  surface: ThemeSurface;
+  id: string;
+}) => {
+  if (surface === "overlay") overlayTheme.value = id;
+  if (surface === "scoreboard") scoreboardTheme.value = id;
+  persistTheme();
+};
+
+const overlayThemeName = computed(
+  () => themeRegistry[overlayTheme.value]?.manifest.name ?? "—",
+);
+const scoreboardThemeName = computed(
+  () => themeRegistry[scoreboardTheme.value]?.manifest.name ?? "—",
+);
+
+// URL builders include ?theme= so OBS / venue TV pick up the selected theme.
 const urls = computed(() => ({
   control: `${baseUrl.value}/m/${matchId.value}/control`,
-  overlay: `${baseUrl.value}/m/${matchId.value}/overlay`,
-  scoreboard: `${baseUrl.value}/m/${matchId.value}/scoreboard`,
+  overlay: `${baseUrl.value}/m/${matchId.value}/overlay?theme=${overlayTheme.value}`,
+  scoreboard: `${baseUrl.value}/m/${matchId.value}/scoreboard?theme=${scoreboardTheme.value}`,
 }));
 
 const score = (side: "a" | "b") => {
@@ -40,28 +98,23 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-foreground font-sans pb-8">
-    <!-- Top bar -->
-    <header class="px-4 pt-16 pb-2 flex items-center justify-between">
-      <button
-        type="button"
-        class="size-9 rounded-md text-foreground hover:bg-surface-2 inline-flex items-center justify-center"
-        aria-label="Back"
-        @click="navigateTo('/')"
-      >
-        ←
-      </button>
+  <div class="font-sans pb-8">
+    <!-- Page header strip — match id badge + disabled settings button.
+         Global AppHeader (logo + avatar) is rendered by layouts/default.vue. -->
+    <div class="flex items-center justify-between px-4 pt-4 pb-2">
       <span class="text-[13px] font-semibold text-fg-subtle">
         Match · {{ matchId.slice(0, 8) }}…
       </span>
       <button
         type="button"
-        class="size-9 rounded-md text-foreground hover:bg-surface-2 inline-flex items-center justify-center"
-        aria-label="Settings"
+        class="size-9 rounded-md text-foreground/40 cursor-not-allowed inline-flex items-center justify-center"
+        aria-label="Settings (coming in v1.x)"
+        title="Match settings (court, round, category, venue) — coming in v1.x"
+        disabled
       >
         ⚙
       </button>
-    </header>
+    </div>
 
     <!-- Hero status card -->
     <div class="px-4 pt-2 pb-4">
@@ -314,6 +367,7 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
         <button
           type="button"
           class="p-3 bg-surface border border-border rounded-md text-left flex flex-col gap-1.5 hover:bg-surface-2"
+          @click="themeSheetOpen = true"
         >
           <span class="flex justify-between items-center">
             <span
@@ -323,11 +377,18 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
             </span>
             <span class="text-fg-subtle">›</span>
           </span>
-          <span class="text-sm font-semibold">Broadcast Classic</span>
+          <span class="block text-sm font-semibold">{{
+            overlayThemeName
+          }}</span>
+          <span class="block text-[10px] text-fg-subtle">
+            Scoreboard: {{ scoreboardThemeName }}
+          </span>
         </button>
         <button
           type="button"
-          class="p-3 bg-surface border border-border rounded-md text-left flex flex-col gap-1.5 hover:bg-surface-2"
+          disabled
+          class="p-3 bg-surface border border-border rounded-md text-left flex flex-col gap-1.5 opacity-60 cursor-not-allowed"
+          title="Custom team colors land in v1.x"
         >
           <span class="flex justify-between items-center">
             <span
@@ -335,7 +396,7 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
             >
               🖌 Colors
             </span>
-            <span class="text-fg-subtle">›</span>
+            <span class="text-fg-subtle">soon</span>
           </span>
           <span class="text-sm font-semibold inline-flex items-center gap-1.5">
             <span class="size-3.5 rounded-sm bg-team-a" />
@@ -345,5 +406,12 @@ const openControl = () => navigateTo(`/m/${matchId.value}/control`);
         </button>
       </div>
     </div>
+
+    <ThemePickerSheet
+      v-model:open="themeSheetOpen"
+      :overlay-theme="overlayTheme"
+      :scoreboard-theme="scoreboardTheme"
+      @pick="onPickTheme"
+    />
   </div>
 </template>

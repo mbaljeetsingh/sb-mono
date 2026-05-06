@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import {
+  type RacquetConfig,
   type RacquetEvent,
   type SideId,
+  badminton15,
   badminton21,
   reduceBadminton,
   applyBadmintonUndo,
@@ -11,10 +13,72 @@ definePageMeta({ layout: false });
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
-const config = badminton21;
-const teamNames = ref({ a: "Priya / Anu", b: "Karan / Jay" });
 
-// Pick up team names persisted by /new
+// Format = which points-per-game preset + how many games make a match.
+// Persisted to localStorage so undo / refresh preserves the chosen format.
+// Engine recomputes match-over from the event log on every reduce, so the
+// operator can flip these mid-match — including extending an in-progress
+// match from "single" to "best of 3".
+//   gamesToWin = 1 → single match (first game decides).
+//   gamesToWin = 2 → best of 3 (first to 2 games wins).
+//   gamesToWin = 3 → best of 5, etc.
+type FormatPreset = "badminton-21" | "badminton-15";
+// 21-point is current BWF (since 2006). 15-point is the BWF 2027 proposal
+// (pending April 2026 vote, effective Jan 2027 if approved). Default = today's BWF.
+const formatPreset = ref<FormatPreset>("badminton-21");
+const gamesToWin = ref<number>(1);
+
+const FORMAT_KEY = computed(() => `sb:format:${matchId.value}`);
+
+onMounted(() => {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const raw = localStorage.getItem(FORMAT_KEY.value);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (
+        parsed?.preset === "badminton-15" ||
+        parsed?.preset === "badminton-21"
+      ) {
+        formatPreset.value = parsed.preset;
+      }
+      if (
+        typeof parsed?.gamesToWin === "number" &&
+        parsed.gamesToWin >= 1 &&
+        parsed.gamesToWin <= 6
+      ) {
+        gamesToWin.value = parsed.gamesToWin;
+      }
+    }
+  } catch {}
+});
+
+const persistFormat = () => {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(
+    FORMAT_KEY.value,
+    JSON.stringify({
+      preset: formatPreset.value,
+      gamesToWin: gamesToWin.value,
+    }),
+  );
+};
+
+const config = computed<RacquetConfig>(() => {
+  const base =
+    formatPreset.value === "badminton-15" ? badminton15 : badminton21;
+  return { ...base, gamesToWin: gamesToWin.value };
+});
+
+// Explicit navigation helper — using `${matchId.value}` instead of relying on
+// template-literal auto-unwrap inside @click expressions. Avoids any edge case
+// where the ref doesn't unwrap and we end up with a stale or wrong match id.
+const goToMatchHome = () => navigateTo(`/m/${matchId.value}`);
+const teamNames = ref({ a: "", b: "" });
+const isDoubles = ref(false);
+const players = ref({ a1: "", a2: "", b1: "", b2: "" });
+
+// Pick up team names + per-player + format from /new's localStorage stash.
 onMounted(() => {
   if (typeof localStorage === "undefined") return;
   try {
@@ -22,6 +86,16 @@ onMounted(() => {
     if (raw) {
       const meta = JSON.parse(raw);
       if (meta?.teamNames) teamNames.value = meta.teamNames;
+      if (typeof meta?.isDoubles === "boolean")
+        isDoubles.value = meta.isDoubles;
+      if (meta?.players) {
+        players.value = {
+          a1: meta.players.a1 ?? "",
+          a2: meta.players.a2 ?? "",
+          b1: meta.players.b1 ?? "",
+          b2: meta.players.b2 ?? "",
+        };
+      }
     }
   } catch {}
 });
@@ -38,7 +112,7 @@ onMounted(() => {
   }
 });
 
-const state = computed(() => reduceBadminton(events.value, config));
+const state = computed(() => reduceBadminton(events.value, config.value));
 
 const score = (side: SideId) => {
   const last = state.value.games[state.value.games.length - 1];
@@ -66,19 +140,158 @@ const isGlowing = computed<SideId | null>(() => {
   return state.value.servingSide;
 });
 
-const serverArrow = computed(() =>
-  state.value.serverCourt === "right" ? "↘" : "↙",
-);
-
 const games = computed(() => state.value.games);
 const gamesWon = computed(() => state.value.gamesWon);
+
+const seriesLabel = computed(() =>
+  gamesToWin.value === 1 ? "Single" : `BO${gamesToWin.value * 2 - 1}`,
+);
+const presetLabel = computed(() =>
+  formatPreset.value === "badminton-15" ? "15 (2027)" : "BWF 21",
+);
 
 const headerLabel = computed(() => {
   const cur = games.value.length;
   if (state.value.matchOver) return "Match complete";
   if (state.value.betweenGames)
     return `Between games · ${gamesWon.value.a}–${gamesWon.value.b}`;
-  return `Game ${cur} · BWF 21 · BO3`;
+  return `Game ${cur} · ${presetLabel.value} · ${seriesLabel.value}`;
+});
+
+// Display names with placeholder fallback when blank.
+const displayNameA = computed(() => teamNames.value.a?.trim() || "Player 1");
+const displayNameB = computed(() => teamNames.value.b?.trim() || "Player 2");
+
+// Per-player labels for the grid view.
+// Source order:
+//   1. Per-player fields persisted by /new (`players.a1` etc).
+//   2. Split joined `teamNames.a` ("Priya / Anu" → ["Priya", "Anu"]) — covers older
+//      matches created before /new started writing the per-player split, plus the
+//      common case where the user typed a doubles team as one string.
+//   3. "Player N" placeholder fallback.
+const splitTeam = (joined: string): [string, string] => {
+  if (!joined) return ["", ""];
+  const parts = joined
+    .split(/\s*\/\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return [parts[0] ?? "", parts[1] ?? ""];
+};
+
+const playerLabels = computed(() => {
+  const [aP1, aP2] = splitTeam(teamNames.value.a);
+  const [bP1, bP2] = splitTeam(teamNames.value.b);
+  return {
+    a1: players.value.a1?.trim() || aP1 || "Player 1",
+    a2: players.value.a2?.trim() || aP2 || "Player 2",
+    b1:
+      players.value.b1?.trim() ||
+      bP1 ||
+      (isDoubles.value ? "Player 3" : "Player 2"),
+    b2: players.value.b2?.trim() || bP2 || (isDoubles.value ? "Player 4" : ""),
+  };
+});
+
+// Per-cell layout for doubles. Cells in the team's row are fixed to service-court
+// positions: cell index 0 is the LEFT service court, cell index 1 is the RIGHT.
+// The PLAYER NAME displayed in each cell is derived from `partnerOnRight` — names
+// visibly swap between cells whenever the team scores on serve, matching the BWF
+// rule that partners swap courts each time their team wins on serve. The Serves
+// pill follows `serverCourt` directly because the cell IS the court.
+//
+// Trace: A=0, partnerOnRight.a=1 → right cell (1) shows Player 1, left cell (0)
+// shows Player 2, pill on right cell. A wins → A=1, partnerOnRight.a=2 → right
+// cell shows Player 2, left cell shows Player 1, pill moves to left cell. Player 1
+// is now visually on the left side of the screen, still serving. ✓ Matches BWF.
+//
+// Cell layout differs between singles and doubles:
+//   - Doubles: 2 cells per team (left court | right court). Each cell shows
+//     whichever partner is currently in that court (per `partnerOnRight`).
+//     Cell highlighted + Serves pill on the cell whose court matches `serverCourt`.
+//   - Singles: 1 cell per team with the only player's name. Spatial info (which
+//     court the serve comes from) is encoded via CONTENT ALIGNMENT inside the
+//     single cell — items-start when serving from left, items-end when serving
+//     from right, items-center when receiving. Avoids redundantly showing the
+//     same name in two cells.
+type CellInfo = {
+  key: string;
+  court: "left" | "right" | null;
+  label: string;
+};
+
+const cellsForTeam = (team: "A" | "B"): CellInfo[] => {
+  const teamKey = team === "A" ? "a" : "b";
+  if (!isDoubles.value) {
+    // Singles: still 2 cells (left | right) so the operator sees the court split,
+    // but the player's name appears only in the ACTIVE cell. For the serving team
+    // that's the cell matching `serverCourt`; for the receiving team it's the
+    // diagonal opposite (BWF: receiver stands diagonally across from server).
+    // The other cell is empty (no label) but still tappable.
+    const name = team === "A" ? displayNameA.value : displayNameB.value;
+    const serverCourt = state.value.serverCourt;
+    const isServingTeam = state.value.servingSide === team;
+    const activeCourt: "left" | "right" = isServingTeam
+      ? serverCourt
+      : serverCourt === "left"
+        ? "right"
+        : "left";
+    return [
+      {
+        key: `${teamKey}-left`,
+        court: "left",
+        label: activeCourt === "left" ? name : "",
+      },
+      {
+        key: `${teamKey}-right`,
+        court: "right",
+        label: activeCourt === "right" ? name : "",
+      },
+    ];
+  }
+  const onRight = state.value.partnerOnRight[teamKey];
+  const labels = playerLabels.value;
+  const slotKey = (n: 1 | 2) => `${teamKey}${n}` as "a1" | "a2" | "b1" | "b2";
+  return [
+    {
+      key: `${teamKey}-left`,
+      court: "left",
+      label: labels[slotKey(onRight === 1 ? 2 : 1)],
+    },
+    {
+      key: `${teamKey}-right`,
+      court: "right",
+      label: labels[slotKey(onRight)],
+    },
+  ];
+};
+
+const cellsA = computed(() => cellsForTeam("A"));
+const cellsB = computed(() => cellsForTeam("B"));
+
+// Doubles: highlight + pill on the cell whose court matches serverCourt.
+// Singles: cell is single, court is null, highlight whenever team is serving.
+const cellIsServer = (
+  team: "A" | "B",
+  court: "left" | "right" | null,
+): boolean => {
+  if (state.value.servingSide !== team) return false;
+  if (court === null) return true;
+  return state.value.serverCourt === court;
+};
+
+// Cell content (player name + serves pill) is centered both horizontally and
+// vertically in every cell. Singles draws a decorative center hairline inside
+// the single cell to keep the left/right court split visible without moving
+// the name around. Spatial info (which court is on serve) is conveyed by the
+// serves pill being present and the team-row's score parity in the header strip.
+
+// Most-recent point event → which side scored last. Drives the brief "+1" pulse.
+const lastPointWinner = computed<SideId | null>(() => {
+  for (let i = events.value.length - 1; i >= 0; i--) {
+    const ev = events.value[i] as { type: string; side?: SideId };
+    if (ev.type === "point") return ev.side ?? null;
+  }
+  return null;
 });
 
 const wakeLock = useWakeLock();
@@ -86,9 +299,18 @@ onMounted(() => wakeLock.request("screen"));
 onUnmounted(() => wakeLock.release());
 
 // ─────────── Sheets ───────────
-type SheetKind = "events" | "matchState" | "scoreCorrect" | null;
+type SheetKind = "events" | "matchState" | "scoreCorrect" | "format" | null;
 const openSheet = ref<SheetKind>(null);
 const closeSheet = () => (openSheet.value = null);
+
+const setPreset = (preset: FormatPreset) => {
+  formatPreset.value = preset;
+  persistFormat();
+};
+const setGamesToWin = (n: number) => {
+  gamesToWin.value = n;
+  persistFormat();
+};
 
 // Long-press on Undo opens events sheet.
 const undoTimer = ref<ReturnType<typeof setTimeout> | null>(null);
@@ -232,553 +454,737 @@ const applyScoreCorrect = () => {
 </script>
 
 <template>
-  <div
-    class="fixed inset-0 flex flex-col bg-background text-foreground font-sans"
-  >
-    <!-- Top chrome -->
-    <header
-      class="h-12 flex-shrink-0 px-3 flex items-center justify-between border-b border-border"
-    >
-      <button
-        type="button"
-        class="size-11 rounded-md text-fg-muted hover:bg-surface-2 hover:text-foreground text-xl"
-        aria-label="Back"
-        @click="navigateTo(`/m/${matchId}`)"
-      >
-        ←
-      </button>
-      <span
-        class="text-[11px] font-semibold tracking-wider text-fg-muted uppercase"
-      >
-        {{ headerLabel }}
-      </span>
-      <button
-        type="button"
-        class="size-11 rounded-md text-fg-muted hover:bg-surface-2 hover:text-foreground text-xl"
-        aria-label="More"
-        @click="openSheet = 'matchState'"
-      >
-        ⋯
-      </button>
-    </header>
-
-    <!-- Active timeout banner -->
+  <!-- Outer scrim: full-screen on phone (just the bg color); on desktop adds a subtle
+       backdrop so the centered "court" stands out. -->
+  <div class="fixed inset-0 bg-muted/40 sm:bg-muted">
+    <!-- Court frame: capped to phone-portrait width on desktop. mx-auto centers it.
+         Side borders on >sm give a TV-bezel feel. -->
     <div
-      v-if="state.timeout"
-      class="px-4 py-2 bg-warning-soft text-warning text-xs font-bold tracking-wider uppercase flex justify-between items-center"
+      class="mx-auto flex h-full max-w-md flex-col bg-background text-foreground font-sans sm:border-x sm:border-border sm:shadow-2xl"
     >
-      <span
-        >⏸ TIMEOUT · TEAM {{ state.timeout.side }} ·
-        {{ state.timeout.kind }}</span
+      <!-- Top chrome -->
+      <header
+        class="h-12 flex-shrink-0 px-3 flex items-center justify-between border-b border-border"
       >
-      <button
-        type="button"
-        class="text-xs font-semibold underline"
-        @click="onClearTimeout"
-      >
-        End
-      </button>
-    </div>
-
-    <!-- Suspension banner -->
-    <div
-      v-if="state.suspended"
-      class="px-4 py-2 bg-danger-soft text-danger text-xs font-bold tracking-wider uppercase"
-    >
-      ⏸ MATCH SUSPENDED
-    </div>
-
-    <!-- Team A tap zone -->
-    <button
-      type="button"
-      class="flex-1 m-2 rounded-lg p-5 flex flex-col justify-between text-left text-team-a bg-team-a-soft border-[1.5px] disabled:cursor-not-allowed disabled:opacity-65 active:brightness-95 transition-[border-color] duration-200"
-      :class="[
-        isGlowing === 'A'
-          ? 'border-team-a animate-glow-a'
-          : 'border-transparent',
-      ]"
-      :disabled="state.matchOver"
-      :aria-label="`Team A score ${score('A')}, tap to add point`"
-      @click="onTap('A')"
-    >
-      <div class="flex justify-between items-start w-full">
-        <div class="flex flex-col gap-1 text-left">
-          <div
-            class="text-[11px] font-bold tracking-[0.06em] uppercase text-team-a"
-          >
-            TEAM A
-          </div>
-          <div
-            class="text-[17px] font-semibold text-foreground leading-snug max-w-[200px]"
-          >
-            {{ teamNames.a }}
-          </div>
-        </div>
-        <div
-          v-if="
-            state.servingSide === 'A' &&
-            (state.isMatchPoint || state.isGamePoint)
-          "
-          class="px-2 py-1 rounded-sm text-[11px] font-bold tracking-[0.06em] bg-team-a text-team-a-foreground"
-        >
-          {{ state.isMatchPoint ? "MATCH PT" : "GAME PT" }}
-        </div>
-      </div>
-
-      <div class="flex items-end justify-between gap-3">
-        <span
-          class="score text-[clamp(96px,22vh,168px)] font-bold tracking-[-0.05em] leading-[0.85]"
-        >
-          {{ score("A") }}
-        </span>
-        <div class="flex flex-col items-end gap-2 pb-2">
-          <div class="flex gap-1">
-            <span
-              v-for="i in config.gamesToWin + 1"
-              :key="`a-${i}`"
-              class="size-[10px] rounded-full"
-              :class="i <= gamesWon.a ? 'bg-team-a' : 'bg-border-strong'"
-            />
-          </div>
-          <div
-            v-if="state.servingSide === 'A'"
-            class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold tracking-[0.06em] bg-team-a text-team-a-foreground"
-          >
-            <span class="size-[5px] rounded-full bg-white animate-pulse-soft" />
-            SERVE {{ serverArrow }}
-          </div>
-        </div>
-      </div>
-    </button>
-
-    <!-- Centerbar -->
-    <div
-      class="h-9 px-3 flex items-center justify-between border-y border-border bg-background/80 backdrop-blur-sm text-sm text-fg-muted"
-    >
-      <span class="flex items-center gap-2">
-        <template v-for="(g, i) in games" :key="i">
-          <span class="font-mono tabular-nums inline-flex gap-1 items-baseline">
-            <span class="score text-sm">{{ g.a }}</span>
-            <span class="opacity-40">–</span>
-            <span class="score text-sm">{{ g.b }}</span>
-            <span
-              v-if="i < games.length - 1 || state.betweenGames"
-              class="ml-1 text-success"
-            >
-              ✓
-            </span>
-          </span>
-          <span v-if="i < games.length - 1" class="opacity-40">·</span>
-        </template>
-      </span>
-      <span
-        v-if="state.atInterval"
-        class="text-[11px] font-bold tracking-[0.06em] uppercase text-warning bg-warning-soft px-2 py-0.5 rounded-sm"
-      >
-        INTERVAL
-      </span>
-    </div>
-
-    <!-- Team B tap zone -->
-    <button
-      type="button"
-      class="flex-1 m-2 rounded-lg p-5 flex flex-col justify-between text-left text-team-b bg-team-b-soft border-[1.5px] disabled:cursor-not-allowed disabled:opacity-65 active:brightness-95 transition-[border-color] duration-200"
-      :class="[
-        isGlowing === 'B'
-          ? 'border-team-b animate-glow-b'
-          : 'border-transparent',
-      ]"
-      :disabled="state.matchOver"
-      :aria-label="`Team B score ${score('B')}, tap to add point`"
-      @click="onTap('B')"
-    >
-      <div class="flex justify-between items-start w-full">
-        <div class="flex flex-col gap-1 text-left">
-          <div
-            class="text-[11px] font-bold tracking-[0.06em] uppercase text-team-b"
-          >
-            TEAM B
-          </div>
-          <div
-            class="text-[17px] font-semibold text-foreground leading-snug max-w-[200px]"
-          >
-            {{ teamNames.b }}
-          </div>
-        </div>
-        <div
-          v-if="
-            state.servingSide === 'B' &&
-            (state.isMatchPoint || state.isGamePoint)
-          "
-          class="px-2 py-1 rounded-sm text-[11px] font-bold tracking-[0.06em] bg-team-b text-team-b-foreground"
-        >
-          {{ state.isMatchPoint ? "MATCH PT" : "GAME PT" }}
-        </div>
-      </div>
-
-      <div class="flex items-end justify-between gap-3">
-        <span
-          class="score text-[clamp(96px,22vh,168px)] font-bold tracking-[-0.05em] leading-[0.85]"
-        >
-          {{ score("B") }}
-        </span>
-        <div class="flex flex-col items-end gap-2 pb-2">
-          <div class="flex gap-1">
-            <span
-              v-for="i in config.gamesToWin + 1"
-              :key="`b-${i}`"
-              class="size-[10px] rounded-full"
-              :class="i <= gamesWon.b ? 'bg-team-b' : 'bg-border-strong'"
-            />
-          </div>
-          <div
-            v-if="state.servingSide === 'B'"
-            class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold tracking-[0.06em] bg-team-b text-team-b-foreground"
-          >
-            <span class="size-[5px] rounded-full bg-white animate-pulse-soft" />
-            SERVE {{ serverArrow }}
-          </div>
-        </div>
-      </div>
-    </button>
-
-    <!-- Bottom action bar -->
-    <footer
-      class="h-14 flex-shrink-0 px-3 flex items-center justify-between border-t border-border"
-    >
-      <button
-        type="button"
-        class="h-9 px-3 rounded-md border border-border bg-surface text-foreground text-sm font-medium hover:bg-surface-2 select-none"
-        @pointerdown="onUndoPointerDown"
-        @pointerup="onUndoPointerUp"
-        @pointerleave="onUndoPointerUp"
-      >
-        ↶ Undo
-      </button>
-      <span class="text-[11px] text-fg-subtle">long-press for events</span>
-      <button
-        type="button"
-        class="h-9 px-3 rounded-md border border-border bg-surface text-foreground text-sm font-medium hover:bg-surface-2"
-        @click="openSheet = 'matchState'"
-      >
-        Events
-      </button>
-    </footer>
-
-    <!-- Match-over modal -->
-    <div
-      v-if="state.matchOver"
-      class="absolute inset-0 z-50 flex items-center justify-center bg-overlay"
-    >
-      <div
-        class="w-[min(90%,360px)] bg-surface text-foreground rounded-2xl p-8 shadow-2xl text-center"
-      >
-        <div
-          class="text-[11px] font-bold tracking-[0.08em] uppercase text-brand mb-2"
-        >
-          {{
-            state.endReason === "walkover"
-              ? "WALKOVER"
-              : state.endReason === "retirement"
-                ? "RETIREMENT"
-                : state.endReason === "default"
-                  ? "DEFAULT"
-                  : "MATCH COMPLETE"
-          }}
-        </div>
-        <div class="text-[28px] font-semibold mb-4">
-          {{ state.winner === "A" ? teamNames.a : teamNames.b }} wins
-        </div>
-        <div
-          v-if="state.endReason === 'normal'"
-          class="score text-[90px] font-bold flex items-baseline justify-center gap-2 mb-6"
-        >
-          <span>{{ gamesWon.a }}</span>
-          <span class="opacity-40 text-[60px]">–</span>
-          <span>{{ gamesWon.b }}</span>
-        </div>
-        <div class="flex flex-col gap-2">
-          <button
-            type="button"
-            class="h-12 w-full rounded-md bg-brand text-brand-foreground font-semibold hover:bg-brand-hover transition-colors"
-            @click="onReset"
-          >
-            New match
-          </button>
-          <button
-            type="button"
-            class="h-9 w-full rounded-md text-foreground text-sm hover:bg-surface-2"
-            @click="navigateTo(`/m/${matchId}`)"
-          >
-            Back to dashboard
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Bottom sheet backdrop -->
-    <div
-      v-if="openSheet"
-      class="absolute inset-0 z-40 bg-overlay"
-      @click="closeSheet"
-    />
-
-    <!-- Events sheet -->
-    <div
-      v-if="openSheet === 'events'"
-      class="absolute inset-x-0 bottom-0 z-50 max-h-[70vh] bg-surface text-foreground rounded-t-2xl px-4 pt-3 pb-6 flex flex-col shadow-[0_-12px_40px_rgba(0,0,0,0.18)]"
-    >
-      <div class="size-1 w-10 bg-border-strong rounded-full mx-auto mb-3" />
-      <div class="flex justify-between items-baseline mb-3">
-        <h2 class="text-lg font-semibold">Recent events</h2>
-        <span class="text-[11px] text-fg-subtle">tap to undo back to here</span>
-      </div>
-      <div class="flex-1 overflow-y-auto">
-        <div
-          v-for="e in recentEvents"
-          :key="e.id"
-          class="flex items-center gap-2.5 py-2 border-b border-dashed border-border"
-          :class="e.isSystem ? 'opacity-60' : ''"
-        >
-          <div class="font-mono text-[11px] w-8 text-fg-subtle">
-            {{ e.ago }}
-          </div>
-          <div class="flex-1 text-sm">{{ e.label }}</div>
-          <button
-            v-if="!e.isSystem"
-            type="button"
-            class="text-team-a text-sm font-semibold"
-            @click="undoTo(e.idx)"
-          >
-            ↶
-          </button>
-        </div>
-        <div
-          v-if="recentEvents.length === 0"
-          class="text-fg-subtle text-sm py-4 text-center"
-        >
-          No events yet
-        </div>
-      </div>
-      <div class="flex justify-between gap-2 mt-3 pt-3 border-t border-border">
         <button
           type="button"
-          class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
+          class="size-11 rounded-md text-fg-muted hover:bg-surface-2 hover:text-foreground text-xl"
+          aria-label="Back"
+          @click="goToMatchHome()"
+        >
+          ←
+        </button>
+        <span
+          class="text-[11px] font-semibold tracking-wider text-fg-muted uppercase"
+        >
+          {{ headerLabel }}
+        </span>
+        <button
+          type="button"
+          class="size-11 rounded-md text-fg-muted hover:bg-surface-2 hover:text-foreground text-xl"
+          aria-label="More"
+          @click="openSheet = 'matchState'"
+        >
+          ⋯
+        </button>
+      </header>
+
+      <!-- Active timeout banner -->
+      <div
+        v-if="state.timeout"
+        class="px-4 py-2 bg-warning-soft text-warning text-xs font-bold tracking-wider uppercase flex justify-between items-center"
+      >
+        <span
+          >⏸ TIMEOUT · TEAM {{ state.timeout.side }} ·
+          {{ state.timeout.kind }}</span
+        >
+        <button
+          type="button"
+          class="text-xs font-semibold underline"
+          @click="onClearTimeout"
+        >
+          End
+        </button>
+      </div>
+
+      <!-- Suspension banner -->
+      <div
+        v-if="state.suspended"
+        class="px-4 py-2 bg-danger-soft text-danger text-xs font-bold tracking-wider uppercase"
+      >
+        ⏸ MATCH SUSPENDED
+      </div>
+
+      <!-- Format / previous-games / interval strip. Tap chip to change format. -->
+      <div
+        class="h-9 px-3 flex items-center justify-between border-b border-border bg-background/80 backdrop-blur-sm text-sm text-fg-muted"
+      >
+        <span class="flex items-center gap-2 text-xs">
+          <template v-for="(g, i) in games" :key="i">
+            <span
+              class="font-mono tabular-nums inline-flex gap-1 items-baseline"
+            >
+              <span class="score">{{ g.a }}</span>
+              <span class="opacity-40">–</span>
+              <span class="score">{{ g.b }}</span>
+              <span
+                v-if="i < games.length - 1 || state.betweenGames"
+                class="ml-1 text-success"
+              >
+                ✓
+              </span>
+            </span>
+            <span v-if="i < games.length - 1" class="opacity-40">·</span>
+          </template>
+        </span>
+        <div class="flex items-center gap-2">
+          <span
+            v-if="state.atInterval"
+            class="text-[10px] font-bold tracking-wider uppercase text-warning bg-warning-soft px-2 py-0.5 rounded-sm"
+          >
+            INTERVAL
+          </span>
+          <button
+            type="button"
+            class="text-[11px] text-fg-muted hover:text-foreground underline-offset-2 hover:underline"
+            @click="openSheet = 'format'"
+          >
+            {{ presetLabel }} · {{ seriesLabel }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Court frame.
+           Two team rows separated by a 1px line (`gap-px` over the dark wrapper bg).
+           Each row owns its own state — outer ring for game/match point or last-point
+           winner — so the highlight is on the WHOLE row, not duplicated per cell.
+           Internal vertical hairline between cells uses `border-l` on cell 1 (only
+           reaches inside the row, doesn't compound with the row's outer ring).
+           Singles AND doubles use 2 cells per team (left court | right court). -->
+      <div
+        class="m-2 flex flex-1 flex-col gap-px overflow-hidden rounded-lg bg-foreground/30 ring-1 ring-foreground/30"
+      >
+        <!-- Team A row -->
+        <div
+          class="relative flex flex-1 flex-col bg-team-a-soft transition-shadow duration-200"
+          :class="[
+            isGlowing === 'A'
+              ? 'shadow-[inset_0_0_0_3px_var(--color-team-a)] animate-glow-a'
+              : lastPointWinner === 'A' && !state.matchOver
+                ? 'shadow-[inset_0_0_0_2px_var(--color-team-a)] opacity-100'
+                : '',
+          ]"
+        >
+          <!-- Header strip: team label + score + pips + MATCH PT, centered. -->
+          <div
+            class="flex items-center justify-center gap-3 border-b border-team-a/20 px-3 py-2.5"
+          >
+            <span
+              class="text-[10px] font-bold uppercase tracking-[0.08em] text-team-a"
+            >
+              Team A
+            </span>
+            <span
+              class="score text-[clamp(32px,6vh,52px)] font-bold leading-none tabular-nums text-foreground"
+            >
+              {{ score("A") }}
+            </span>
+            <div class="flex gap-1">
+              <span
+                v-for="i in config.gamesToWin + 1"
+                :key="`a-${i}`"
+                class="size-[7px] rounded-full"
+                :class="i <= gamesWon.a ? 'bg-team-a' : 'bg-border-strong'"
+              />
+            </div>
+            <span
+              v-if="
+                state.servingSide === 'A' &&
+                (state.isMatchPoint || state.isGamePoint)
+              "
+              class="rounded-sm bg-team-a px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-team-a-foreground"
+            >
+              {{ state.isMatchPoint ? "MATCH PT" : "GAME PT" }}
+            </span>
+          </div>
+
+          <!-- Cells. Content is vertically AND horizontally centered in the cell
+               (items-center justify-center). Pill rendered after the name in DOM,
+               so when serving the pill appears below the name and the centered
+               flex-col group naturally lifts the name up slightly to make room.
+               Singles: decorative center hairline (court split) drawn inside the
+               single cell so the operator still sees the left/right court divide. -->
+          <div class="flex flex-1">
+            <button
+              v-for="(cell, idx) in cellsA"
+              :key="cell.key"
+              type="button"
+              :disabled="state.matchOver"
+              :aria-label="`Tap to score for ${cell.label || 'team A'}`"
+              class="relative flex flex-1 flex-col items-center justify-center gap-2 px-4 py-4 transition-[background-color] duration-150 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-65"
+              :class="[idx > 0 ? 'border-l border-team-a/20' : '']"
+              @click="onTap('A')"
+            >
+              <span
+                v-if="cell.label"
+                class="max-w-full truncate text-[15px] font-semibold leading-tight text-foreground"
+              >
+                {{ cell.label }}
+              </span>
+              <div
+                v-if="cellIsServer('A', cell.court)"
+                class="inline-flex items-center gap-1 rounded-full bg-team-a px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-team-a-foreground"
+              >
+                <span
+                  class="size-[5px] rounded-full bg-white animate-pulse-soft"
+                />
+                Serves
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Team B row — same shape, mirrored colors. -->
+        <div
+          class="relative flex flex-1 flex-col bg-team-b-soft transition-shadow duration-200"
+          :class="[
+            isGlowing === 'B'
+              ? 'shadow-[inset_0_0_0_3px_var(--color-team-b)] animate-glow-b'
+              : lastPointWinner === 'B' && !state.matchOver
+                ? 'shadow-[inset_0_0_0_2px_var(--color-team-b)] opacity-100'
+                : '',
+          ]"
+        >
+          <div
+            class="flex items-center justify-center gap-3 border-b border-team-b/20 px-3 py-2.5"
+          >
+            <span
+              class="text-[10px] font-bold uppercase tracking-[0.08em] text-team-b"
+            >
+              Team B
+            </span>
+            <span
+              class="score text-[clamp(32px,6vh,52px)] font-bold leading-none tabular-nums text-foreground"
+            >
+              {{ score("B") }}
+            </span>
+            <div class="flex gap-1">
+              <span
+                v-for="i in config.gamesToWin + 1"
+                :key="`b-${i}`"
+                class="size-[7px] rounded-full"
+                :class="i <= gamesWon.b ? 'bg-team-b' : 'bg-border-strong'"
+              />
+            </div>
+            <span
+              v-if="
+                state.servingSide === 'B' &&
+                (state.isMatchPoint || state.isGamePoint)
+              "
+              class="rounded-sm bg-team-b px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-team-b-foreground"
+            >
+              {{ state.isMatchPoint ? "MATCH PT" : "GAME PT" }}
+            </span>
+          </div>
+
+          <!-- Team B cells. Same layout convention as team A — items-center
+               justify-center; pill renders after the name. -->
+          <div class="flex flex-1">
+            <button
+              v-for="(cell, idx) in cellsB"
+              :key="cell.key"
+              type="button"
+              :disabled="state.matchOver"
+              :aria-label="`Tap to score for ${cell.label || 'team B'}`"
+              class="relative flex flex-1 flex-col items-center justify-center gap-2 px-4 py-4 transition-[background-color] duration-150 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-65"
+              :class="[idx > 0 ? 'border-l border-team-b/20' : '']"
+              @click="onTap('B')"
+            >
+              <span
+                v-if="cell.label"
+                class="max-w-full truncate text-[15px] font-semibold leading-tight text-foreground"
+              >
+                {{ cell.label }}
+              </span>
+              <div
+                v-if="cellIsServer('B', cell.court)"
+                class="inline-flex items-center gap-1 rounded-full bg-team-b px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-team-b-foreground"
+              >
+                <span
+                  class="size-[5px] rounded-full bg-white animate-pulse-soft"
+                />
+                Serves
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom action bar -->
+      <footer
+        class="h-14 flex-shrink-0 px-3 flex items-center justify-between border-t border-border"
+      >
+        <button
+          type="button"
+          class="h-9 px-3 rounded-md border border-border bg-surface text-foreground text-sm font-medium hover:bg-surface-2 select-none"
+          @pointerdown="onUndoPointerDown"
+          @pointerup="onUndoPointerUp"
+          @pointerleave="onUndoPointerUp"
+        >
+          ↶ Undo
+        </button>
+        <span class="text-[11px] text-fg-subtle">long-press for events</span>
+        <button
+          type="button"
+          class="h-9 px-3 rounded-md border border-border bg-surface text-foreground text-sm font-medium hover:bg-surface-2"
+          @click="openSheet = 'matchState'"
+        >
+          Events
+        </button>
+      </footer>
+
+      <!-- Match-over modal -->
+      <div
+        v-if="state.matchOver"
+        class="absolute inset-0 z-50 flex items-center justify-center bg-overlay"
+      >
+        <div
+          class="w-[min(90%,360px)] bg-surface text-foreground rounded-2xl p-8 shadow-2xl text-center"
+        >
+          <div
+            class="text-[11px] font-bold tracking-[0.08em] uppercase text-brand mb-2"
+          >
+            {{
+              state.endReason === "walkover"
+                ? "WALKOVER"
+                : state.endReason === "retirement"
+                  ? "RETIREMENT"
+                  : state.endReason === "default"
+                    ? "DEFAULT"
+                    : "MATCH COMPLETE"
+            }}
+          </div>
+          <div class="text-[28px] font-semibold mb-4">
+            {{ state.winner === "A" ? displayNameA : displayNameB }} wins
+          </div>
+          <div
+            v-if="state.endReason === 'normal'"
+            class="score text-[90px] font-bold flex items-baseline justify-center gap-2 mb-6"
+          >
+            <span>{{ gamesWon.a }}</span>
+            <span class="opacity-40 text-[60px]">–</span>
+            <span>{{ gamesWon.b }}</span>
+          </div>
+          <div class="flex flex-col gap-2">
+            <button
+              type="button"
+              class="h-12 w-full rounded-md bg-brand text-brand-foreground font-semibold hover:bg-brand-hover transition-colors"
+              @click="onReset"
+            >
+              New match
+            </button>
+            <button
+              type="button"
+              class="h-9 w-full rounded-md text-foreground text-sm hover:bg-surface-2"
+              @click="goToMatchHome()"
+            >
+              Back to dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom sheet backdrop -->
+      <div
+        v-if="openSheet"
+        class="absolute inset-0 z-40 bg-overlay"
+        @click="closeSheet"
+      />
+
+      <!-- Events sheet -->
+      <div
+        v-if="openSheet === 'events'"
+        class="absolute inset-x-0 bottom-0 z-50 max-h-[70vh] bg-surface text-foreground rounded-t-2xl px-4 pt-3 pb-6 flex flex-col shadow-[0_-12px_40px_rgba(0,0,0,0.18)]"
+      >
+        <div class="size-1 w-10 bg-border-strong rounded-full mx-auto mb-3" />
+        <div class="flex justify-between items-baseline mb-3">
+          <h2 class="text-lg font-semibold">Recent events</h2>
+          <span class="text-[11px] text-fg-subtle"
+            >tap to undo back to here</span
+          >
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          <div
+            v-for="e in recentEvents"
+            :key="e.id"
+            class="flex items-center gap-2.5 py-2 border-b border-dashed border-border"
+            :class="e.isSystem ? 'opacity-60' : ''"
+          >
+            <div class="font-mono text-[11px] w-8 text-fg-subtle">
+              {{ e.ago }}
+            </div>
+            <div class="flex-1 text-sm">{{ e.label }}</div>
+            <button
+              v-if="!e.isSystem"
+              type="button"
+              class="text-team-a text-sm font-semibold"
+              @click="undoTo(e.idx)"
+            >
+              ↶
+            </button>
+          </div>
+          <div
+            v-if="recentEvents.length === 0"
+            class="text-fg-subtle text-sm py-4 text-center"
+          >
+            No events yet
+          </div>
+        </div>
+        <div
+          class="flex justify-between gap-2 mt-3 pt-3 border-t border-border"
+        >
+          <button
+            type="button"
+            class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
+            @click="openScoreCorrect"
+          >
+            Score correction →
+          </button>
+          <button
+            type="button"
+            class="h-9 px-3 rounded-md bg-team-a text-team-a-foreground text-sm font-semibold inline-flex items-center gap-1"
+            @click="
+              () => {
+                onUndo();
+                closeSheet();
+              }
+            "
+          >
+            ↶ Undo last
+          </button>
+        </div>
+      </div>
+
+      <!-- Match-state sheet -->
+      <div
+        v-if="openSheet === 'matchState'"
+        class="absolute inset-x-0 bottom-0 z-50 bg-surface text-foreground rounded-t-2xl px-4 pt-3 pb-6 shadow-[0_-12px_40px_rgba(0,0,0,0.18)]"
+      >
+        <div class="size-1 w-10 bg-border-strong rounded-full mx-auto mb-3" />
+        <h2 class="text-lg font-semibold">Match events</h2>
+        <p class="text-[11px] text-fg-subtle mb-4">
+          All recorded as events · undoable
+        </p>
+
+        <div
+          class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
+        >
+          Pause
+        </div>
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <button
+            type="button"
+            class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
+            @click="onTimeout('A', 'standard')"
+          >
+            ⏸ Timeout · A
+          </button>
+          <button
+            type="button"
+            class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
+            @click="onTimeout('B', 'standard')"
+          >
+            ⏸ Timeout · B
+          </button>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mb-5">
+          <button
+            type="button"
+            class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
+            @click="onTimeout('A', 'medical')"
+          >
+            + Medical · A
+          </button>
+          <button
+            type="button"
+            class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
+            @click="onTimeout('B', 'medical')"
+          >
+            + Medical · B
+          </button>
+        </div>
+
+        <div
+          class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
+        >
+          End match
+        </div>
+        <div class="flex flex-col gap-2 mb-3">
+          <button
+            type="button"
+            class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
+            @click="onWalkover('A')"
+          >
+            <span class="text-team-a text-lg">⚑</span>
+            <span class="flex-1">
+              <span class="block text-sm font-semibold">Walkover · A wins</span>
+              <span class="block text-[11px] text-fg-subtle"
+                >B didn't show</span
+              >
+            </span>
+            <span>›</span>
+          </button>
+          <button
+            type="button"
+            class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
+            @click="onWalkover('B')"
+          >
+            <span class="text-team-b text-lg">⚑</span>
+            <span class="flex-1">
+              <span class="block text-sm font-semibold">Walkover · B wins</span>
+              <span class="block text-[11px] text-fg-subtle"
+                >A didn't show</span
+              >
+            </span>
+            <span>›</span>
+          </button>
+          <button
+            type="button"
+            class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
+            @click="onRetirement('A')"
+          >
+            <span class="text-team-a text-lg">✕</span>
+            <span class="flex-1">
+              <span class="block text-sm font-semibold">Retirement · A</span>
+              <span class="block text-[11px] text-fg-subtle"
+                >A injured · B wins</span
+              >
+            </span>
+            <span>›</span>
+          </button>
+          <button
+            type="button"
+            class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
+            @click="onRetirement('B')"
+          >
+            <span class="text-team-b text-lg">✕</span>
+            <span class="flex-1">
+              <span class="block text-sm font-semibold">Retirement · B</span>
+              <span class="block text-[11px] text-fg-subtle"
+                >B injured · A wins</span
+              >
+            </span>
+            <span>›</span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          class="w-full h-9 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2 mt-2"
           @click="openScoreCorrect"
         >
-          Score correction →
-        </button>
-        <button
-          type="button"
-          class="h-9 px-3 rounded-md bg-team-a text-team-a-foreground text-sm font-semibold inline-flex items-center gap-1"
-          @click="
-            () => {
-              onUndo();
-              closeSheet();
-            }
-          "
-        >
-          ↶ Undo last
+          Score correction…
         </button>
       </div>
-    </div>
 
-    <!-- Match-state sheet -->
-    <div
-      v-if="openSheet === 'matchState'"
-      class="absolute inset-x-0 bottom-0 z-50 bg-surface text-foreground rounded-t-2xl px-4 pt-3 pb-6 shadow-[0_-12px_40px_rgba(0,0,0,0.18)]"
-    >
-      <div class="size-1 w-10 bg-border-strong rounded-full mx-auto mb-3" />
-      <h2 class="text-lg font-semibold">Match events</h2>
-      <p class="text-[11px] text-fg-subtle mb-4">
-        All recorded as events · undoable
-      </p>
-
+      <!-- Format sheet — change target points / series mid-match. -->
       <div
-        class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
+        v-if="openSheet === 'format'"
+        class="absolute inset-x-0 bottom-0 z-50 bg-surface text-foreground rounded-t-2xl px-4 pt-3 pb-6 shadow-[0_-12px_40px_rgba(0,0,0,0.18)]"
       >
-        Pause
-      </div>
-      <div class="grid grid-cols-2 gap-2 mb-3">
-        <button
-          type="button"
-          class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
-          @click="onTimeout('A', 'standard')"
-        >
-          ⏸ Timeout · A
-        </button>
-        <button
-          type="button"
-          class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
-          @click="onTimeout('B', 'standard')"
-        >
-          ⏸ Timeout · B
-        </button>
-      </div>
-      <div class="grid grid-cols-2 gap-2 mb-5">
-        <button
-          type="button"
-          class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
-          @click="onTimeout('A', 'medical')"
-        >
-          + Medical · A
-        </button>
-        <button
-          type="button"
-          class="h-9 px-3 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
-          @click="onTimeout('B', 'medical')"
-        >
-          + Medical · B
-        </button>
-      </div>
+        <div class="size-1 w-10 bg-border-strong rounded-full mx-auto mb-3" />
+        <h2 class="text-lg font-semibold">Match format</h2>
+        <p class="text-[11px] text-fg-subtle mb-4">
+          Change anytime — engine recomputes from the event log.
+        </p>
 
-      <div
-        class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
-      >
-        End match
-      </div>
-      <div class="flex flex-col gap-2 mb-3">
-        <button
-          type="button"
-          class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
-          @click="onWalkover('A')"
-        >
-          <span class="text-team-a text-lg">⚑</span>
-          <span class="flex-1">
-            <span class="block text-sm font-semibold">Walkover · A wins</span>
-            <span class="block text-[11px] text-fg-subtle">B didn't show</span>
-          </span>
-          <span>›</span>
-        </button>
-        <button
-          type="button"
-          class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
-          @click="onWalkover('B')"
-        >
-          <span class="text-team-b text-lg">⚑</span>
-          <span class="flex-1">
-            <span class="block text-sm font-semibold">Walkover · B wins</span>
-            <span class="block text-[11px] text-fg-subtle">A didn't show</span>
-          </span>
-          <span>›</span>
-        </button>
-        <button
-          type="button"
-          class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
-          @click="onRetirement('A')"
-        >
-          <span class="text-team-a text-lg">✕</span>
-          <span class="flex-1">
-            <span class="block text-sm font-semibold">Retirement · A</span>
-            <span class="block text-[11px] text-fg-subtle"
-              >A injured · B wins</span
-            >
-          </span>
-          <span>›</span>
-        </button>
-        <button
-          type="button"
-          class="p-3 rounded-md border border-border bg-surface flex items-center gap-3 text-left hover:bg-surface-2"
-          @click="onRetirement('B')"
-        >
-          <span class="text-team-b text-lg">✕</span>
-          <span class="flex-1">
-            <span class="block text-sm font-semibold">Retirement · B</span>
-            <span class="block text-[11px] text-fg-subtle"
-              >B injured · A wins</span
-            >
-          </span>
-          <span>›</span>
-        </button>
-      </div>
-
-      <button
-        type="button"
-        class="w-full h-9 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2 mt-2"
-        @click="openScoreCorrect"
-      >
-        Score correction…
-      </button>
-    </div>
-
-    <!-- Score correction modal -->
-    <div
-      v-if="openSheet === 'scoreCorrect'"
-      class="absolute inset-x-4 top-20 bottom-20 z-50 bg-surface text-foreground rounded-2xl p-5 shadow-[0_24px_60px_rgba(0,0,0,0.2)] flex flex-col"
-    >
-      <h2 class="text-lg font-semibold">Fix the score</h2>
-      <p class="text-[11px] text-fg-subtle mb-3">
-        Recorded as a score.correct event · audit-logged
-      </p>
-
-      <div
-        class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
-      >
-        Set correct scores
-      </div>
-      <div class="flex flex-col gap-2 mb-3 flex-1 overflow-y-auto">
         <div
-          v-for="(g, i) in correctGames"
-          :key="i"
-          class="flex items-center gap-2"
+          class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
         >
-          <div class="w-8 text-[11px] font-semibold text-fg-subtle">
-            G{{ i + 1 }}
+          Points per game
+        </div>
+        <div class="grid grid-cols-2 gap-2 mb-4">
+          <button
+            type="button"
+            class="h-11 rounded-md border-[1.5px] text-sm font-semibold transition-colors"
+            :class="
+              formatPreset === 'badminton-21'
+                ? 'border-foreground bg-foreground text-background'
+                : 'border-border bg-surface text-foreground hover:bg-surface-2'
+            "
+            @click="setPreset('badminton-21')"
+          >
+            21 · BWF
+            <span class="block text-[10px] font-medium opacity-60 mt-0.5">
+              cap 30 · interval 11
+            </span>
+          </button>
+          <button
+            type="button"
+            class="h-11 rounded-md border-[1.5px] text-sm font-semibold transition-colors"
+            :class="
+              formatPreset === 'badminton-15'
+                ? 'border-foreground bg-foreground text-background'
+                : 'border-border bg-surface text-foreground hover:bg-surface-2'
+            "
+            @click="setPreset('badminton-15')"
+          >
+            15 (2027)
+            <span class="block text-[10px] font-medium opacity-60 mt-0.5">
+              proposal · cap 21 · interval 8
+            </span>
+          </button>
+        </div>
+
+        <div
+          class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
+        >
+          Match length
+        </div>
+        <div class="grid grid-cols-2 gap-2 mb-2">
+          <button
+            type="button"
+            class="h-11 rounded-md border-[1.5px] text-sm font-semibold transition-colors"
+            :class="
+              gamesToWin === 1
+                ? 'border-foreground bg-foreground text-background'
+                : 'border-border bg-surface text-foreground hover:bg-surface-2'
+            "
+            @click="setGamesToWin(1)"
+          >
+            Single match
+          </button>
+          <button
+            type="button"
+            class="h-11 rounded-md border-[1.5px] text-sm font-semibold transition-colors"
+            :class="
+              gamesToWin >= 2
+                ? 'border-foreground bg-foreground text-background'
+                : 'border-border bg-surface text-foreground hover:bg-surface-2'
+            "
+            @click="setGamesToWin(gamesToWin >= 2 ? gamesToWin : 2)"
+          >
+            Best of {{ gamesToWin >= 2 ? gamesToWin * 2 - 1 : 3 }}
+          </button>
+        </div>
+        <!-- Best-of stepper, visible only when 'best-of' is selected. -->
+        <div v-if="gamesToWin >= 2" class="flex items-center gap-3 mb-2 px-1">
+          <button
+            type="button"
+            aria-label="Decrease best-of"
+            class="size-9 rounded-md border border-border bg-surface text-foreground font-semibold hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            :disabled="gamesToWin <= 2"
+            @click="setGamesToWin(Math.max(2, gamesToWin - 1))"
+          >
+            −
+          </button>
+          <div class="flex-1 text-center">
+            <span class="text-base font-semibold text-foreground">
+              Best of {{ gamesToWin * 2 - 1 }}
+            </span>
+            <span class="block text-[11px] text-fg-subtle mt-0.5">
+              first to {{ gamesToWin }} games
+            </span>
           </div>
+          <button
+            type="button"
+            aria-label="Increase best-of"
+            class="size-9 rounded-md border border-border bg-surface text-foreground font-semibold hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            :disabled="gamesToWin >= 6"
+            @click="setGamesToWin(Math.min(6, gamesToWin + 1))"
+          >
+            +
+          </button>
+        </div>
+
+        <button
+          type="button"
+          class="w-full h-9 rounded-md text-sm font-medium text-fg-muted hover:bg-surface-2 mt-3"
+          @click="closeSheet"
+        >
+          Done
+        </button>
+      </div>
+
+      <!-- Score correction modal -->
+      <div
+        v-if="openSheet === 'scoreCorrect'"
+        class="absolute inset-x-4 top-20 bottom-20 z-50 bg-surface text-foreground rounded-2xl p-5 shadow-[0_24px_60px_rgba(0,0,0,0.2)] flex flex-col"
+      >
+        <h2 class="text-lg font-semibold">Fix the score</h2>
+        <p class="text-[11px] text-fg-subtle mb-3">
+          Recorded as a score.correct event · audit-logged
+        </p>
+
+        <div
+          class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
+        >
+          Set correct scores
+        </div>
+        <div class="flex flex-col gap-2 mb-3 flex-1 overflow-y-auto">
+          <div
+            v-for="(g, i) in correctGames"
+            :key="i"
+            class="flex items-center gap-2"
+          >
+            <div class="w-8 text-[11px] font-semibold text-fg-subtle">
+              G{{ i + 1 }}
+            </div>
+            <input
+              v-model="g.a"
+              type="number"
+              inputmode="numeric"
+              class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums bg-surface border border-border-strong rounded-md outline-none focus-visible:border-ring"
+            />
+            <span class="text-fg-muted">—</span>
+            <input
+              v-model="g.b"
+              type="number"
+              inputmode="numeric"
+              class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums bg-surface border border-border-strong rounded-md outline-none focus-visible:border-ring"
+            />
+          </div>
+        </div>
+
+        <div
+          class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
+        >
+          Games won
+        </div>
+        <div class="flex gap-2 mb-4">
           <input
-            v-model="g.a"
+            v-model.number="correctGamesWon.a"
             type="number"
             inputmode="numeric"
+            min="0"
             class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums bg-surface border border-border-strong rounded-md outline-none focus-visible:border-ring"
           />
-          <span class="text-fg-muted">—</span>
+          <span class="text-fg-muted self-center">vs</span>
           <input
-            v-model="g.b"
+            v-model.number="correctGamesWon.b"
             type="number"
             inputmode="numeric"
+            min="0"
             class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums bg-surface border border-border-strong rounded-md outline-none focus-visible:border-ring"
           />
         </div>
-      </div>
 
-      <div
-        class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
-      >
-        Games won
-      </div>
-      <div class="flex gap-2 mb-4">
-        <input
-          v-model.number="correctGamesWon.a"
-          type="number"
-          inputmode="numeric"
-          min="0"
-          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums bg-surface border border-border-strong rounded-md outline-none focus-visible:border-ring"
-        />
-        <span class="text-fg-muted self-center">vs</span>
-        <input
-          v-model.number="correctGamesWon.b"
-          type="number"
-          inputmode="numeric"
-          min="0"
-          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums bg-surface border border-border-strong rounded-md outline-none focus-visible:border-ring"
-        />
-      </div>
-
-      <div class="flex gap-2">
-        <button
-          type="button"
-          class="flex-1 h-10 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
-          @click="closeSheet"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="flex-[2] h-10 rounded-md bg-brand text-brand-foreground text-sm font-semibold hover:bg-brand-hover"
-          @click="applyScoreCorrect"
-        >
-          Apply correction
-        </button>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="flex-1 h-10 rounded-md border border-border bg-surface text-sm font-medium hover:bg-surface-2"
+            @click="closeSheet"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="flex-[2] h-10 rounded-md bg-brand text-brand-foreground text-sm font-semibold hover:bg-brand-hover"
+            @click="applyScoreCorrect"
+          >
+            Apply correction
+          </button>
+        </div>
       </div>
     </div>
   </div>

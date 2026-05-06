@@ -48,6 +48,8 @@ function applyEvent(
         servingSide: ev.serverSide,
         serverCourt: ev.serverCourt,
         names: state.names,
+        // Both teams' slot-1 starts in their right service court (BWF default).
+        partnerOnRight: { a: 1, b: 1 },
       };
 
     case "team.rename":
@@ -183,6 +185,19 @@ function applyPoint(
   const serverCourt: "right" | "left" =
     serverScore % 2 === 0 ? "right" : "left";
 
+  // BWF doubles partner tracking. If the rally was "won on serve" (the team that
+  // was already serving scored), that team's two partners swap courts. Otherwise
+  // the service shifts to the receiving team and nobody swaps — the partner who
+  // happens to be in the appropriate score-parity court becomes the new server.
+  const wonOnServe = working.servingSide === side;
+  const teamKey: "a" | "b" = side === "A" ? "a" : "b";
+  const nextPartnerOnRight: RacquetState["partnerOnRight"] = wonOnServe
+    ? {
+        ...working.partnerOnRight,
+        [teamKey]: working.partnerOnRight[teamKey] === 1 ? 2 : 1,
+      }
+    : working.partnerOnRight;
+
   // Interval flag fires once per game, the first time intervalAt is reached.
   const reachedInterval =
     cfg.intervalAt !== null &&
@@ -203,6 +218,9 @@ function applyPoint(
       gamesWon,
       servingSide,
       serverCourt,
+      // BWF: each new game starts with both teams' slot-1 in the right court.
+      // (Match-over keeps last positions for the audience-facing surfaces.)
+      partnerOnRight: matchOver ? nextPartnerOnRight : { a: 1, b: 1 },
       betweenGames: !matchOver,
       matchOver,
       winner: matchOver ? (gamesWon.a > gamesWon.b ? "A" : "B") : null,
@@ -225,6 +243,7 @@ function applyPoint(
     games: newGames,
     servingSide,
     serverCourt,
+    partnerOnRight: nextPartnerOnRight,
     atInterval: reachedInterval,
     isGamePoint,
     isMatchPoint: aWouldWinMatch || bWouldWinMatch,

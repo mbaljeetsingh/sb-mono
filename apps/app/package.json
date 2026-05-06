@@ -16,7 +16,8 @@
     "@sb/layer-app-base": "workspace:*",
     "@sb/layer-ui": "workspace:*",
     "@sb/shared": "workspace:*",
-    "@sb/themes": "workspace:*"
+    "@sb/themes": "workspace:*",
+    "browser-image-compression": "^2.0.2"
   },
   "devDependencies": {
     "@nuxtjs/supabase": "^2.0.4",

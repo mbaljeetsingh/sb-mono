@@ -23,16 +23,19 @@ Phase gates from BRD §13 control progression. Don't start phase N+1 until phase
 | **E1.3 · Monorepo + tooling** | pnpm workspaces, Turbo, Biome, layers (`ui`, `app-base`), shadcn-vue (16 components), Tailwind v4, Vue overrides. | ✅ done |
 | **E1.4 · Design tokens** | Court-green palette, warm parchment background, all chrome + domain tokens via `@theme inline`. | ✅ done |
 | **E1.5 · Themes registry** | 5 v1 themes (broadcast-classic, minimal-bug, top-ribbon, filmable, minimal-typographic) via `@sb/themes` registry. | ✅ done |
-| **E1.6 · Pages + routes** | 14 routes implemented: landing, new match, result entry, dashboard, control, overlay, scoreboard, saved, themes gallery, tournament home + ticker, dynamic URL setup + overlay, 404. | ✅ done |
+| **E1.6 · Pages + routes** | Routes implemented: landing, new match, result entry, dashboard, control, overlay, scoreboard, saved, tournament home + ticker, dynamic URL setup + overlay, auth (signin/signup/forgot/reset/callback), profile, 404. (`/themes` moved to `apps/web` — see E1.26.) | ✅ done |
 | **E1.7 · Control surface** | Two tap zones, server indicator, glow on game/match point, undo, long-press events sheet, match-state sheet, score-correction modal, match-over modal differentiating walkover/retirement/default. Wake-lock + haptics. | ✅ done |
 | **E1.8 · Local-first sync** | localStorage + BroadcastChannel cross-tab. Tab 1 scores → tab 2 overlay updates. | ✅ done |
-| **E1.9 · Supabase schema + seed** | matches + events + tournaments tables, RLS, realtime publication. Seed: 4 users + 3 demo matches. | ✅ done |
+| **E1.9 · Supabase schema + seed** | matches + events tables, full RLS (auth-owner writes + anonymous-match path), realtime publication, avatars bucket. 4 migrations: initial schema, users profile, roles + permissions + handle_new_user, avatars storage. Seed: 4 auth users (admin/coach/streamer/player) with profile + role rows + 3 demo matches. | ✅ done |
 | **E1.10 · Docs + decision log** | BRD (28 locked decisions), PRD (~50 surfaces specced), ARCHITECTURE.md (12 sections including threat model). | ✅ done |
+| **E1.0 · Auth + accounts (pulled forward from E2.1)** | Email/password signin/signup/forgot/reset (5 auth pages + auth layout), email confirmation on, custom branded email templates (6 in `supabase/templates/`), custom_access_token JWT claim hook, roles (`admin`/`free`/`pro`) + permissions + v-permission directive + `useRolePermissions` composable, public.users profile + handle_new_user trigger (OAuth-aware: pulls full_name/avatar_url from Google metadata), avatars storage bucket + ProfilePhotoUpload, profile page, AppHeader with NavUser dropdown, auth.global middleware, RLS: authenticated owners gate writes; **anonymous matches still allowed** (Option A — owner_id NULL path). Google OAuth wired but UI button disabled. Public scoreboards (`/m/[id]/scoreboard\|overlay`) un-gated. Per-match write-tokens (delegated scoring) deferred to **E2.8**. | ✅ done |
 
 ### Epics — PENDING ⏳
 
 | Epic | What's needed | Estimate |
 |---|---|---|
+| **E1.0a · Auto-migrate local matches on first login** | When a logged-out user has scored matches against `localStorage` and then signs in, claim them: write `owner_id = auth.uid()` on those match rows + flush any queued events. One-shot on first authed mount. | 4 hours |
+| **E1.0b · Vue Email template gen script** | Port `pnpm email:gen` from np-mono so the 6 `supabase/templates/*.html` files are generated from `.vue` sources rather than maintained as raw HTML. | 4 hours |
 | **E1.11 · Supabase Realtime sync** | Replace localStorage in `useEvents` with Supabase Realtime subscription + Dexie offline queue. Cross-device sync per ARCHITECTURE §4.5. | 1 weekend |
 | **E1.12 · PWA install + offline** | Verify `@vite-pwa/nuxt` config, add real icon set (192/512/maskable), test offline shell on iOS/Android, "Add to Home Screen" prompt timing. | 1 day |
 | **E1.13 · Match-card og:image rendering** | Server route `/m/[id]/card.png` using Satori/`vercel/og`. og:meta tags for social sharing previews. PRD §3.18. | 1-2 days |
@@ -44,7 +47,7 @@ Phase gates from BRD §13 control progression. Don't start phase N+1 until phase
 | **E1.19 · Landing demo match** | Pre-seeded match auto-scoring on the homepage hero. PRD §3.22. | 1 day |
 | **E1.20 · Practice mode** | `/practice` route, never writes to Supabase, "PRACTICE" watermark. | 1 day |
 | **E1.21 · Tennis + pickleball + table-tennis presets** | Three more racquet sport configs (engine already supports them — just config files). | 4 hours |
-| **E1.22 · Doubles service rotation polish** | Currently doubles displays correctly but service rotation mirrors singles. Add `serverPlayer` to events + state for partner-level tracking. | 2 days |
+| **~~E1.22 · Doubles service rotation polish~~** ✅ done 2026-05-05 | `partnerOnRight: { a: 1\|2; b: 1\|2 }` added to `RacquetState`. Reducer toggles the serving team's flag on every "won on serve" point; resets to `{ a: 1, b: 1 }` at game start. Control UI derives `currentServerSlot` and shows the `Serves` pill on the correct partner's cell. 29/29 engine tests still passing. | done |
 | **E1.23 · Deploy buttons + self-hosting docs** | Netlify / Vercel one-click buttons in README, `docs/SELF_HOSTING.md`. | 1 day |
 | **E1.24 · Launch landing page** | About, GitHub link, contributors, change-log. | 1 day |
 | **E1.25 · Public domain + production deploy** | Pick brand domain, configure SSL, point at Netlify, hosted Supabase project + migrate. | 1 day |
@@ -61,7 +64,7 @@ Phase gates from BRD §13 control progression. Don't start phase N+1 until phase
 
 | Epic | What it covers |
 |---|---|
-| **E2.1 · Supabase Auth + accounts** | Email + Google + Apple OAuth. Magic-link option. Profile page. |
+| **~~E2.1 · Supabase Auth + accounts~~** | Pulled forward to **E1.0**. Phase 2 retains: enabling Google OAuth, Apple OAuth, magic-link option, account deletion (DPDP/GDPR), per-match write-tokens for delegated scoring. |
 | **E2.2 · Cloud match history** | Migrate browser-stored matches to user account on opt-in. Match list, search, filters. |
 | **E2.3 · Player profiles** | `/p/[handle]` public profile pages with match history. |
 | **E2.4 · Lifetime stats + head-to-head** | Win rate, streaks, head-to-head records derived from event log. |

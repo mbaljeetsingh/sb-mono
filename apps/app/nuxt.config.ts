@@ -14,10 +14,18 @@ export default defineNuxtConfig({
   vite: {
     plugins: [tailwindcss()],
   },
+  // shadcn-vue: no prefix, no auto-import. Components are imported explicitly:
+  //   import { Button } from "@sb/layer-ui/components/ui/button"
+  // componentDir is still set so the shadcn CLI knows where to drop new components.
   shadcn: {
-    prefix: "Ui",
+    prefix: "",
     componentDir: "../../layers/ui/components/ui",
   },
+  components: [
+    // Auto-import only app-local components (apps/app/components/**).
+    // Layer UI components are imported explicitly per-file.
+    { path: "~/components", pathPrefix: false },
+  ],
   app: {
     head: {
       title: "Scoreboard",
@@ -38,8 +46,23 @@ export default defineNuxtConfig({
       link: [{ rel: "icon", type: "image/svg+xml", href: "/icon.svg" }],
     },
   },
+  // Supabase Auth — anonymous-OK app (Option A). Auth is optional and unlocks ownership;
+  // anonymous scoring works against the same DB via permissive RLS for owner_id IS NULL.
+  // Middleware handles redirects, not the module's built-in redirect.
   supabase: {
-    redirectOptions: { login: "/", callback: "/", exclude: ["/**"] },
+    redirect: false,
+    redirectOptions: {
+      login: "/auth/signin",
+      callback: "/auth/callback",
+    },
+    cookieOptions: {
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      sameSite: "lax" as const, // PKCE requires lax for top-level cross-site OAuth redirects
+      secure: process.env.NODE_ENV === "production",
+    },
+    // Disable the auto-typed-Database expectation. We don't ship generated types yet;
+    // supabase calls fall back to `Database = unknown`, which is fine for v1.
+    types: false,
   },
   pwa: {
     registerType: "autoUpdate",

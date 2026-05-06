@@ -111,7 +111,7 @@ Just played 3 games at her local club. Wants to record the result and share it.
 
 | Surface | Route | Audience | Notes |
 |---|---|---|---|
-| **Control** | `/m/[id]/control` | Scorekeeper's phone | Two huge tap zones, server indicator, swipe-up advanced. Wake-lock, haptics. |
+| **Control** | `/m/[id]/control` | Scorekeeper's phone | Two team rows. Each row has a centered header (team label · score · games-won pips · `MATCH PT`/`GAME PT` badge) above a 2-cell tap area (left court \| right court). Tap any cell of a team to add a point. Doubles: each cell shows whichever partner is currently in that court (via `partnerOnRight`). Singles: name shown only in the active cell — server's court for the serving team, diagonal opposite for the receiver. Serving cell shows a `● Serves` pill. Sub-bar above: previous games, `INTERVAL` badge, tap-to-edit format chip. Sheets via `⋯`: events list (long-press on Undo opens it), match-state actions, format pickers, score correction. Wake-lock + haptics. Desktop caps width to `max-w-md` with side scrim. |
 | **Overlay** | `/m/[id]/overlay` | OBS / Streamlabs / Streamyard browser source | Transparent background, no chrome. Lower-third or corner-bug layouts. |
 | **Scoreboard** | `/m/[id]/scoreboard` | Tablet/TV at venue, sharing link | Opaque background, fullscreen, designed to be **filmed** as much as displayed. |
 
@@ -270,29 +270,49 @@ type TournamentRecord = {
 | Hosting | Netlify (web) + Supabase managed (DB) | Existing pipeline |
 | Mobile (v2) | **Capacitor** wrapping Nuxt | One codebase. Expo deferred unless Capacitor proves limiting. |
 
-### 3.12 Pages / routes (v1)
+### 3.12 Pages / routes (v1) *(refined 2026-05-05)*
+
+**`apps/app` — auth-aware product (anonymous-OK):**
 
 ```
-/                             # Landing — "Start a match" / "Log a result"
-/new                          # Sport picker + match config
-/new/result                   # Result-only entry form
-/m/[id]                       # Match dashboard (URLs, theme picker, branding)
-/m/[id]/control               # Scorekeeper control surface (phone)
+/                             # Authenticated dashboard / anonymous "Start a match" landing
+/new                          # Sport picker + match config (anonymous-OK)
+/new/result                   # Result-only entry form (anonymous-OK)
+/m/[id]                       # Match hub — live status, overlay/scoreboard URLs, theme picker
+/m/[id]/control               # Court control surface (phone) — anonymous-OK
 /m/[id]/overlay               # OBS / Streamlabs browser source (transparent)
 /m/[id]/scoreboard            # Fullscreen scoreboard (TVs, sharing, filmable)
 /d/[dynamicId]                # Dynamic URL → resolves to current bound match
 /t/[id]                       # Tournament home page (list of matches)
 /t/[id]/overlay               # Combined overlay (multi-court ticker)
-/themes                       # Theme gallery (preview each)
-/about                        # About + GitHub link + contributors
+/auth/signin                  # Sign in (email/password; Google button rendered but disabled in v1)
+/auth/signup                  # Sign up (display name + email + password)
+/auth/forgot-password         # Password reset request
+/auth/reset-password          # Password reset form (linked from email)
+/auth/callback                # OAuth / email-confirmation landing
+/profile                      # Display name, avatar (drag-drop upload), change password — sign-in required
 ```
+
+Auth gating: only `/profile` (and future `/history`, `/admin`) require sign-in. All scorer surfaces are anonymous-OK.
+
+**`apps/web` — marketing site (planned, currently empty):**
+
+```
+/                             # Landing page (theme previews, GitHub link, OSS messaging)
+/themes                       # Theme gallery + live previews — moved from apps/app
+/score                        # Free anonymous scorer (subset of apps/app surfaces)
+/legal/privacy                # Privacy policy
+/legal/terms                  # Terms of service
+```
+
+**Removed in 2026-05-05 sweep:** `/themes` and `/about` left `apps/app` — both belong on the marketing site.
 
 ### 3.13 Out of scope for v1, with explicit deferrals
 
 | Feature | Deferred to | Why |
 |---|---|---|
-| User accounts / sign-in | v2 | Adds friction; v1 validates without it |
-| Cloud match history | v2 | Requires accounts |
+| ~~User accounts / sign-in~~ *(pulled into v1 as **E1.0**, optional)* | — | Auth scaffolding (Supabase email/password, custom-claims, RLS for `owner_id IS NULL`) shipped in v1. Anonymous remains the default. Per BRD #9 *(2026-05-05)*. |
+| Cloud match history | v2 | Requires accounts (now optional, but the history UI itself is v2) |
 | Lifetime stats / head-to-head | v2 | Requires accounts + significant UI |
 | Player profiles | v2 | Out of scope for the streamer wedge |
 | Custom branding / sponsor logos | v2 | Pro feature |
@@ -503,6 +523,55 @@ Plus `docs/SELF_HOSTING.md` covering:
 - Migration application
 
 This makes the open-source claim real and material — a tournament organizer can run their own instance in 15 minutes.
+
+### 3.26 Auth surfaces (v1, optional) *(added 2026-05-05 — E1.0)*
+
+Auth is **optional**. Anonymous scoring is the default. Sign-in unlocks profile, ownership, multi-device-as-same-user, and primes Pro features for v2.
+
+| Surface | Route | Behavior |
+|---|---|---|
+| Sign in | `/auth/signin` | Email + password. Redirects to `?redirect=…` after success, defaults to `/`. Google button rendered but disabled in v1; flip `[auth.external.google].enabled = true` in `supabase/config.toml` to activate. |
+| Sign up | `/auth/signup` | Display name (optional) + email + password + confirm. Email confirmation **on** — Supabase sends a branded confirmation link before sign-in works. |
+| Forgot password | `/auth/forgot-password` | Email-only form; sends a reset link via Supabase. |
+| Reset password | `/auth/reset-password` | Linked from email; new + confirm password fields. |
+| OAuth callback | `/auth/callback` | Auto-detects PKCE `?code=…`; re-syncs the user store and redirects to `?redirect=…`. |
+| Profile | `/profile` | Display name + avatar (drag-drop upload or URL paste) + change password. **Sign-in required.** Account deletion (DPDP/GDPR) deferred — see E1.14. |
+
+**Auth layout** (`layouts/auth.vue`): rotating features carousel (`AuthFeatures` — 6 sb-flavored slides) on the left at `md+`, form pane on the right.
+
+**Header dropdown** (NavUser, in `default.vue`): avatar with display-name initial → Profile / Admin (admin-role-only) / Sign out. When signed-out, header shows a "Sign in" link instead.
+
+**Email templates** (rebranded from np-mono, in `supabase/templates/`): confirmation, recovery, invite, magic-link, email-change, reauthentication. Wired in `supabase/config.toml`.
+
+**Roles + permissions** (scaffolding only in v1):
+
+- `app_role` ENUM: `admin`, `free` (default), `pro` (reserved for v2).
+- `app_permission` ENUM: 8 permissions including `match.create`, `match.update.own`, `theme.use.free`, `theme.use.pro`, `branding.custom`, `admin.users.manage_roles`.
+- `custom_access_token_hook` injects `user_role` into JWT claims on every token issuance.
+- `authorize(permission)` SQL helper for RLS; `get_my_permissions()` RPC for the client.
+- `useRolePermissions().hasPermission(...)` composable + `v-permission="'…'"` directive (hides the element when the role lacks the permission).
+- New signups get the `free` role via `handle_new_user` trigger which also populates `public.users` with `display_name` + `avatar_url` from `raw_user_meta_data` (so Google sign-in pre-populates name + picture).
+
+### 3.27 Per-match theme picker (v1) *(added 2026-05-05 — partial E1.16)*
+
+A `🎨 Theme` button on `/m/[id]` opens a Sheet listing the 5 themes from `@sb/themes`, grouped by surface (overlay vs scoreboard). Click to select. Persisted to `localStorage:sb:theme:{matchId}`. The button label updates to show the chosen overlay theme; a sub-label shows the chosen scoreboard theme. Overlay/scoreboard URLs (the ones the operator copies into OBS / opens on the venue TV) include `?theme=X` so the existing surfaces pick up the choice.
+
+Live in-modal preview (true E1.16) is still pending. Custom team colors (`🖌 Colors` button) and match settings (`⚙` button) are disabled with "soon" tooltips until E1.17 lands.
+
+### 3.28 Format pickers — points-per-game + match length (v1) *(added 2026-05-05)*
+
+Format is set during match creation on `/new` AND can be changed mid-match from `/m/[id]/control`. Both surfaces persist to the same `localStorage:sb:format:{matchId}` key, so creating with a format and then editing it from control just overwrites.
+
+**Two dimensions:**
+
+- **Points per game:** `15 BWF` (default — cap 21, interval 8 — current BWF format since 2025) or `21 classic` (cap 30, interval 11 — BWF 2006–24, still common in amateur leagues).
+- **Match length:** `Single match` (default — `gamesToWin: 1`, first game decides the match) or `Best of N` (a stepper N ∈ {3, 5, 7, 9, 11}, → `gamesToWin: (N+1)/2`). Engine `RacquetConfig.gamesToWin` is a plain number, so any odd N from 3 upward works.
+
+Engine recomputes match-over from the event log on every reduce, so the operator can flip these mid-match — including extending a single match into a best-of-3 retroactively. Switching format never invalidates past points.
+
+### 3.29 Theme gallery — moves to `apps/web` *(2026-05-05)*
+
+The `/themes` route was deleted from `apps/app`. The theme gallery (with live previews + contribute CTA) is a marketing-site responsibility — it goes in `apps/web` once that ships. Per-match theme selection inside the product app uses the per-match picker (§3.27).
 
 ## 4. v2 detailed requirements (preview, ~6 months post-v1)
 

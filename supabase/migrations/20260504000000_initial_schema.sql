@@ -1,5 +1,15 @@
 -- sb-mono initial schema
 -- Event-sourced: matches table holds metadata + config; events table is the append-only log.
+--
+-- RLS shape (Option A — free anonymous scorer):
+--   * Anyone (anon or authed) can READ any match/event by id. The match URL is the access token.
+--   * Authenticated users INSERT matches with owner_id = auth.uid() and a 'match.create' permission.
+--   * Anonymous users INSERT matches with owner_id = NULL.
+--   * Owners UPDATE/DELETE their own matches (with the corresponding permission).
+--   * Anonymous matches (owner_id IS NULL) stay open to anon and authed UPDATE.
+--   * Events follow the same gating via the parent match's owner_id.
+--
+-- Per-match write tokens for delegated scoring are deferred to E2.8.
 
 create extension if not exists "uuid-ossp";
 
@@ -13,7 +23,11 @@ create table public.matches (
     config          jsonb not null default '{}'::jsonb,
     theme_id        text not null default 'broadcast-classic',
     colors          jsonb not null default '{"a": "#dc2626", "b": "#2563eb"}'::jsonb,
-    started_at      bigint                                  -- ms since epoch; null until first point
+    started_at      bigint,                                 -- ms since epoch; null until first point
+    court_label     text,
+    round           text,
+    category        text,
+    venue           text
 );
 
 create index matches_owner_id_idx on public.matches (owner_id);
@@ -36,47 +50,17 @@ create index events_match_id_id_idx on public.events (match_id, id);
 alter publication supabase_realtime add table public.matches;
 alter publication supabase_realtime add table public.events;
 
--- Row-Level Security
--- v1 model: anonymous matches are readable by anyone with the match id (it's a UUID-ish secret).
--- Authenticated users own their matches when owner_id is set.
+-- Row-Level Security ---------------------------------------------------------
 alter table public.matches enable row level security;
-alter table public.events enable row level security;
+alter table public.events  enable row level security;
 
--- Anyone can read any match by id (the id itself is the access token in v1).
+-- Public read by id (URL = access token).
 create policy "matches_read_by_id" on public.matches
     for select using (true);
 
--- Anyone can insert anonymous matches; signed-in users insert with their owner_id.
-create policy "matches_insert_open" on public.matches
-    for insert with check (owner_id is null or owner_id = auth.uid());
-
--- Only owner can update their matches; anonymous matches are immutable in metadata
--- (event log carries the truth).
-create policy "matches_update_owner" on public.matches
-    for update using (owner_id is not null and owner_id = auth.uid())
-    with check (owner_id = auth.uid());
-
--- Events: anyone can read events for any match (overlay/scoreboard surfaces).
 create policy "events_read_by_match" on public.events
     for select using (true);
 
--- Events: anyone can append. The owner check happens at the match level.
--- (v1: trust event log writers. Tighten in v2 with a per-match write token.)
-create policy "events_insert_open" on public.events
-    for insert with check (true);
-
--- Trigger: bump matches.updated_at when a new event lands.
-create or replace function public.bump_match_updated_at()
-returns trigger as $$
-begin
-    update public.matches
-    set updated_at = now(),
-        started_at = coalesce(started_at, new.ts)
-    where id = new.match_id;
-    return new;
-end;
-$$ language plpgsql;
-
-create trigger events_bump_match
-    after insert on public.events
-    for each row execute function public.bump_match_updated_at();
+-- Permission-gated policies on matches/events depend on public.authorize(),
+-- which is defined in the roles_and_permissions migration. We split the
+-- mutation policies into that migration to keep the dependency order clean.

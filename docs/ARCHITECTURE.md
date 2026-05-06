@@ -2,7 +2,7 @@
 
 **Status:** v1.0 draft
 **Companion:** [BRD.md](./BRD.md), [PRD.md](./PRD.md)
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-05
 
 This document captures the *how*: the engineering decisions, data flow, and architectural primitives that the BRD's *why* and PRD's *what* depend on. Read this before contributing code.
 
@@ -164,33 +164,79 @@ Event and match IDs are **ULIDs**, not UUIDs:
 
 This matters for offline-merge: two devices appending events offline can sort their merged streams by ID alone. No clock-skew arbitration needed.
 
-### 4.4 Row-Level Security model
+### 4.4 Row-Level Security model *(refined 2026-05-05)*
 
-v1 uses RLS optimistically:
-- **Anyone** can read any match by ID. The ID itself is the access token (UUID-ish, not enumerable).
-- **Anyone** can append events to any match. The match URL is the write capability.
-- **Owner** (when set) is the only one who can update match metadata.
+RLS supports both **anonymous** and **authenticated** scoring against the same DB (Option A — see BRD #30):
 
-This is *intentionally permissive* for v1. The risk: someone discovers a match URL and trolls it with fake events. Mitigation: matches expire in 30 days; owner can correct via `score.correct` events; v2 adds a per-match write token that the operator's device alone holds.
+- **Read** — public for matches + events. The match ULID is the access token.
+- **Anonymous match** (`owner_id IS NULL`):
+  - `anon` role can `INSERT` matches with `owner_id = null`.
+  - `anon` role can `UPDATE` such matches and `INSERT` events into them.
+  - `authenticated` users can also score anonymous matches (covers the "started anonymous, signed in mid-match" case).
+- **Owned match** (`owner_id = auth.uid()`):
+  - Only the owner can `INSERT` / `UPDATE` / `DELETE` the match row.
+  - Only the owner can `INSERT` events into their match.
+  - Permission check via `authorize('match.create' | 'match.update.own' | 'match.delete.own')` against `role_permissions`.
+- **Roles** — `app_role` ENUM (`admin`, `free`, `pro`) with `app_permission` ENUM. JWT claim `user_role` is injected by the `custom_access_token_hook` Postgres function so RLS can read it cheaply via `auth.jwt() ->> 'user_role'`.
 
-### 4.5 Sync flow
+**Profile rows** (`public.users`):
+- Public read (display_name + avatar_url shown on shared scoreboards).
+- Owner-only update (`auth.uid() = id`).
+- Auto-created by `handle_new_user()` trigger on `auth.users` insert; pulls `display_name` + `avatar_url` from `raw_user_meta_data` (so Google sign-in pre-populates).
+
+**Storage bucket `avatars`** (public, 2MB, jpeg/png/webp/gif):
+- Public read (`bucket_id = 'avatars'`).
+- Owner-only write under `{user_id}/...` (folder-name guard via `(storage.foldername(name))[1] = auth.uid()::text`).
+
+Risks intentionally accepted in v1:
+- Anonymous match URLs can be scored by anyone who has the URL. Mitigation: match URLs are ULID-secret (not enumerable); v2 adds per-match write tokens (E2.8) for delegated scoring.
+- Anonymous matches accumulate; a 30-day GC job (E1.x) cleans them up.
+
+Migrations (in chronological order):
+1. `20260504000000_initial_schema.sql` — matches + events tables, basic RLS.
+2. `20260505000000_users_profile.sql` — public.users.
+3. `20260505000001_roles_and_permissions.sql` — ENUMs, user_roles, role_permissions, custom_access_token_hook, authorize(), get_my_permissions(), handle_new_user trigger.
+4. `20260505000002_tighten_match_rls.sql` — owner-gated writes for authenticated users.
+5. `20260505000003_add_match_metadata_columns.sql` — court_label, round, category, venue.
+6. `20260505000004_avatars_storage.sql` — storage bucket + folder-RLS.
+7. `20260505000005_handle_new_user_oauth.sql` — pull display_name + avatar from OAuth metadata.
+8. `20260505000006_anonymous_matches.sql` — anon-OK insert/update for `owner_id IS NULL` matches + events.
+
+### 4.5 Sync flow *(refined 2026-05-05 — E1.11 done)*
+
+`useEvents` (in `layers/app-base/composables/useEvents.ts`) is local-first + Supabase-synced:
 
 ```
-Score tap (control surface)
-  └──► Append event to Pinia store (synchronous, UI updates)
-      └──► Persist to Dexie (async, fire-and-forget)
-          └──► Enqueue for sync
-              └──► If online, POST to Supabase /events
-                   └──► On success, mark event synced in Dexie
-              └──► If offline, queue in Dexie until reconnect
+Score tap (any device)
+  └──► append() — push event into Vue ref (synchronous, UI repaints)
+      ├──► persist to localStorage (offline survival)
+      ├──► postMessage to BroadcastChannel `sb-match-{id}` (same-device cross-tab)
+      └──► fire-and-forget INSERT into Supabase events
+              └──► ensureMatchRow() lazy-creates the match row if missing
+                   (owner_id = auth.uid() if signed in, null otherwise)
 
-Realtime listener (overlay / scoreboard surfaces)
-  └──► Subscribe to Supabase Realtime channel `match-{id}`
-      └──► On INSERT event row, append to Pinia store
-          └──► UI re-renders via reactive computed state
+Realtime subscriber (every device that has the URL open)
+  └──► supabase.channel(`match:{id}`)
+      ├──► on INSERT → upsertLocal(event) — dedupe by event.id
+      └──► on DELETE → removeLocal(event.id) — handles cross-device undo
+
+replace() (used by undo)
+  └──► trim local events
+      ├──► persist to localStorage
+      ├──► broadcast on BroadcastChannel
+      └──► DELETE the diff from Supabase (so OBS overlay on a separate laptop also rolls back)
+
+Initial mount
+  └──► loadLocal() — paint immediately from localStorage (fast, offline-safe)
+      └──► fetchRemote() — pull events from Supabase
+          └──► merge by id, persist, repaint
 ```
 
-**Same-device cross-tab sync** uses BroadcastChannel — instant, no network. Lifted from OpenScoreboard's `getBroadcastChannelName.ts` pattern.
+**Same-device cross-tab sync** still uses BroadcastChannel — faster than going through Supabase Realtime when both tabs are on the same machine. Lifted from OpenScoreboard's `getBroadcastChannelName.ts` pattern.
+
+**Stable per-browser device id** (`localStorage:sb:device-id`) is included on every event row (`device_id` column) for provenance + debugging.
+
+**Dexie-backed offline retry queue** is *not yet implemented* — current behavior on network failure is "log a warning, localStorage retains the event so the UI keeps working, but the row never reaches Supabase." Production-quality offline tolerance is a follow-up (E1.x).
 
 ## 5. The three rendering surfaces
 
@@ -200,12 +246,19 @@ All three surfaces:
 - Render different *views* of the resulting state
 
 ### 5.1 Control (`/m/[id]/control`)
-- Scorekeeper's phone
-- Two huge tap zones (top-half = team A, bottom-half = team B, or left/right depending on orientation)
-- Server indicator (court + side)
-- Long-press undo, swipe-up advanced sheet
-- Wake Lock active, haptic feedback on tap
-- Writes events; doesn't read others' writes (it created them)
+- Scorekeeper's phone, full-screen (`layout: false`). Desktop caps width at `max-w-md` with side scrim.
+- **Two team rows.** Each row: centered header strip (team label · score · games-won pips · `MATCH PT`/`GAME PT` badge) above a 2-cell tap area (left court | right court). Tap any cell of a team to add a point. Whole-row inset ring for game/match point or last-point winner.
+- **Doubles:** each cell shows whichever partner is currently in that court, via `state.partnerOnRight` (see §5.1.1). Pill on the cell whose court matches `state.serverCourt`.
+- **Singles:** name shown in only the active cell — server's court for the serving team, diagonal opposite for the receiver. Other cell is empty but tappable.
+- **Sub-bar** above the rows: previous-game scorelines, `INTERVAL` badge, tap-to-edit format chip.
+- **Sheets** (open via `⋯` or specific affordances): events list, match-state actions (timeout / walkover / retirement / default), format pickers (points-per-game + match length), score correction.
+- Wake-lock + haptics. Writes events; reads its own writes via the same Realtime subscription as overlays.
+
+#### 5.1.1 BWF doubles partner tracking
+`state.partnerOnRight: { a: 1 | 2; b: 1 | 2 }` records which slot of each team is currently in their right service court. Initial state: both teams' slot-1 in right court (BWF Law 8). On a "won on serve" point, the serving team's flag toggles (partners swap courts). On a "won as receiver" point, no swap. Game end resets to `{ a: 1, b: 1 }`. The current server's slot is derived as `serverCourt === 'right' ? partnerOnRight[team] : (partnerOnRight[team] === 1 ? 2 : 1)` — exactly the canonical rotation `a1 → b2 → a2 → b1 → a1` from BWF docs.
+
+#### 5.1.2 Per-match metadata flow
+`/new` writes `localStorage:sb:meta:{id}` (`{ sport, isDoubles, teamNames, players: { a1, a2, b1, b2 } }`) and `localStorage:sb:format:{id}` (`{ preset, gamesToWin }`). The control surface reads both on mount; the format key is also written when the operator changes format mid-match.
 
 ### 5.2 Overlay (`/m/[id]/overlay`)
 - OBS / Streamlabs / Streamyard browser source
@@ -318,7 +371,29 @@ If `p75 LCP > 4s` for 30 minutes → alert. If error rate > 1% of sessions for 3
 | og:image rendering | Netlify Edge Functions or Supabase Edge Functions | Satori-based PNG generation |
 | Stale-match cleanup cron | Supabase Edge Function, nightly | Cost containment |
 
-## 12. Open architectural questions
+## 12. Auth + roles
+
+Auth is **optional**. Anonymous scoring is the default; sign-in unlocks ownership, profile, history-eligibility, and primes the `pro` role for v2.
+
+**Stack:** `@nuxtjs/supabase` with `redirect: false` (custom middleware), 30-day cookie. Email confirmation on, branded templates in `supabase/templates/`. Google OAuth wired but `enabled = false` (UI button rendered disabled).
+
+**Client:** Pinia store `apps/app/stores/user.ts` exposes `currentUser`, `userRole`, `permissions`, plus `signIn*/signUp/signOut/resetPassword/updateProfile/initAuth`. `composables/useAuth.ts` wraps it with form state. `composables/useRolePermissions.ts` exposes `hasPermission`/`isAdmin`/`isPro`. `plugins/permission.ts` registers a `v-permission="'…'"` directive. `middleware/auth.global.ts` is allowlist-based — anonymous-OK on `/`, `/new`, `/m/*`, `/d/*`, `/t/*`, `/auth/*`; everything else requires sign-in.
+
+**SQL** (migration `20260505000001_roles_and_permissions`):
+- `app_role` ENUM: `admin`, `free`, `pro`. `app_permission` ENUM (8 perms).
+- `user_roles` + `role_permissions` tables, seeded.
+- `custom_access_token_hook(event jsonb)` injects `user_role` into JWT claims.
+- `authorize(permission)` — RLS helper reading `auth.jwt() ->> 'user_role'`.
+- `get_my_permissions()` RPC — returns the role's permission list for the client.
+- `handle_new_user()` trigger — creates `public.users` row + grants default `free` role; pulls `display_name` + `avatar_url` from `raw_user_meta_data` (Google auto-populates).
+
+**Avatar upload:** drag-drop or click in `ProfilePhotoUpload.vue` → `browser-image-compression` (≤200KB / ≤512px / WebP) → `supabase.storage.from('avatars').upload(`{userId}/{ts}.{ext}`)` → `public.users.avatar_url`. Bucket is public-read, owner-write under `{user_id}/...` (folder-prefix RLS in migration `20260505000002_avatars_storage`).
+
+## 13. Monorepo + apps split
+
+`apps/app` is the auth-aware product; `apps/web` (planned) hosts marketing + a public free anonymous scorer. Both consume `packages/engine` (publishable as `@sb/engine`), `packages/themes`, `layers/ui` (shadcn-vue), and `layers/app-base` (Pinia, `useEvents`, `useMatchState`). The split lets the marketing surface deploy without auth code and gives Pro features a clean home in `apps/app`.
+
+## 14. Open architectural questions
 
 1. **Where does the og:image render?** Netlify Edge Function (closer to user) vs Supabase Edge Function (closer to data). Recommendation: Netlify, since most reads are anonymous and don't need DB context beyond the match row.
 2. **Bundle splitting strategy.** Each surface (control / overlay / scoreboard) is its own route; Nuxt should code-split automatically. Verify after v1 implementation that the overlay route doesn't pull in control-only code (it shouldn't need haptics, wake-lock, etc.).

@@ -85,6 +85,27 @@ values
 set session_replication_role = default;
 
 -- ────────────────────────────────────────────────────────────────────────────
+--  PUBLIC PROFILES + ROLES
+-- ────────────────────────────────────────────────────────────────────────────
+-- The on_auth_user_created trigger is bypassed by session_replication_role=replica
+-- above (we need that to bulk-insert auth.users without firing it once per row).
+-- Re-create the rows it would have inserted so the seed is consistent end-state.
+
+insert into public.users (id, email, display_name, avatar_url) values
+  ('a0000000-0000-4000-8000-000000000001'::uuid, 'admin@scoreboard.com',    'Admin',                  null),
+  ('a0000000-0000-4000-8000-000000000002'::uuid, 'coach@scoreboard.com',    'Coach Sharma',           null),
+  ('a0000000-0000-4000-8000-000000000003'::uuid, 'streamer@scoreboard.com', 'Arjun (OBS streamer)',   null),
+  ('a0000000-0000-4000-8000-000000000004'::uuid, 'player@scoreboard.com',   'Priya',                  null)
+on conflict (id) do nothing;
+
+insert into public.user_roles (user_id, role) values
+  ('a0000000-0000-4000-8000-000000000001'::uuid, 'admin'::public.app_role),
+  ('a0000000-0000-4000-8000-000000000002'::uuid, 'free'::public.app_role),
+  ('a0000000-0000-4000-8000-000000000003'::uuid, 'free'::public.app_role),
+  ('a0000000-0000-4000-8000-000000000004'::uuid, 'free'::public.app_role)
+on conflict (user_id, role) do nothing;
+
+-- ────────────────────────────────────────────────────────────────────────────
 --  MATCHES — three demo matches across personas
 -- ────────────────────────────────────────────────────────────────────────────
 -- Match 1: Live match owned by the streamer (Persona B)

@@ -1,21 +1,65 @@
 <script setup lang="ts">
 import { ulid } from "ulid";
 
-definePageMeta({ layout: false });
+// Uses default layout (AppHeader). Keep the page contents focused on the form.
+useSeoMeta({ title: "New match" });
 
 type SportId = "badminton" | "tennis" | "pickleball" | "table-tennis";
+type FormatPreset = "badminton-21" | "badminton-15";
+type MatchLength = "single" | "best-of";
 
 const sport = ref<SportId>("badminton");
 const isDoubles = ref(true);
 
-const teamA = ref({ p1: "Priya", p2: "Anu" });
-const teamB = ref({ p1: "Karan", p2: "Jay" });
+// Match format: which BWF preset (21pt vs 15pt) and how many games make a match.
+// Default = single game (no series). Operator can change these mid-match from
+// the control surface too — the engine recomputes from the event log.
+// 21-point is current BWF (since 2006). 15-point is the BWF 2027 proposal
+// (pending April 2026 vote, effective Jan 2027 if approved). Default tracks
+// today's official rule.
+const formatPreset = ref<FormatPreset>("badminton-21");
+const matchLength = ref<MatchLength>("single");
+const bestOfN = ref<number>(3); // odd number ≥ 3 — used only when matchLength === 'best-of'
 
-const sports: { id: SportId; label: string; preset: string }[] = [
-  { id: "badminton", label: "Badminton", preset: "21pt BWF" },
-  { id: "tennis", label: "Tennis", preset: "Best of 3" },
-  { id: "pickleball", label: "Pickleball", preset: "11pt classic" },
-  { id: "table-tennis", label: "Table tennis", preset: "11pt · BO5" },
+// gamesToWin derived: single = 1, best-of-N = ceil(N/2) = (N+1)/2 for odd N.
+const gamesToWin = computed<number>(() =>
+  matchLength.value === "single" ? 1 : Math.ceil(bestOfN.value / 2),
+);
+
+const decBestOf = () => {
+  bestOfN.value = Math.max(3, bestOfN.value - 2);
+};
+const incBestOf = () => {
+  bestOfN.value = Math.min(11, bestOfN.value + 2);
+};
+
+// Empty by default so users see placeholder hints; control surface falls back to
+// "Player 1" / "Player 2" labels if names are still blank when they start scoring.
+const teamA = ref({ p1: "", p2: "" });
+const teamB = ref({ p1: "", p2: "" });
+
+// v1: only badminton ships scoring rules (engine has badminton-21 + badminton-15).
+// Other sports stay listed but `enabled: false` until their engine config lands (E1.21).
+const sports: {
+  id: SportId;
+  label: string;
+  preset: string;
+  enabled: boolean;
+}[] = [
+  { id: "badminton", label: "Badminton", preset: "21pt BWF", enabled: true },
+  { id: "tennis", label: "Tennis", preset: "Coming soon", enabled: false },
+  {
+    id: "pickleball",
+    label: "Pickleball",
+    preset: "Coming soon",
+    enabled: false,
+  },
+  {
+    id: "table-tennis",
+    label: "Table tennis",
+    preset: "Coming soon",
+    enabled: false,
+  },
 ];
 
 const formatNames = (t: { p1: string; p2: string }) =>
@@ -23,7 +67,8 @@ const formatNames = (t: { p1: string; p2: string }) =>
 
 const createMatch = () => {
   const id = ulid();
-  // Persist team names to localStorage so the control page can pick them up.
+  // Persist team names + per-player split + format to localStorage so the control
+  // surface picks them up on first mount.
   if (typeof localStorage !== "undefined") {
     localStorage.setItem(
       `sb:meta:${id}`,
@@ -31,32 +76,36 @@ const createMatch = () => {
         sport: sport.value,
         isDoubles: isDoubles.value,
         teamNames: { a: formatNames(teamA.value), b: formatNames(teamB.value) },
+        players: {
+          a1: teamA.value.p1,
+          a2: teamA.value.p2,
+          b1: teamB.value.p1,
+          b2: teamB.value.p2,
+        },
+      }),
+    );
+    // Match-format key the control surface reads on mount (same key it persists
+    // when the operator changes format from the in-match format sheet).
+    localStorage.setItem(
+      `sb:format:${id}`,
+      JSON.stringify({
+        preset: formatPreset.value,
+        gamesToWin: gamesToWin.value,
       }),
     );
   }
-  return navigateTo(`/m/${id}/control`);
+  // Land on the match hub so the operator can grab overlay / scoreboard URLs
+  // before opening control. Hub has a prominent "Open Control" CTA for the
+  // common case where they just want to score.
+  return navigateTo(`/m/${id}`);
 };
 </script>
 
 <template>
-  <div
-    class="min-h-screen bg-background text-foreground font-sans flex flex-col"
-  >
-    <!-- Top bar -->
-    <header class="px-4 pt-16 pb-2 flex items-center justify-between">
-      <button
-        type="button"
-        class="size-9 rounded-md hover:bg-surface-2 inline-flex items-center justify-center"
-        aria-label="Back"
-        @click="navigateTo('/')"
-      >
-        ←
-      </button>
-      <span class="font-semibold">New match</span>
-      <span class="size-9" />
-    </header>
+  <div class="flex flex-col font-sans">
+    <h1 class="px-4 pt-6 pb-3 text-xl font-semibold">New match</h1>
 
-    <main class="flex-1 px-4 pb-32 pt-5 overflow-y-auto">
+    <main class="flex-1 px-4 pb-32 pt-2">
       <!-- Sport picker -->
       <div
         class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
@@ -68,13 +117,17 @@ const createMatch = () => {
           v-for="s in sports"
           :key="s.id"
           type="button"
+          :disabled="!s.enabled"
+          :title="s.enabled ? '' : `${s.label} engine ships in v1.x (E1.21)`"
           class="p-3.5 rounded-md text-left flex flex-col gap-2 min-h-[84px] border-[1.5px] transition-colors"
           :class="
-            sport === s.id
-              ? 'bg-foreground text-background border-foreground'
-              : 'bg-surface text-foreground border-border hover:bg-surface-2'
+            !s.enabled
+              ? 'bg-surface text-foreground/40 border-border opacity-60 cursor-not-allowed'
+              : sport === s.id
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-surface text-foreground border-border hover:bg-surface-2'
           "
-          @click="sport = s.id"
+          @click="s.enabled && (sport = s.id)"
         >
           <span class="text-2xl leading-none">
             {{
@@ -96,11 +149,11 @@ const createMatch = () => {
         </button>
       </div>
 
-      <!-- Format -->
+      <!-- Type: Singles / Doubles -->
       <div
         class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
       >
-        Format
+        Type
       </div>
       <div class="flex p-1 bg-surface-2 rounded-md gap-0.5 mb-6">
         <button
@@ -128,6 +181,105 @@ const createMatch = () => {
           Doubles
         </button>
       </div>
+
+      <!-- Points per game: 21 BWF / 15 classic -->
+      <div
+        class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
+      >
+        Points per game
+      </div>
+      <div class="flex p-1 bg-surface-2 rounded-md gap-0.5 mb-6">
+        <button
+          type="button"
+          class="flex-1 py-2.5 rounded-sm text-sm transition-all"
+          :class="
+            formatPreset === 'badminton-21'
+              ? 'bg-surface font-semibold shadow-sm'
+              : 'bg-transparent font-medium text-foreground/70'
+          "
+          @click="formatPreset = 'badminton-21'"
+        >
+          21 BWF
+        </button>
+        <button
+          type="button"
+          class="flex-1 py-2.5 rounded-sm text-sm transition-all"
+          :class="
+            formatPreset === 'badminton-15'
+              ? 'bg-surface font-semibold shadow-sm'
+              : 'bg-transparent font-medium text-foreground/70'
+          "
+          @click="formatPreset = 'badminton-15'"
+        >
+          15 (2027)
+        </button>
+      </div>
+
+      <!-- Match length: single game OR best-of-N. Default = single. -->
+      <div
+        class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
+      >
+        Match length
+      </div>
+      <div class="flex p-1 bg-surface-2 rounded-md gap-0.5 mb-2">
+        <button
+          type="button"
+          class="flex-1 py-2.5 rounded-sm text-sm transition-all"
+          :class="
+            matchLength === 'single'
+              ? 'bg-surface font-semibold shadow-sm'
+              : 'bg-transparent font-medium text-foreground/70'
+          "
+          @click="matchLength = 'single'"
+        >
+          Single match
+        </button>
+        <button
+          type="button"
+          class="flex-1 py-2.5 rounded-sm text-sm transition-all"
+          :class="
+            matchLength === 'best-of'
+              ? 'bg-surface font-semibold shadow-sm'
+              : 'bg-transparent font-medium text-foreground/70'
+          "
+          @click="matchLength = 'best-of'"
+        >
+          Best of N
+        </button>
+      </div>
+      <!-- Best-of-N stepper, visible only when 'best-of' is selected. -->
+      <div
+        v-if="matchLength === 'best-of'"
+        class="flex items-center gap-3 mb-6 px-1"
+      >
+        <button
+          type="button"
+          aria-label="Decrease best-of"
+          class="size-9 rounded-md border border-border-strong bg-surface text-foreground font-semibold hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          :disabled="bestOfN <= 3"
+          @click="decBestOf"
+        >
+          −
+        </button>
+        <div class="flex-1 text-center">
+          <span class="text-base font-semibold text-foreground">
+            Best of {{ bestOfN }}
+          </span>
+          <span class="block text-[11px] text-fg-subtle mt-0.5">
+            first to {{ gamesToWin }} {{ gamesToWin === 1 ? "game" : "games" }}
+          </span>
+        </div>
+        <button
+          type="button"
+          aria-label="Increase best-of"
+          class="size-9 rounded-md border border-border-strong bg-surface text-foreground font-semibold hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          :disabled="bestOfN >= 11"
+          @click="incBestOf"
+        >
+          +
+        </button>
+      </div>
+      <div v-else class="mb-6" />
 
       <!-- Team A -->
       <div

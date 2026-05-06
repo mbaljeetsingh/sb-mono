@@ -1,5 +1,6 @@
 <script setup lang="ts">
-definePageMeta({ layout: false });
+// Uses default layout (AppHeader). The tournament-name hero is page content, not chrome.
+useSeoMeta({ title: "Tournament" });
 
 const route = useRoute();
 const tournamentId = computed(() => String(route.params.id ?? ""));
@@ -56,15 +57,17 @@ const filteredMatches = computed(() =>
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-foreground font-sans">
-    <!-- Hero -->
-    <header class="bg-brand text-brand-foreground px-6 pt-16 pb-5">
+  <div class="font-sans">
+    <!-- Tournament hero (page content, not chrome). -->
+    <section
+      class="bg-brand text-brand-foreground rounded-lg mt-4 mx-4 px-6 py-5"
+    >
       <div class="text-2xl font-bold tracking-tight">{{ tournament.name }}</div>
       <div class="text-sm opacity-85 mt-1">
         {{ tournament.date }} · {{ tournament.courts }} courts ·
         {{ tournament.totalMatches }} matches
       </div>
-    </header>
+    </section>
 
     <!-- Filters -->
     <div class="px-4 pt-4 flex gap-2 overflow-x-auto">

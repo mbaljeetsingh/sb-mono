@@ -212,7 +212,7 @@ Decisions made and locked. Re-opening any of these requires explicit reason in t
 | 6 | **Event-sourced** data model | Free undo, free replay, free video burn-in, no hardcoded game limits — sidesteps OpenScoreboard's traps |
 | 7 | **Sports as first-class siblings** under `packages/engine/src/sports/` | Cricket fits as a sibling of badminton, not a config hack — explicit fix to OpenScoreboard's switch-statement trap |
 | 8 | **Badminton-first** positioning | Clear wedge; existing tools don't cover it; expandable across racquet sports |
-| 9 | **No accounts in v1** | Zero friction; account system arrives with v2 Pro |
+| 9 | **Optional accounts in v1** | Anonymous scoring is the default. Sign-in (E1.0) is optional and unlocks profile + ownership + multi-device. Per-match URL is the access token for anonymous matches. Per-match write tokens for delegated scoring stay in E2.8. |
 | 10 | **Defer Pro tier and themes until v1 has users** | Avoids building unused tiers; validates demand first |
 | 11 | **Result logging is in v1** | ~1 weekend; expands TAM 5-10×; natural funnel to live scoring |
 | 12 | **Tournament *grouping* is in v1** | One column on `matches` table (`tournament_id`) and one route; near-free architectural keep-the-door-open |
@@ -232,6 +232,8 @@ Decisions made and locked. Re-opening any of these requires explicit reason in t
 | 26 | **Open source decision re-locked: MIT, full app + engine.** Not BSL, not closed, not partial. | Distribution > forking risk for a product this size; OSS purity protects v3 academy trust; monetization paths (SaaS, themes, Pro, academy) all work without closed code |
 | 27 | `@sb/engine` published to npm at v1 ship | Concretizes the OSS claim; enables Capacitor / Tauri / third-party builds against the same engine |
 | 28 | No closed-source / open-core split in v1 | All v1 features ship as MIT; gating happens via hosted services + accounts in v2, not via license |
+| 29 | **Two apps in the monorepo** | `apps/app` = auth-aware product. `apps/web` = marketing + free anonymous scorer + theme gallery. Lets the marketing surface deploy without auth code; Pro features get a clean home in `apps/app`. |
+| 30 | **Anonymous scoring is DB-backed** | Free scorer writes to Supabase with `owner_id = null` so cross-device sync works via Realtime. One backend for free + Pro; no separate relay. |
 
 ## 13. Phase gates — explicit
 
