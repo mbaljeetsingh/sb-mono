@@ -19,7 +19,7 @@ Phase gates from BRD §13 control progression. Don't start phase N+1 until phase
 | Epic | What's in | Status |
 |---|---|---|
 | **E1.1 · Engine: badminton + match-state events** | BWF 21pt/15pt, deuce, cap-30, interval-11, server court, walkover/retirement/default/timeout/suspension/score-correct events. 29/29 tests passing. | ✅ done |
-| **E1.2 · Cricket-ready architecture** | Sports-as-siblings under `packages/engine/src/sports/`, cricket folder with placeholder README. | ✅ done |
+| **E1.2 · Sport-pluggable architecture** | Sports-as-siblings under `packages/engine/src/sports/` so a new racquet sport drops in without touching the existing reducer. | ✅ done |
 | **E1.3 · Monorepo + tooling** | pnpm workspaces, Turbo, Biome, layers (`ui`, `app-base`), shadcn-vue (16 components), Tailwind v4, Vue overrides. | ✅ done |
 | **E1.4 · Design tokens** | Court-green palette, warm parchment background, all chrome + domain tokens via `@theme inline`. | ✅ done |
 | **E1.5 · Themes registry** | 5 v1 themes (broadcast-classic, minimal-bug, top-ribbon, filmable, minimal-typographic) via `@sb/themes` registry. | ✅ done |
@@ -74,9 +74,8 @@ Phase gates from BRD §13 control progression. Don't start phase N+1 until phase
 | **E2.7 · Pro subscription billing** | Razorpay (India) + Stripe (rest of world). Price tier, billing portal. |
 | **E2.8 · Multi-scorekeeper per match** | Operator passes a write-token to a co-scorekeeper. Conflict resolution from event log. |
 | **E2.9 · Capacitor mobile app** | Wrap Nuxt PWA, ship to App Store + Play Store. |
-| **E2.10 · Cricket sport family** | Innings/overs/balls/wickets data model + reducer + tests. Separate sibling under `packages/engine/src/sports/cricket/`. |
-| **E2.11 · Post-production video burn-in** | Upload MP4 → FFmpeg + event log → MP4 with overlay rendered into pixels. |
-| **E2.12 · Custom email templates** | Confirmation / magic-link / password-reset templates branded. |
+| **E2.10 · Post-production video burn-in** | Upload MP4 → FFmpeg + event log → MP4 with overlay rendered into pixels. |
+| **E2.11 · Custom email templates** | Confirmation / magic-link / password-reset templates branded. |
 
 **Phase 2 gate (G2) → unlocks Phase 3 only when:** 1,000+ MAU AND ≥1 academy is asking for tournament features.
 
@@ -84,7 +83,7 @@ Phase gates from BRD §13 control progression. Don't start phase N+1 until phase
 
 ## Phase 3 · v3 (the real business)
 
-> **Goal:** academy network platform. Cricheroes-for-racquet-sports.
+> **Goal:** academy network platform — vertical SaaS for racquet sports.
 
 ### Epics — ALL PENDING
 

@@ -6,7 +6,7 @@
 // rotation in `state.partnerOnRight` is BWF-specific; non-badminton themes
 // should ignore it.
 //
-// New sport family (e.g., cricket) = add a sibling reducer + entries here.
+// New sport family = add a sibling reducer + entries here.
 
 import { badminton15, badminton21 } from "./sports/badminton/config";
 import { reduce as reduceRacquet } from "./sports/badminton/reducer";

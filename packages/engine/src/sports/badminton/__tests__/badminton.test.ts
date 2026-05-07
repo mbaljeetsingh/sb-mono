@@ -453,6 +453,54 @@ describe("badminton doubles — partner rotation (BWF Law 8)", () => {
   });
 });
 
+describe("penalty cards (BWF Law 16)", () => {
+  it("yellow card increments count without changing score", () => {
+    const s = reduce(
+      [start("A"), point("A"), ev("penalty", { side: "A", card: "yellow" })],
+      badminton21,
+    );
+    expect(s.cards.a.yellow).toBe(1);
+    expect(s.games[0]).toEqual({ a: 1, b: 0 });
+  });
+
+  it("red card awards a point to the opponent", () => {
+    const s = reduce(
+      [start("A"), ev("penalty", { side: "A", card: "red" })],
+      badminton21,
+    );
+    expect(s.cards.a.red).toBe(1);
+    expect(s.games[0]).toEqual({ a: 0, b: 1 });
+    expect(s.servingSide).toBe("B");
+  });
+
+  it("red card at game point ends the game", () => {
+    const points20toA: SideId[] = [];
+    for (let i = 0; i < 20; i++) points20toA.push("B");
+    // B is at 20-0; a red card on A gives B the 21st point and ends the game.
+    const s = reduce(
+      [
+        start("A"),
+        ...points(points20toA),
+        ev("penalty", { side: "A", card: "red" }),
+      ],
+      badminton21,
+    );
+    expect(s.gamesWon.b).toBe(1);
+    expect(s.betweenGames).toBe(true);
+  });
+
+  it("black card ends match with opponent as winner", () => {
+    const s = reduce(
+      [start("A"), point("A"), ev("penalty", { side: "A", card: "black" })],
+      badminton21,
+    );
+    expect(s.matchOver).toBe(true);
+    expect(s.winner).toBe("B");
+    expect(s.endReason).toBe("default");
+    expect(s.cards.a.black).toBe(1);
+  });
+});
+
 describe("badminton — undo round-trips partnerOnRight + serverCourt", () => {
   it("undoing a 'won on serve' point reverts the partner swap", () => {
     const before = reduce([start("A")], badminton21);

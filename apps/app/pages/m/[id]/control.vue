@@ -167,6 +167,10 @@ const onRetirement = (retiring: SideId) => {
   append({ type: "retirement", retiring } as Omit<RacquetEvent, "id" | "ts">);
   closeSheet();
 };
+const onPenalty = (side: SideId, card: "yellow" | "red" | "black") => {
+  append({ type: "penalty", side, card } as Omit<RacquetEvent, "id" | "ts">);
+  closeSheet();
+};
 const onTimeout = (side: SideId, kind: "standard" | "medical" | "injury") => {
   append({ type: "timeout.start", side, kind } as Omit<
     RacquetEvent,
@@ -224,7 +228,7 @@ const positionB = computed(() =>
 <template>
   <div class="fixed inset-0 bg-muted/40 sm:bg-muted">
     <div
-      class="mx-auto flex h-full max-w-md flex-col bg-background text-foreground font-sans sm:border-x sm:border-border sm:shadow-2xl"
+      class="mx-auto flex h-full max-w-2xl flex-col bg-background text-foreground font-sans sm:border-x sm:border-border sm:shadow-2xl"
     >
       <!-- Top chrome -->
       <header
@@ -429,11 +433,14 @@ const positionB = computed(() =>
       />
       <MatchStateSheet
         v-if="openSheet === 'matchState'"
+        :team-names="{ a: displayNameA, b: displayNameB }"
         @timeout="onTimeout"
+        @penalty="onPenalty"
         @walkover="onWalkover"
         @retirement="onRetirement"
         @open-score-correct="openSheet = 'scoreCorrect'"
         @reset="onResetFromSheet"
+        @close="closeSheet"
       />
       <FormatSheet
         v-if="openSheet === 'format'"

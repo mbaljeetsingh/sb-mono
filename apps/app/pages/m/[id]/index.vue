@@ -106,10 +106,10 @@ const onPickTheme = ({
       </div>
       <div class="flex flex-col gap-2">
         <Button
-          type="button"
+          as="a"
           variant="outline"
+          :href="`/m/${matchId}/control`"
           class="h-auto justify-start gap-3 p-3 text-left whitespace-normal"
-          @click="navigateTo(`/m/${matchId}/control`)"
         >
           <span
             class="size-7 rounded-full bg-surface-2 text-fg-muted inline-flex items-center justify-center text-[13px] font-bold shrink-0"
@@ -121,7 +121,7 @@ const onPickTheme = ({
               Score from your phone
             </span>
             <span class="block text-xs text-fg-muted mt-0.5 font-normal">
-              Open Control on this device
+              Open Control on this device · ⌘/Ctrl+click for new tab
             </span>
           </span>
           <span

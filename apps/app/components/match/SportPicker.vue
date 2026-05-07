@@ -9,10 +9,13 @@ export type SportId = "badminton" | "tennis" | "pickleball" | "table-tennis";
 const props = defineProps<{ modelValue: SportId }>();
 defineEmits<{ (e: "update:modelValue", v: SportId): void }>();
 
-// All four racquet sports ship engine configs in @sb/engine/registry, but
-// only badminton is exposed in the picker today. The others stay listed (so
-// users see what's coming) but disabled — engine, control surface, and
-// themes need a polish pass before they ship publicly.
+// All four racquet sports ship engine configs in @sb/engine/registry. Badminton
+// and table tennis are public; tennis and pickleball stay listed but disabled
+// until their themes and control surfaces get a dedicated polish pass.
+//
+// Note: table tennis doubles uses a 4-player rotation that differs from BWF
+// partner rotation, which is what the shared reducer implements. /new hides
+// the doubles toggle for TT until a TT-specific reducer lands.
 const sports: {
   id: SportId;
   label: string;
@@ -28,6 +31,13 @@ const sports: {
     enabled: true,
   },
   {
+    id: "table-tennis",
+    label: "Table tennis",
+    preset: "11pt, BO5",
+    emoji: "🏓",
+    enabled: true,
+  },
+  {
     id: "tennis",
     label: "Tennis",
     preset: "Coming soon",
@@ -39,13 +49,6 @@ const sports: {
     label: "Pickleball",
     preset: "Coming soon",
     emoji: "🥎",
-    enabled: false,
-  },
-  {
-    id: "table-tennis",
-    label: "Table tennis",
-    preset: "Coming soon",
-    emoji: "🏓",
     enabled: false,
   },
 ];

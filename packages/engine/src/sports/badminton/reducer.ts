@@ -131,6 +131,40 @@ function applyEvent(
     case "suspension.end":
       return { ...state, suspended: false };
 
+    case "penalty": {
+      if (state.matchOver) return state;
+      const teamKey: "a" | "b" = ev.side === "A" ? "a" : "b";
+      const cards = {
+        ...state.cards,
+        [teamKey]: {
+          ...state.cards[teamKey],
+          [ev.card]: state.cards[teamKey][ev.card] + 1,
+        },
+      };
+      if (ev.card === "yellow") {
+        return { ...state, cards };
+      }
+      if (ev.card === "red") {
+        // Award a point to the opponent — reuse applyPoint so game/match-win
+        // logic, server changes, and partner rotation all stay correct.
+        const opponent: SideId = ev.side === "A" ? "B" : "A";
+        const next = applyPoint(state, opponent, cfg, intervalSeen);
+        return { ...next, cards };
+      }
+      // Black: disqualification — opponent wins immediately.
+      const winner: SideId = ev.side === "A" ? "B" : "A";
+      return {
+        ...state,
+        cards,
+        matchOver: true,
+        winner,
+        endReason: "default",
+        betweenGames: false,
+        isGamePoint: false,
+        isMatchPoint: false,
+      };
+    }
+
     case "score.correct": {
       // Authoritative reset of scores. Recompute winner/over flags.
       const matchOver =

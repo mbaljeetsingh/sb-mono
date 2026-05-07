@@ -44,6 +44,14 @@ export type RacquetEvent =
       games: GameScore[];
       gamesWon: { a: number; b: number };
       reason?: string;
+    })
+  | (BaseEvent & {
+      // BWF Law 16 / ITTF analog. Yellow = warning (no score change),
+      // red = fault (point to opponent), black = disqualification (match ends).
+      type: "penalty";
+      side: SideId;
+      card: "yellow" | "red" | "black";
+      reason?: string;
     });
 
 export type GameScore = { a: number; b: number };
@@ -87,6 +95,11 @@ export type RacquetState = BaseState & {
    * "in" both courts conceptually.
    */
   partnerOnRight: { a: 1 | 2; b: 1 | 2 };
+  /** Penalty card counts per side. Themes/UI surface non-zero counts. */
+  cards: {
+    a: { yellow: number; red: number; black: number };
+    b: { yellow: number; red: number; black: number };
+  };
 };
 
 /** Generic config shape for all racquet-family sports. Sports may extend with their own fields. */
@@ -122,6 +135,10 @@ export const initialRacquetState = (): RacquetState => ({
   timeout: null,
   suspended: false,
   partnerOnRight: { a: 1, b: 1 },
+  cards: {
+    a: { yellow: 0, red: 0, black: 0 },
+    b: { yellow: 0, red: 0, black: 0 },
+  },
 });
 
 /** Returns the side that has won the game, or null if neither has yet. */

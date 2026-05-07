@@ -18,6 +18,11 @@ export type MatchMeta = {
   isDoubles?: boolean;
   teamNames?: { a: string; b: string };
   players?: { a1: string; a2: string; b1: string; b2: string };
+  /** Tournament metadata surfaced by themes (e.g. "Quarterfinal", "Mixed Doubles", "Court 1"). */
+  eventName?: string;
+  round?: string;
+  category?: string;
+  courtLabel?: string;
 };
 
 const EMPTY: MatchMeta = {};

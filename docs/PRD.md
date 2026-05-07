@@ -50,7 +50,6 @@ Scoreboard is an open-source, mobile-first live scorecard for racquet sports. Th
 | Custom branding / sponsor logos | | ✅ | | |
 | Multi-scorekeeper per match | | ✅ | | |
 | Capacitor mobile app (iOS + Android) | | ✅ | | |
-| Cricket sport family | | ✅ | | |
 | Post-production video burn-in (FFmpeg) | | ✅ | | |
 | Networks / academies / clubs (multi-tenant) | | | ✅ | |
 | Player registration for events | | | ✅ | |
@@ -135,7 +134,7 @@ A **tournament** in v1 is just a *container of matches*. No registration, no bra
 
 ### 3.5 Sports & rules (v1 scope)
 
-Each sport is a `RacquetConfig` object — pure data, not code. Adding a sport is a config file in `packages/engine/src/sports/<sport>/config.ts`, not a fork. Cricket is a separate sport family with its own event vocabulary, deferred to v2.
+Each sport is a `RacquetConfig` object — pure data, not code. Adding a sport is a config file in `packages/engine/src/sports/<sport>/config.ts`, not a fork.
 
 #### Day-one presets
 
@@ -187,7 +186,7 @@ type MatchRecord = {
   created_at: string
   updated_at: string
   owner_id: string | null       // null for anonymous v1 matches; user_id arrives with Pro
-  sport_family: 'racquet' | 'cricket'  // cricket is v2
+  sport_family: 'racquet'
   sport_preset: string          // 'badminton-21', 'badminton-15', 'pickleball-classic', etc.
   config: jsonb                 // e.g., RacquetConfig
   theme_id: string
@@ -225,7 +224,7 @@ type TournamentRecord = {
 - **Free conflict resolution** — merge two event streams by `[ts, deviceId]`
 - **Free video burn-in (v2)** — FFmpeg overlay at any frame timestamp
 - **No game-count hardcode** — best-of-N is just a config field
-- **Sport-pluggable** — cricket, chess, etc. add new event types without disturbing existing sports
+- **Sport-pluggable** — new racquet sports add their config without disturbing existing ones
 
 ### 3.8 Local-first sync
 
@@ -319,7 +318,6 @@ Auth gating: only `/profile` (and future `/history`, `/admin`) require sign-in. 
 | Theme marketplace / paid themes | v2 | Validate v1 first |
 | Multi-scorekeeper per match | v2 | Edge case in v1 — one phone is enough |
 | Native mobile app | v2 (Capacitor) | PWA covers 95% of need |
-| Cricket | v2 | Different sport family, real engineering |
 | Tennis tiebreaks, volleyball, squash | v1.x | Add as community PRs |
 | Visual / drag-and-drop theme editor | v3 (or never) | Ship 3 great themes; let demand pull editor work |
 | Tournament brackets / draws | v3 | Real product category, months of work |
@@ -425,7 +423,7 @@ When a scoreboard URL is shared on WhatsApp / Twitter / Facebook, the link previ
 - Same approach for tournament pages (`/t/[id]/card.png`) — shows leaderboard or live ticker
 
 **Why it matters:**
-Cricheroes attributes a meaningful share of growth to share-preview-with-live-score. Every shared link is a free, contextual ad.
+Vertical-SaaS competitors attribute a meaningful share of growth to share-preview-with-live-score. Every shared link is a free, contextual ad.
 
 ### 3.19 Privacy & legal (v1, required for any public deployment)
 
@@ -591,7 +589,6 @@ The `/themes` route was deleted from `apps/app`. The theme gallery (with live pr
 - **Lifetime stats** — match count, win rate, avg game length, head-to-head records
 - **Custom branding** on overlays (sponsor logo upload, color overrides)
 - **Multi-scorekeeper per match** (assistant on second phone, same control surface)
-- **Cricket sport family** — innings/overs/balls model in `packages/engine/src/sports/cricket/`
 - **Theme marketplace** — paid theme packs via Gumroad/Lemon Squeezy
 - **Capacitor mobile app** — iOS + Android wrap of the existing PWA
 - **Post-production video burn-in** — upload an MP4 of a recorded match, get back the same MP4 with the scoreboard overlay rendered into the pixels using FFmpeg + the event log
@@ -685,5 +682,4 @@ The network owner pays a monthly subscription based on player count.
 | Tournament brackets | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Network / academy | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Payments | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Cricket | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Mobile native app | ❌ | ❌ | ⚠️ Expo Web only | ❌ (PWA only) | ✅ Capacitor |

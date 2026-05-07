@@ -14,7 +14,7 @@ These are not negotiable in v1. Every other decision follows from them.
 
 1. **Event-sourced.** Match state is *always* computed from an append-only event log. Never store state directly.
 2. **Local-first.** Every score tap writes to local storage (IndexedDB) before the network. UI reads from local state synchronously.
-3. **Sport-pluggable.** Each sport family is a self-contained module under `packages/engine/src/sports/<family>/` with its own event vocabulary and reducer. Cricket sits as a sibling of badminton, not a config hack.
+3. **Sport-pluggable.** Each sport family is a self-contained module under `packages/engine/src/sports/<family>/` with its own event vocabulary and reducer. New racquet sports drop in as siblings of badminton, not as config hacks.
 4. **Three rendering surfaces from one match state.** Control / overlay / scoreboard are different views over the same data; the data layer doesn't know about presentation.
 5. **Themes are user-replaceable.** Plain HTML + CSS files with `data-bind` attributes hydrated at runtime. No build step required to author a theme.
 6. **Framework-free engine.** `@sb/engine` is pure TypeScript with zero runtime dependencies. It runs in Nuxt, Capacitor, Tauri, Node, Cloudflare Workers — anywhere.
@@ -58,12 +58,10 @@ If a proposed change violates one of these, it's wrong. Update the principles de
 Each sport family is a top-level concept with its own:
 - Event vocabulary (`MatchEvent` discriminated union)
 - State shape (`MatchState`)
-- Configuration shape (e.g., `RacquetConfig`, future `CricketConfig`)
+- Configuration shape (e.g., `RacquetConfig`)
 - Reducer: `(events, config) => state`
 
-**v1 ships:** the racquet family, with badminton 21pt + 15pt presets. Tennis, pickleball, table tennis are config additions to the racquet reducer.
-
-**v2 adds:** cricket as a sibling family. Cricket's events (`ball`, `over.end`, `innings.start`, `wicket`) and state shape are completely different from racquet. They share only the `BaseEvent` (id, ts, type) and `BaseState` (matchOver, winner) interfaces.
+**Scoreboard ships racquet only.** Badminton 21pt + 15pt + table tennis are presets today; tennis and pickleball are wired in the engine and surface as the UI is polished. The `BaseEvent` (id, ts, type) and `BaseState` (matchOver, winner) interfaces are kept generic so a sibling family could be added later without disturbing the racquet stack — but no sibling family is on the roadmap.
 
 ### 3.2 Why event-sourced
 
@@ -99,8 +97,6 @@ This purity is what makes `?at=<ms>` work — passing a slice of events through 
 4. If it's a new family, write a `reducer.ts` and a `__tests__/` folder
 5. Open a PR with tests passing
 
-Cricket is the first sport that requires a new family. Its `reducer.ts` will be ~500 lines (vs badminton's ~150) because of innings, overs, partnerships, and bowling figures.
-
 ## 4. Data layer
 
 ### 4.1 Storage targets
@@ -122,7 +118,7 @@ matches(
   created_at timestamptz,
   updated_at timestamptz,
   owner_id uuid?,                      -- null for anonymous; user_id arrives v2
-  sport_family text,                   -- 'racquet' | 'cricket'
+  sport_family text,                   -- 'racquet'
   sport_preset text,                   -- 'badminton-21', 'badminton-15', ...
   config jsonb,                        -- RacquetConfig or family-specific
   theme_id text,

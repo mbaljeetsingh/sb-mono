@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useStorage } from "@vueuse/core";
 import { getTheme } from "@sb/themes";
 
 definePageMeta({ layout: false });
@@ -22,14 +23,16 @@ const themeId = computed(
 );
 
 const { state, config } = useMatchState(matchId);
-const { teamNames } = useMatchMeta(matchId);
+const { teamNames, meta: matchMeta } = useMatchMeta(matchId);
 const meta = computed(() => ({
-  sportLabel: (config.value.sport ?? "badminton").toUpperCase(),
-  // Tournament metadata (court, round, category, venue, sponsor) wires through
-  // /m/[id] settings in v1.x — see ROADMAP E1.17. Until then surfaces show none.
-  courtLabel: null as string | null,
-  round: null as string | null,
-  category: null as string | null,
+  sportLabel: (
+    matchMeta.value.eventName ||
+    config.value.sport ||
+    "badminton"
+  ).toUpperCase(),
+  courtLabel: matchMeta.value.courtLabel?.trim() || null,
+  round: matchMeta.value.round?.trim() || null,
+  category: matchMeta.value.category?.trim() || null,
   venue: null as string | null,
   sponsorName: null as string | null,
 }));

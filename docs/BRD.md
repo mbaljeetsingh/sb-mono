@@ -11,9 +11,9 @@
 
 ## 1. Executive summary
 
-Scoreboard is an open-source live scorecard for racquet sports — badminton first, then tennis, pickleball, table tennis, squash, volleyball; cricket as a separate sport family later. The wedge is **mobile-first scoring with broadcast-quality overlays for streamers and in-venue scoreboards for clubs**.
+Scoreboard is an open-source live scorecard for racquet sports — badminton first, then tennis, pickleball, table tennis, squash, volleyball. The wedge is **mobile-first scoring with broadcast-quality overlays for streamers and in-venue scoreboards for clubs**.
 
-The long-term vision is to grow into a **network platform for amateur and academy-level racquet sports** — modeled on what Cricheroes built for Indian cricket — where academies, leagues, and clubs run their tournaments, players track their results, and the scoring engine is the connective tissue.
+The long-term vision is to grow into a **network platform for amateur and academy-level racquet sports** — where academies, leagues, and clubs run their tournaments, players track their results, and the scoring engine is the connective tissue.
 
 **v1 is intentionally narrow:** ship the best-in-class open-source scoring tool for badminton in 7 weekends. Everything else — accounts, profiles, registrations, networks, payments — is gated behind explicit phase milestones tied to v1 traction. This BRD's most important job is preventing scope creep into the bigger vision before the wedge proves itself.
 
@@ -28,7 +28,7 @@ Amateur and semi-pro racquet-sport streamers — local badminton tournaments, cl
 Most matches that happen in the world are never streamed. Two friends play, a coach runs a session, a club hosts a Sunday round-robin — the results live in a WhatsApp message and disappear. There's no lightweight way to record "we played 3 games, here are the scores" and share or save it.
 
 ### 2.3 Academies and clubs lack affordable tooling
-Badminton academies in India and similar markets ("Xperience Academy" is the kind of place we mean) run weekly internal events, monthly tournaments, sometimes leagues. Their tools today are WhatsApp + Excel + manual brackets on a whiteboard. Cricheroes (cricket-only) is the only proven model. Nothing equivalent exists for badminton at affordable price points.
+Badminton academies in India and similar markets ("Xperience Academy" is the kind of place we mean) run weekly internal events, monthly tournaments, sometimes leagues. Their tools today are WhatsApp + Excel + manual brackets on a whiteboard. Vertical-SaaS networks have proven this model in other amateur sports; nothing equivalent exists for badminton at affordable price points.
 
 **The opportunity:** one product that solves these three pains progressively, starting with the streamer wedge (where the best tool wins via GitHub + word of mouth), expanding to the player log (massive audience), and eventually to the academy network (the real long-term business).
 
@@ -41,7 +41,7 @@ Scoreboard is the **player and academy platform for racquet sports**. In 2-3 yea
 - **The default tournament platform** for badminton academies and small-to-mid-size leagues
 - **A live data layer** that other apps and broadcasters can plug into
 
-The strategic shape is **vertical SaaS for racquet sports**. The scoring engine is the wedge that lets us own the racquet-sports vertical the way Cricheroes owns cricket.
+The strategic shape is **vertical SaaS for racquet sports**. The scoring engine is the wedge that lets us own the racquet-sports vertical end-to-end.
 
 ## 4. The competitive landscape
 
@@ -52,7 +52,6 @@ The strategic shape is **vertical SaaS for racquet sports**. The scoring engine 
 | **OpenScoreboard** (jackbmccarthy) | OSS scoreboard suite, table tennis + pickleball | No badminton, dated tech, mutable-state architecture, GPLv3 limits commercial reuse, self-host only |
 | **Singular.live, vMix titles** | Pro broadcast tools | Paid SaaS, steep learning curve, overkill |
 | **StreamElements / Streamlabs widgets** | General-purpose stream overlays | Sports widgets are thin afterthoughts |
-| **Cricheroes** | Cricket scoring + tournaments + community | Cricket only; no presence in racquet sports |
 | **TournamentSoftware** (BWF) | Pro badminton tournament management | Heavy, federation-targeted, no mobile-first scoring, no overlay, expensive |
 
 **The gap:** an OSS, mobile-first, badminton-aware, theme-swappable, hosted-but-self-hostable scorecard that grows into a player + academy platform. No competitor occupies this exact position.
@@ -162,7 +161,6 @@ Tauri app for venue-WiFi-less environments. Lifetime theme packs included. For t
 - ≥ 1,000 monthly active users
 - ≥ 100 theme-pack purchases
 - ≥ 20 active Pro subscribers
-- 1 cricket sport family added (community PR or v1.x roadmap)
 
 ### v3 (12-24 months)
 
@@ -175,7 +173,6 @@ Tauri app for venue-WiFi-less environments. Lifetime theme packs included. For t
 
 - Recognized as **the** open badminton + racquet-sports scoring/registration platform
 - Tournament-grade adoption (one or more national/regional federations using it)
-- Cricket support shipped at parity with badminton
 - Sustainable indie business OR plausible candidate for funding
 
 ## 10. Risks & mitigations
@@ -184,7 +181,7 @@ Tauri app for venue-WiFi-less environments. Lifetime theme packs included. For t
 |---|---|---|
 | Scope creep into network/academy in v1 | High (already pushing) | This BRD's explicit phase gates; PRD's "out of scope, deferred to phase X" sections |
 | OpenScoreboard adds badminton + mobile control | Low | Architecturally hard for them (mutable state); we have a 6+ month head start anyway |
-| Cricheroes-style competitor enters racquet sports | Medium | First-mover advantage on OSS; community + theme ecosystem are durable |
+| A vertical-SaaS competitor enters racquet sports | Medium | First-mover advantage on OSS; community + theme ecosystem are durable |
 | Academy market in India is harder than expected | Medium | v1 doesn't depend on academy traction; pivot point is v3 if v2 stalls |
 | Solo developer burnout | Medium | 7-weekend v1 is small enough to ship; phase 2+ only after validation |
 | Paid Indian streamers churn quickly | Medium | Theme-pack model (one-time payments) softens churn; subscriptions arrive only with Pro |
@@ -210,7 +207,7 @@ Decisions made and locked. Re-opening any of these requires explicit reason in t
 | 4 | **Capacitor** over Expo for v2 mobile | One codebase; PWA UX is sufficient; OpenScoreboard's Expo path proves the cost |
 | 5 | **Plain HTML+CSS themes** (no visual editor in v1) | Designer-friendly contribution model; ships in v1 weeks not v2 months |
 | 6 | **Event-sourced** data model | Free undo, free replay, free video burn-in, no hardcoded game limits — sidesteps OpenScoreboard's traps |
-| 7 | **Sports as first-class siblings** under `packages/engine/src/sports/` | Cricket fits as a sibling of badminton, not a config hack — explicit fix to OpenScoreboard's switch-statement trap |
+| 7 | **Sports as first-class siblings** under `packages/engine/src/sports/` | New racquet sports drop in as siblings of badminton, not a config hack — explicit fix to OpenScoreboard's switch-statement trap |
 | 8 | **Badminton-first** positioning | Clear wedge; existing tools don't cover it; expandable across racquet sports |
 | 9 | **Optional accounts in v1** | Anonymous scoring is the default. Sign-in (E1.0) is optional and unlocks profile + ownership + multi-device. Per-match URL is the access token for anonymous matches. Per-match write tokens for delegated scoring stay in E2.8. |
 | 10 | **Defer Pro tier and themes until v1 has users** | Avoids building unused tiers; validates demand first |
@@ -227,7 +224,7 @@ Decisions made and locked. Re-opening any of these requires explicit reason in t
 | 21 | WCAG 2.1 AA accessibility is **v1**, not nice-to-have | Risk mitigation + design discipline; not optional for a public web app |
 | 22 | Privacy policy + DPDP/GDPR compliance is **v1** | Required from day 1 for any app processing personal data |
 | 23 | Cookieless analytics (Plausible / Cloudflare) over PostHog/GA at v1 | Avoids cookie banner; respects user privacy; reduces legal surface |
-| 24 | Anonymous match retention: 30 days from last activity | Cost containment; matches Cricheroes-style "session" semantics |
+| 24 | Anonymous match retention: 30 days from last activity | Cost containment; "session" semantics for tools that don't require an account |
 | 25 | Theme moderation: PR review for malicious code; CSP forbids external font/image loads in v1 | Security; reputation; reduces attack surface |
 | 26 | **Open source decision re-locked: MIT, full app + engine.** Not BSL, not closed, not partial. | Distribution > forking risk for a product this size; OSS purity protects v3 academy trust; monetization paths (SaaS, themes, Pro, academy) all work without closed code |
 | 27 | `@sb/engine` published to npm at v1 ship | Concretizes the OSS claim; enables Capacitor / Tauri / third-party builds against the same engine |

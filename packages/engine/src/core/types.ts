@@ -2,14 +2,11 @@
 //
 // Sport families:
 //   - racquet  : badminton, tennis, pickleball, table tennis, squash, volleyball
-//   - cricket  : ball-by-ball, innings-based (T20, ODI, Test, custom)
-//   - (future) : chess (turn+time), golf (per-hole), free-form
 //
-// Each sport family defines its own MatchEvent union and MatchState shape.
-// All families conform to the BaseEvent / BaseState shape so storage and sync
-// can be uniform.
+// Scoreboard is racquet-only by design. The BaseEvent / BaseState shape is kept
+// generic so storage and sync stay uniform if a sibling family is added later.
 
-export type SportFamily = "racquet" | "cricket";
+export type SportFamily = "racquet";
 
 /** Every event ever stored has at minimum these fields. */
 export type BaseEvent = {
@@ -24,6 +21,6 @@ export type BaseEvent = {
 /** Every state shape includes at minimum these fields. */
 export type BaseState = {
   matchOver: boolean;
-  /** Sport-family-specific winner identifier (SideId for racquet, team for cricket, etc.). */
+  /** Sport-family-specific winner identifier (SideId for racquet, etc.). */
   winner: string | null;
 };

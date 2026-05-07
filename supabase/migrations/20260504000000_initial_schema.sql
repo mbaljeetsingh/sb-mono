@@ -18,7 +18,7 @@ create table public.matches (
     created_at      timestamptz not null default now(),
     updated_at      timestamptz not null default now(),
     owner_id        uuid references auth.users(id) on delete set null,
-    sport_family    text not null check (sport_family in ('racquet', 'cricket')),
+    sport_family    text not null check (sport_family in ('racquet')),
     sport_preset    text not null,                          -- e.g., 'badminton-21', 'badminton-15'
     config          jsonb not null default '{}'::jsonb,
     theme_id        text not null default 'broadcast-classic',

@@ -36,6 +36,16 @@ const matchLength = ref<MatchLength>("single");
 const bestOfN = ref<number>(3);
 const teamA = ref({ p1: "", p2: "" });
 const teamB = ref({ p1: "", p2: "" });
+const eventName = ref("");
+const round = ref("");
+const courtLabel = ref("");
+
+// TT doubles uses a 4-player rotation that the shared (BWF) reducer doesn't
+// implement. Force singles for TT until a TT-specific reducer ships.
+const supportsDoubles = computed(() => sport.value !== "table-tennis");
+watch(supportsDoubles, (ok) => {
+  if (!ok) isDoubles.value = false;
+});
 
 // When sport changes, snap preset + match length to that sport's natural
 // defaults (table tennis → BO5, badminton → Single, etc.).
@@ -99,6 +109,9 @@ watchEffect(() => {
       b1: teamB.value.p1,
       b2: teamB.value.p2,
     },
+    eventName: eventName.value.trim(),
+    round: round.value.trim(),
+    courtLabel: courtLabel.value.trim(),
   };
   presetStorage.value = formatPreset.value;
   gamesToWinStorage.value = gamesToWin.value;
@@ -123,7 +136,7 @@ const createMatch = () => navigateTo(`/m/${matchId.value}`);
         <SportPicker v-model="sport" />
       </section>
 
-      <section>
+      <section v-if="supportsDoubles">
         <Label
           class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
         >
@@ -278,6 +291,32 @@ const createMatch = () => navigateTo(`/m/${matchId.value}`);
           v-model="teamB.p2"
           type="text"
           placeholder="Player 2 (doubles)"
+          class="h-11 mt-2"
+        />
+      </section>
+
+      <section>
+        <Label
+          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
+        >
+          Tournament details (optional)
+        </Label>
+        <Input
+          v-model="eventName"
+          type="text"
+          placeholder='Event (e.g. "Spring Open")'
+          class="h-11"
+        />
+        <Input
+          v-model="round"
+          type="text"
+          placeholder='Round (e.g. "Quarterfinal")'
+          class="h-11 mt-2"
+        />
+        <Input
+          v-model="courtLabel"
+          type="text"
+          placeholder='Court / table (e.g. "Court 1")'
           class="h-11 mt-2"
         />
       </section>
