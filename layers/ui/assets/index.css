@@ -15,6 +15,7 @@
 
 @source '../components/**/*.{vue,ts}';
 @source '../../app-base/components/**/*.{vue,ts}';
+@source '../../../packages/themes/src/**/*.{vue,ts}';
 
 /* Base body/HTML reset for app surfaces */
 html,
