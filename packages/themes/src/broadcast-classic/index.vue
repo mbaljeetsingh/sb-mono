@@ -74,18 +74,38 @@ const meta = computed(() => {
               WINNER
             </span>
             <span
-              v-if="state.cards[side].yellow"
+              v-if="
+                (state.cards?.[side] ?? { yellow: 0, red: 0, black: 0 }).yellow
+              "
               class="ml-1 text-[10px]"
-              :title="`${state.cards[side].yellow} yellow`"
+              :title="`${(state.cards?.[side] ?? { yellow: 0, red: 0, black: 0 }).yellow} yellow`"
             >
-              {{ "🟨".repeat(Math.min(state.cards[side].yellow, 3)) }}
+              {{
+                "🟨".repeat(
+                  Math.min(
+                    (state.cards?.[side] ?? { yellow: 0, red: 0, black: 0 })
+                      .yellow,
+                    3,
+                  ),
+                )
+              }}
             </span>
             <span
-              v-if="state.cards[side].red"
+              v-if="
+                (state.cards?.[side] ?? { yellow: 0, red: 0, black: 0 }).red
+              "
               class="ml-0.5 text-[10px]"
-              :title="`${state.cards[side].red} red`"
+              :title="`${(state.cards?.[side] ?? { yellow: 0, red: 0, black: 0 }).red} red`"
             >
-              {{ "🟥".repeat(Math.min(state.cards[side].red, 3)) }}
+              {{
+                "🟥".repeat(
+                  Math.min(
+                    (state.cards?.[side] ?? { yellow: 0, red: 0, black: 0 })
+                      .red,
+                    3,
+                  ),
+                )
+              }}
             </span>
           </div>
           <div class="inline-flex gap-1 mt-0.5">

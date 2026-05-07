@@ -52,6 +52,10 @@ const defaultState: RacquetState = {
   timeout: null,
   suspended: false,
   partnerOnRight: { a: 1, b: 1 },
+  cards: {
+    a: { yellow: 0, red: 0, black: 0 },
+    b: { yellow: 0, red: 0, black: 0 },
+  },
 };
 
 const previewState = computed(() => props.state ?? defaultState);
