@@ -11,7 +11,9 @@ import BroadcastClassic from "./broadcast-classic/index.vue";
 import Filmable from "./filmable/index.vue";
 import MinimalBug from "./minimal-bug/index.vue";
 import MinimalTypographic from "./minimal-typographic/index.vue";
+import Scorecard from "./scorecard/index.vue";
 import TopRibbon from "./top-ribbon/index.vue";
+import VerticalStack from "./vertical-stack/index.vue";
 
 export type ThemeSurface = "overlay" | "scoreboard";
 
@@ -111,6 +113,36 @@ export const themes: Record<string, ThemeEntry> = {
       id: "minimal-typographic",
       name: "Minimal Typographic",
       description: "Light, editorial, big-number scoreboard.",
+      author: "Scoreboard core team",
+      license: "MIT",
+      version: "1.0.0",
+      supports: ["scoreboard"],
+      supportedSports: ["badminton", "tennis", "pickleball", "table-tennis"],
+      bundleSizeBytes: 0,
+    },
+  },
+  "vertical-stack": {
+    component: VerticalStack,
+    manifest: {
+      id: "vertical-stack",
+      name: "Vertical Stack",
+      description:
+        "Bottom-center stacked overlay sized for portrait streams (TikTok / Reels / IG Live).",
+      author: "Scoreboard core team",
+      license: "MIT",
+      version: "1.0.0",
+      supports: ["overlay"],
+      supportedSports: ["badminton", "tennis", "pickleball", "table-tennis"],
+      bundleSizeBytes: 0,
+    },
+  },
+  scorecard: {
+    component: Scorecard,
+    manifest: {
+      id: "scorecard",
+      name: "Scorecard",
+      description:
+        "Tournament-program-style scoreboard with a column per game and per-team rows.",
       author: "Scoreboard core team",
       license: "MIT",
       version: "1.0.0",

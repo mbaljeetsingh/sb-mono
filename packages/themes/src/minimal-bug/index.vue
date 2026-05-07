@@ -1,51 +1,72 @@
 <script setup lang="ts">
+// Minimal Bug — tiny corner overlay (~190px wide). For streamers who don't
+// want their video covered. No team names by default — just initials, current
+// game score, and the game number. Sport icon for context.
+
+import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
+import SportIcon from "../sport-icon.vue";
+import { teamColor, useThemeState } from "../use-theme-state";
 
 const props = defineProps<ThemeProps>();
+const { currentGame, isServingSide, isWinningSide } = useThemeState(
+  toRef(props, "state"),
+  toRef(props, "teamNames"),
+);
 
-const score = (side: "a" | "b") => {
-  const last = props.state.games[props.state.games.length - 1];
-  return last ? last[side] : 0;
-};
+// Initial of first non-empty word, or "?" if empty. "Alice / Aiden" → "A",
+// "Bob Chen" → "B". Lowercase team names get capitalized.
+const initial = (full: string) =>
+  (full.split(/[\s/]+/).find(Boolean) ?? "?")[0]!.toUpperCase();
+
+const initials = computed(() => ({
+  a: initial(props.teamNames.a),
+  b: initial(props.teamNames.b),
+}));
 </script>
 
 <template>
   <div
-    class="absolute top-9 right-9 rounded-md px-3.5 py-2.5 flex items-center gap-3.5 border border-white/10 backdrop-blur-md bg-neutral-950/90"
+    class="absolute top-9 right-9 rounded-md px-3 py-2 inline-flex items-center gap-3 border border-white/10 backdrop-blur-md bg-neutral-950/85 text-white font-sans"
   >
-    <div class="flex items-center gap-1.5">
+    <SportIcon
+      :sport="config.sport"
+      class="text-[14px] text-neutral-300 shrink-0"
+    />
+    <div
+      v-for="side in ['a', 'b'] as const"
+      :key="side"
+      class="inline-flex items-center gap-1.5"
+    >
       <span
-        class="size-2 rounded-sm"
-        :style="{ background: 'var(--color-team-a)' }"
+        class="size-1.5 rounded-full transition-opacity"
+        :class="isServingSide(side) ? 'animate-pulse-soft' : 'opacity-30'"
+        :style="{ background: teamColor(side) }"
       />
-      <span class="text-xs font-semibold text-neutral-50">
-        {{ teamNames.a.split(" ")[0]?.toUpperCase() }}
-      </span>
-      <span class="score text-lg text-neutral-50 min-w-[24px] text-right">{{
-        score("a")
-      }}</span>
-    </div>
-    <span class="w-px h-4 bg-neutral-700" />
-    <div class="flex items-center gap-1.5">
-      <span class="score text-lg text-neutral-50 min-w-[24px] text-left">{{
-        score("b")
-      }}</span>
-      <span class="text-xs font-semibold text-neutral-50">
-        {{ teamNames.b.split(" ")[0]?.toUpperCase() }}
-      </span>
       <span
-        class="size-2 rounded-sm"
-        :style="{ background: 'var(--color-team-b)' }"
+        class="text-[11px] font-bold tracking-wide"
+        :style="{ color: teamColor(side) }"
+        >{{ initials[side] }}</span
+      >
+      <span
+        class="score text-base text-neutral-50 min-w-[20px]"
+        :class="side === 'a' ? 'text-right' : 'text-left'"
+        >{{ currentGame[side] }}</span
+      >
+      <span
+        v-if="side === 'a'"
+        aria-hidden="true"
+        class="w-px h-3 bg-white/15 ml-1"
       />
     </div>
     <span
       v-if="state.matchOver"
-      class="ml-1 text-[9px] tracking-[0.1em] font-bold text-amber-400"
-      >FINAL</span
+      class="text-[9px] tracking-[0.14em] font-bold text-white/80 ml-1"
+      >FINAL · {{ isWinningSide("a") ? initials.a : initials.b }}</span
     >
     <span
       v-else
-      class="ml-1 text-[9px] font-mono font-bold tracking-[0.06em] text-amber-400"
+      class="text-[9px] font-mono font-bold tracking-wide text-white/60 ml-1"
       >G{{ state.games.length }}</span
     >
   </div>

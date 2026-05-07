@@ -52,6 +52,7 @@ Phase gates from BRD §13 control progression. Don't start phase N+1 until phase
 | **E1.24 · Launch landing page** | About, GitHub link, contributors, change-log. | 1 day |
 | **E1.25 · Public domain + production deploy** | Pick brand domain, configure SSL, point at Netlify, hosted Supabase project + migrate. | 1 day |
 | **E1.26 · Pre-match toss UI** | Proper "who serves first?" flow before the first rally — pick serving side and (for doubles) starting server / receiver courts on `/new` or first mount of `/control`. Today control auto-bootstraps `serverSide: A` and exposes only a 0-0 swap fallback; a toss step replaces the implicit default. Engine already accepts `serverSide` on `match.start`, so this is UI + storage only. | 1 day |
+| **E1.27 · Match-standing indicator for BO5+ themes** | Tennis-style leading "sets won" number per team in overlay/scoreboard themes when `config.gamesToWin >= 3`. Skipped for single match and BO3 because per-game scores already convey it; in BO5+ counting from columns becomes friction. Place between team name and per-game score column. | 4 hours |
 
 **Phase 1 gate (G1) → unlocks Phase 2 only when:** 100+ self-hosted deploys OR 500+ GitHub stars OR 3+ themes contributed.
 

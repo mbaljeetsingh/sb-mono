@@ -1,106 +1,151 @@
 <script setup lang="ts">
+// Top Ribbon — full-width banner pinned to the top of the frame. Centred score
+// in the middle, team blocks left/right. Brand-neutral (no amber/yellow); the
+// only chrome is a single subtle bottom border.
+
+import { toRef } from "vue";
 import type { ThemeProps } from "../index";
+import SportIcon from "../sport-icon.vue";
+import {
+  teamColor,
+  useMetaLine,
+  useStatusPill,
+  useThemeState,
+} from "../use-theme-state";
 
 const props = defineProps<ThemeProps>();
+const {
+  playersA,
+  playersB,
+  currentGame,
+  priorGames,
+  isServingSide,
+  isLastGameWinner,
+  isMatchWinner,
+} = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
+const meta = useMetaLine(toRef(props, "meta"));
+const status = useStatusPill(toRef(props, "state"));
 
-const score = (side: "a" | "b") => {
-  const last = props.state.games[props.state.games.length - 1];
-  return last ? last[side] : 0;
-};
-
-const subLabel = computed(() => {
-  if (props.state.matchOver) return "FINAL";
-  if (props.state.isMatchPoint)
-    return `MATCH POINT · TEAM ${props.state.servingSide}`;
-  if (props.state.isGamePoint)
-    return `GAME POINT · TEAM ${props.state.servingSide}`;
-  return `GAME ${props.state.games.length} · LIVE`;
-});
-
-const topMeta = computed(() => {
-  const m = props.meta ?? {};
-  return [m.sportLabel ?? "BADMINTON", m.round, m.category, m.courtLabel]
-    .filter(Boolean)
-    .join(" · ");
-});
+const playersOf = (side: "a" | "b") =>
+  side === "a" ? playersA.value : playersB.value;
 </script>
 
 <template>
-  <!-- Top full-width ribbon -->
+  <!-- Main ribbon -->
   <div
-    class="absolute top-0 inset-x-0 h-16 grid grid-cols-3 items-center px-6 border-b-2 border-amber-400 bg-[linear-gradient(180deg,rgba(10,10,10,0.95)_0%,rgba(23,23,23,0.95)_100%)]"
+    class="absolute top-0 inset-x-0 h-16 grid grid-cols-[1fr_auto_1fr] items-center px-6 border-b border-white/10 bg-[linear-gradient(180deg,rgba(10,10,10,0.95)_0%,rgba(23,23,23,0.95)_100%)] text-white font-sans"
   >
-    <!-- Left team -->
-    <div class="flex items-center gap-3">
-      <span class="w-1 h-9" :style="{ background: 'var(--color-team-a)' }" />
-      <div>
-        <div
-          class="text-[13px] font-semibold text-neutral-50 leading-tight uppercase"
-        >
-          {{ teamNames.a }}
-        </div>
-        <div class="flex gap-0.5 mt-0.5">
-          <span
-            v-for="i in config.gamesToWin + 1"
-            :key="`a-${i}`"
-            class="size-[5px] rounded-full"
-            :style="{
-              background:
-                i <= state.gamesWon.a ? 'var(--color-team-a)' : '#404040',
-            }"
-          />
+    <!-- Each team block: side A left-aligned, side B right-aligned with order swap -->
+    <div
+      v-for="side in ['a', 'b'] as const"
+      :key="side"
+      :class="[
+        'flex items-center gap-3 min-w-0',
+        side === 'b' ? 'justify-end flex-row-reverse order-3' : '',
+      ]"
+    >
+      <span class="w-1 h-9 shrink-0" :style="{ background: teamColor(side) }" />
+      <div :class="['min-w-0', side === 'b' ? 'text-right' : '']">
+        <div class="text-[13px] font-semibold leading-tight uppercase truncate">
+          <template v-for="(p, idx) in playersOf(side)" :key="idx">
+            <span v-if="idx > 0" class="mx-1 text-white/35 font-normal">/</span>
+            <span
+              :class="
+                p.isServer
+                  ? 'font-bold'
+                  : p.isPartner
+                    ? 'text-white/55 font-medium'
+                    : 'text-neutral-50 font-semibold'
+              "
+              :style="p.isServer ? { color: teamColor(side) } : undefined"
+              >{{ p.name }}</span
+            >
+          </template>
         </div>
       </div>
+      <!-- Chip cycle: WINNER → GAME WON → SERVE -->
       <span
-        v-if="state.servingSide === 'A' && !state.matchOver"
-        class="size-4 rounded-full inline-flex items-center justify-center text-white text-[8px] font-bold"
-        :style="{ background: 'var(--color-team-a)' }"
-        >S</span
+        v-if="isMatchWinner(side)"
+        class="shrink-0 text-[9px] font-bold tracking-[0.16em] text-white px-1.5 py-0.5 rounded-sm"
+        :style="{ background: teamColor(side) }"
       >
+        WINNER
+      </span>
+      <span
+        v-else-if="isLastGameWinner(side)"
+        class="shrink-0 text-[9px] font-bold tracking-[0.14em] text-white/85 px-1.5 py-0.5 rounded-sm border"
+        :style="{
+          borderColor: teamColor(side),
+          background: `color-mix(in srgb, ${teamColor(side)} 18%, transparent)`,
+        }"
+      >
+        GAME WON
+      </span>
+      <span
+        v-else-if="isServingSide(side)"
+        class="shrink-0 inline-flex items-center gap-1 text-[9px] font-bold tracking-[0.14em] text-white px-1.5 py-0.5 rounded-sm"
+        :style="{ background: teamColor(side) }"
+      >
+        <span class="size-1 rounded-full bg-white animate-pulse-soft" />
+        SERVE
+      </span>
     </div>
 
-    <!-- Center score -->
-    <div class="flex items-center justify-center gap-3.5">
-      <span class="score text-[40px] text-neutral-50">{{ score("a") }}</span>
+    <!-- Center score: prior games stack small on either side, current in big -->
+    <div class="flex items-center justify-center gap-3 order-2">
+      <div
+        v-if="priorGames.length"
+        class="score text-base text-neutral-500 tabular-nums flex flex-col items-end leading-tight"
+      >
+        <span v-for="(g, i) in priorGames" :key="i">{{ g.a }}</span>
+      </div>
+      <span class="score text-[40px] text-neutral-50 tabular-nums">{{
+        currentGame.a
+      }}</span>
       <span class="text-lg text-neutral-600 font-medium">—</span>
-      <span class="score text-[40px] text-neutral-50">{{ score("b") }}</span>
-    </div>
-
-    <!-- Right team -->
-    <div class="flex items-center gap-3 justify-end">
-      <span
-        v-if="state.servingSide === 'B' && !state.matchOver"
-        class="size-4 rounded-full inline-flex items-center justify-center text-white text-[8px] font-bold"
-        :style="{ background: 'var(--color-team-b)' }"
-        >S</span
+      <span class="score text-[40px] text-neutral-50 tabular-nums">{{
+        currentGame.b
+      }}</span>
+      <div
+        v-if="priorGames.length"
+        class="score text-base text-neutral-500 tabular-nums flex flex-col items-start leading-tight"
       >
-      <div class="text-right">
-        <div
-          class="text-[13px] font-semibold text-neutral-50 leading-tight uppercase"
-        >
-          {{ teamNames.b }}
-        </div>
-        <div class="flex gap-0.5 mt-0.5 justify-end">
-          <span
-            v-for="i in config.gamesToWin + 1"
-            :key="`b-${i}`"
-            class="size-[5px] rounded-full"
-            :style="{
-              background:
-                i <= state.gamesWon.b ? 'var(--color-team-b)' : '#404040',
-            }"
-          />
-        </div>
+        <span v-for="(g, i) in priorGames" :key="i">{{ g.b }}</span>
       </div>
-      <span class="w-1 h-9" :style="{ background: 'var(--color-team-b)' }" />
     </div>
   </div>
 
-  <!-- Sub-ribbon: meta -->
+  <!-- Sub-strip: meta on the left, status on the right. Dark + restrained,
+       no tournament-branded accent. -->
   <div
-    class="absolute top-16 inset-x-0 h-[22px] bg-amber-400/95 text-neutral-950 flex items-center justify-between px-6 text-[10px] font-bold tracking-[0.1em] uppercase"
+    class="absolute top-16 inset-x-0 h-[22px] bg-neutral-900/95 text-neutral-300 flex items-center justify-between px-6 text-[10px] font-semibold tracking-[0.12em] uppercase border-b border-white/5"
   >
-    <span>{{ topMeta }}</span>
-    <span>{{ subLabel }}</span>
+    <span class="inline-flex items-center gap-2 min-w-0 flex-1">
+      <SportIcon :sport="config.sport" class="text-[12px] shrink-0" />
+      <span class="truncate">{{ meta || "&nbsp;" }}</span>
+    </span>
+    <span
+      v-if="state.matchOver"
+      class="text-white tracking-[0.16em] font-bold shrink-0 ml-3"
+      >FINAL</span
+    >
+    <span
+      v-else-if="status"
+      class="inline-flex items-center gap-1.5 font-bold shrink-0 ml-3"
+      :style="
+        status.tone === 'accent' && status.side
+          ? { color: teamColor(status.side) }
+          : undefined
+      "
+    >
+      {{ status.label }}
+    </span>
+    <span
+      v-else
+      class="inline-flex items-center gap-1.5 text-neutral-400 shrink-0 ml-3"
+    >
+      <span class="size-1.5 rounded-full bg-white animate-pulse-soft" />
+      LIVE · GAME {{ state.games.length }}
+    </span>
   </div>
 </template>
