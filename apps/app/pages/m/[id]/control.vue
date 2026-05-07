@@ -20,6 +20,7 @@ import EventsSheet from "~/components/control/EventsSheet.vue";
 import MatchStateSheet from "~/components/control/MatchStateSheet.vue";
 import FormatSheet from "~/components/control/FormatSheet.vue";
 import ScoreCorrectSheet from "~/components/control/ScoreCorrectSheet.vue";
+import GameOverModal from "~/components/control/GameOverModal.vue";
 import MatchOverModal from "~/components/control/MatchOverModal.vue";
 
 definePageMeta({ layout: false });
@@ -67,6 +68,12 @@ const { vibrate } = useVibrate();
 
 const onTap = (side: SideId) => {
   if (state.value.matchOver) return;
+  // Active timeout or suspension pauses play — score taps no-op until the
+  // operator clears them (Events sheet → "Clear timeout" / "Resume match").
+  // Penalty cards don't pause play (BWF Law 16): yellow is a warning, red
+  // awards a point already, black ends the match.
+  if (state.value.timeout || state.value.suspended) return;
+  if (state.value.betweenGames) return;
   vibrate(10);
   append({ type: "point", side } as Omit<RacquetEvent, "id" | "ts">);
 };
@@ -77,6 +84,30 @@ const onUndo = () => {
 };
 
 const onReset = () => replace([]);
+
+// Reset just the current game's score (mistake recovery without losing
+// completed games). Uses the existing score.correct event so prior games
+// + gamesWon stay intact and the engine recomputes flags from scratch.
+const onResetCurrentGame = () => {
+  const games = state.value.games;
+  if (games.length === 0) return;
+  vibrate(20);
+  append({
+    type: "score.correct",
+    games: [...games.slice(0, -1), { a: 0, b: 0 }],
+    gamesWon: state.value.gamesWon,
+    reason: "Reset current game",
+  } as Omit<RacquetEvent, "id" | "ts">);
+};
+
+// Between-games dialog: explicit transition into the next game. Engine
+// `game.end` appends a fresh {a:0,b:0} game to state.games and clears
+// betweenGames; the operator's next score tap then increments G(N+1)
+// directly without the auto-create path.
+const onStartNextGame = () => {
+  vibrate(10);
+  append({ type: "game.end" } as Omit<RacquetEvent, "id" | "ts">);
+};
 
 // Pre-rally starting-server swap. Only valid before the first point — once a
 // rally is scored, server identity is derived from the event log so we
@@ -113,6 +144,16 @@ const lastPointWinner = computed<SideId | null>(() => {
 
 const games = computed(() => state.value.games);
 const gamesWon = computed(() => state.value.gamesWon);
+const lastGame = computed(
+  () => games.value[games.value.length - 1] ?? { a: 0, b: 0 },
+);
+const lastGameWinnerName = computed(() =>
+  lastGame.value.a > lastGame.value.b ? displayNameA.value : displayNameB.value,
+);
+const lastGameScore = computed(() => ({
+  winner: Math.max(lastGame.value.a, lastGame.value.b),
+  loser: Math.min(lastGame.value.a, lastGame.value.b),
+}));
 
 const headerLabel = computed(() => {
   if (state.value.matchOver) return "Match complete";
@@ -189,6 +230,10 @@ const onClearTimeout = () => {
 const onResetFromSheet = () => {
   vibrate(20);
   onReset();
+  closeSheet();
+};
+const onResetGameFromSheet = () => {
+  onResetCurrentGame();
   closeSheet();
 };
 const onUndoTo = (idx: number) => {
@@ -417,6 +462,16 @@ const positionB = computed(() =>
         @back="goHome"
       />
 
+      <GameOverModal
+        v-else-if="state.betweenGames && games.length > 0"
+        :game-number="games.length"
+        :winner-name="lastGameWinnerName"
+        :game-score="lastGameScore"
+        :match-score="gamesWon"
+        :next-game-number="games.length + 1"
+        @start-next="onStartNextGame"
+      />
+
       <!-- Sheet backdrop -->
       <div
         v-if="openSheet"
@@ -440,6 +495,7 @@ const positionB = computed(() =>
         @retirement="onRetirement"
         @open-score-correct="openSheet = 'scoreCorrect'"
         @reset="onResetFromSheet"
+        @reset-game="onResetGameFromSheet"
         @close="closeSheet"
       />
       <FormatSheet

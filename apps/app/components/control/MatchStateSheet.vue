@@ -15,6 +15,7 @@ const emit = defineEmits<{
   (e: "retirement", retiring: SideId): void;
   (e: "open-score-correct"): void;
   (e: "reset"): void;
+  (e: "reset-game"): void;
   (e: "close"): void;
 }>();
 
@@ -40,8 +41,8 @@ const tapPenalty = (side: SideId, card: "yellow" | "red" | "black") => {
   emit("penalty", side, card);
 };
 
-// Two-tap confirm for the destructive reset. First tap arms it, second fires.
-// Resets when the sheet unmounts via the parent's openSheet swap.
+// Two-tap confirm for the destructive resets. First tap arms it, second fires.
+// State resets when the sheet unmounts via the parent's openSheet swap.
 const confirmReset = ref(false);
 const onResetTap = () => {
   if (!confirmReset.value) {
@@ -49,6 +50,14 @@ const onResetTap = () => {
     return;
   }
   emit("reset");
+};
+const confirmResetGame = ref(false);
+const onResetGameTap = () => {
+  if (!confirmResetGame.value) {
+    confirmResetGame.value = true;
+    return;
+  }
+  emit("reset-game");
 };
 </script>
 
@@ -289,6 +298,18 @@ const onResetTap = () => {
           Danger
         </div>
         <Button
+          :variant="confirmResetGame ? 'destructive' : 'outline'"
+          size="sm"
+          class="w-full"
+          @click="onResetGameTap"
+        >
+          {{
+            confirmResetGame
+              ? "Tap again — current game back to 0–0"
+              : "Reset current game to 0–0"
+          }}
+        </Button>
+        <Button
           :variant="confirmReset ? 'destructive' : 'outline'"
           size="sm"
           class="w-full"
@@ -297,7 +318,7 @@ const onResetTap = () => {
           {{
             confirmReset
               ? "Tap again to confirm — clears all events"
-              : "Reset match to 0–0"
+              : "Reset entire match to 0–0"
           }}
         </Button>
       </div>

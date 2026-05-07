@@ -11,9 +11,9 @@ const props = defineProps<{
     displayName: string;
     config: {
       pointsPerGame: number;
-      cap?: number;
+      cap?: number | null;
       winBy: number;
-      intervalAt?: number;
+      intervalAt?: number | null;
     };
   }[];
 }>();

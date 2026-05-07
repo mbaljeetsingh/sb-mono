@@ -2,7 +2,13 @@
 import { Button } from "@sb/layer-ui/components/ui/button";
 
 defineProps<{
-  endReason: "normal" | "walkover" | "retirement" | "default" | undefined;
+  endReason:
+    | "normal"
+    | "walkover"
+    | "retirement"
+    | "default"
+    | null
+    | undefined;
   winnerName: string;
   gamesWon: { a: number; b: number };
 }>();

@@ -9,14 +9,9 @@
 // All localStorage I/O goes through VueUse `useStorage` so refs auto-sync to
 // disk and across same-domain tabs.
 
-import { computed, onMounted, type Ref } from "vue";
+import { computed, type Ref } from "vue";
 import { useStorage } from "@vueuse/core";
-import {
-  type RacquetEvent,
-  type SportPresetId,
-  getPreset,
-  sportPresets,
-} from "@sb/engine";
+import { type SportPresetId, getPreset, sportPresets } from "@sb/engine";
 
 export function useMatchState(matchId: Ref<string>) {
   const { events, append, replace } = useEvents(matchId);
@@ -61,17 +56,15 @@ export function useMatchState(matchId: Ref<string>) {
     return base;
   });
 
-  onMounted(() => {
-    // Auto-bootstrap: if no events yet, emit a match.start so the overlay/
-    // scoreboard surfaces have meaningful state to render.
-    if (events.value.length === 0) {
-      append({
-        type: "match.start",
-        serverSide: "A",
-        serverCourt: "right",
-      } as Omit<RacquetEvent, "id" | "ts">);
-    }
-  });
+  // No auto-bootstrap here. Earlier this composable would `append` a
+  // match.start whenever events.value.length === 0 on mount, but that
+  // ran on overlay/scoreboard mounts too — and because useEvents only
+  // loads Supabase events asynchronously, the empty check could fire
+  // BEFORE the real events arrived. Each empty-check open of overlay or
+  // scoreboard then wrote a fresh match.start, and the reducer treats
+  // every match.start as a hard reset → prior games wiped. (See
+  // /m/{id}/control.vue for the bootstrap on the operator surface; the
+  // read-only surfaces should never write events.)
 
   const state = computed(() =>
     preset.value.reducer(events.value, config.value),
