@@ -8,6 +8,7 @@
 
 import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
+import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
 import {
   teamColor,
@@ -20,6 +21,7 @@ const props = defineProps<ThemeProps>();
 const {
   playersA,
   playersB,
+  cards,
   games,
   isServingSide,
   isLastGameWinner,
@@ -137,6 +139,7 @@ const gridTemplate = computed(
                 :style="{ color: teamColor(side) }"
                 >· {{ sideStatus(side) }}</span
               >
+              <PenaltyCards :cards="cards(side)" size="sm" class="shrink-0" />
             </div>
           </div>
           <!-- Per-game scores -->

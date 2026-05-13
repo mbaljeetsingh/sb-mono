@@ -8,6 +8,7 @@
 
 import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
+import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
 import { teamColor, useMetaLine, useThemeState } from "../use-theme-state";
 
@@ -15,6 +16,7 @@ const props = defineProps<ThemeProps>();
 const {
   playersA,
   playersB,
+  cards,
   currentGame,
   isServingSide,
   isLastGameWinner,
@@ -84,11 +86,16 @@ const sideLabel = (side: "a" | "b") => {
           <div class="score text-[220px] leading-[0.85]">
             {{ currentGame[side] }}
           </div>
-          <!-- Side-status caption (SERVING / GAME WON / WINNER) -->
+          <!-- Side-status caption (SERVING / GAME WON / WINNER) + cards -->
           <div
-            v-if="sideLabel(side)"
+            v-if="
+              sideLabel(side) ||
+              cards(side).yellow ||
+              cards(side).red ||
+              cards(side).black
+            "
             :class="[
-              'inline-flex items-center gap-1.5 mt-3 text-[11px] font-bold tracking-[0.18em] uppercase',
+              'inline-flex items-center gap-2 mt-3 text-[11px] font-bold tracking-[0.18em] uppercase',
               side === 'b' ? 'flex-row-reverse' : '',
             ]"
             :style="{ color: teamColor(side) }"
@@ -98,7 +105,8 @@ const sideLabel = (side: "a" | "b") => {
               class="size-1.5 rounded-full"
               :style="{ background: teamColor(side) }"
             />
-            {{ sideLabel(side) }}
+            <span v-if="sideLabel(side)">{{ sideLabel(side) }}</span>
+            <PenaltyCards :cards="cards(side)" size="sm" />
           </div>
         </div>
 

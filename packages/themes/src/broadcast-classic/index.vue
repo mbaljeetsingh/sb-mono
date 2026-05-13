@@ -8,6 +8,7 @@
 
 import { toRef } from "vue";
 import type { ThemeProps } from "../index";
+import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
 import {
   teamColor,
@@ -135,21 +136,7 @@ const playersOf = (side: "a" | "b") =>
             >
               GAME WON
             </span>
-            <!-- Penalty cards -->
-            <span class="inline-flex items-center gap-0.5">
-              <span
-                v-for="i in cards(side).yellow"
-                :key="`y${i}`"
-                class="inline-block w-[7px] h-[10px] rounded-[1px] bg-yellow-400 ring-1 ring-yellow-600/60"
-                title="Yellow card"
-              />
-              <span
-                v-for="i in cards(side).red"
-                :key="`r${i}`"
-                class="inline-block w-[7px] h-[10px] rounded-[1px] bg-red-600 ring-1 ring-red-900/60"
-                title="Red card"
-              />
-            </span>
+            <PenaltyCards :cards="cards(side)" size="xs" />
           </div>
         </div>
 

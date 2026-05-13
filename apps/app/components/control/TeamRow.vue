@@ -1,23 +1,30 @@
 <script setup lang="ts">
 import type { Cell } from "@sb/layer-app-base/composables/useCourtCells";
+import PenaltyCards from "@sb/themes/penalty-cards";
+import { ArrowLeftRight } from "lucide-vue-next";
 
 // One team's half of the court — header strip (label + score + pips +
 // MATCH/GAME PT) and two service-court cells. Used twice in control.vue
-// (Team A and Team B) — extracting cuts ~150 lines of near-duplicate template.
+// (Team A and Team B).
 //
-// `position` decides the visual orientation:
-//  - "a-stacked": Team A in portrait (above B). Header anchors top, cells
-//    below; cells flex-row-reverse so cell index 1 (right court) is
-//    visually screen-left, matching BWF court geometry.
-//  - "b-stacked": Team B in portrait. Column flex-col-reverse so the header
-//    sits at the BOTTOM (B's "back of court" in a top-down layout, mirroring
-//    A at the top). Cells flow naturally left→right (no reverse).
-//  - "a-side"/"b-side": both teams in landscape (umpire view). Headers stay
-//    on top, cells stack vertically.
+// `team` drives color (always tied to identity). `orientation` drives
+// geometry — which screen edge this team occupies, derived in the parent
+// from layout + sidesSwapped:
+//  - "top"    — portrait layout, this team at screen-top. Header anchored
+//               top, cells flow flex-row-reverse so the right service court
+//               reads as screen-left (BWF top-down view from this end).
+//  - "bottom" — portrait layout, this team at screen-bottom. Header anchored
+//               bottom (flex-col-reverse on the wrapper); cells flow
+//               flex-row, so the right service court reads as screen-right
+//               (mirroring the top team).
+//  - "left"   — landscape layout, this team at screen-left. Header on top,
+//               cells stack flex-col-reverse.
+//  - "right"  — landscape layout, this team at screen-right. Header on top,
+//               cells stack flex-col.
 
 const props = defineProps<{
   team: "A" | "B";
-  position: "a-stacked" | "b-stacked" | "a-side" | "b-side";
+  orientation: "top" | "bottom" | "left" | "right";
   score: number;
   gamesWon: number;
   totalSlots: number;
@@ -29,25 +36,33 @@ const props = defineProps<{
   isGlowing: boolean;
   lastWinner: boolean;
   cellIsServer: (court: "left" | "right") => boolean;
+  canSwapPlayers?: boolean;
+  cards?: { yellow: number; red: number; black: number };
 }>();
 
-defineEmits<{ (e: "tap"): void }>();
+defineEmits<{
+  (e: "tap"): void;
+  (e: "swap-players"): void;
+}>();
 
-const colorVar = props.team === "A" ? "team-a" : "team-b";
+const isStacked = (o: typeof props.orientation) =>
+  o === "top" || o === "bottom";
+
+// Centerline border sits on the visually-SECOND cell. Top/left orientations
+// use a reversed flow (right court rendered first), so the second visual
+// cell is array index 0; bottom/right use natural flow, so index 1.
+const isSecondVisualCell = (idx: number) =>
+  props.orientation === "top" || props.orientation === "left"
+    ? idx === 0
+    : idx > 0;
 </script>
 
 <template>
   <div
     class="relative flex flex-1 transition-shadow duration-200"
     :class="[
-      position === 'a-stacked' || position === 'a-side'
-        ? 'bg-team-a-soft'
-        : 'bg-team-b-soft',
-      position === 'b-stacked'
-        ? 'flex-col-reverse'
-        : position === 'a-side' || position === 'b-side'
-          ? 'flex-col'
-          : 'flex-col',
+      team === 'A' ? 'bg-team-a-soft' : 'bg-team-b-soft',
+      orientation === 'bottom' ? 'flex-col-reverse' : 'flex-col',
       isGlowing
         ? team === 'A'
           ? 'shadow-[inset_0_0_0_3px_var(--color-team-a)] animate-glow-a'
@@ -63,10 +78,12 @@ const colorVar = props.team === "A" ? "team-a" : "team-b";
     <div
       class="flex items-center justify-center gap-3 px-3 py-2.5"
       :class="[
-        position === 'a-stacked' || position === 'a-side'
-          ? 'border-b border-team-a/20'
-          : position === 'b-stacked'
-            ? 'border-t border-team-b/20'
+        orientation === 'bottom'
+          ? team === 'A'
+            ? 'border-t border-team-a/20'
+            : 'border-t border-team-b/20'
+          : team === 'A'
+            ? 'border-b border-team-a/20'
             : 'border-b border-team-b/20',
       ]"
     >
@@ -76,6 +93,10 @@ const colorVar = props.team === "A" ? "team-a" : "team-b";
       >
         Team {{ team }}
       </span>
+      <!-- Persistent penalty cards. Same component as the broadcast themes
+           so the visual language stays consistent across control + overlay
+           + scoreboard surfaces. -->
+      <PenaltyCards v-if="cards" :cards="cards" size="xs" />
       <span
         class="score text-[clamp(32px,6vh,52px)] font-bold leading-none tabular-nums text-foreground"
       >
@@ -108,20 +129,18 @@ const colorVar = props.team === "A" ? "team-a" : "team-b";
       </span>
     </div>
 
-    <!-- Cells. Direction flips with layout: cells split left|right when teams
-         are stacked, top|bottom when side-by-side. Team A is reversed so the
-         right service court reads as screen-left (matching BWF court view);
-         Team B is non-reversed for the same reason from the opposite side. -->
+    <!-- Cells. Direction flips with orientation so the right service court
+         reads correctly in BWF top-down geometry. -->
     <div
-      class="flex flex-1"
+      class="relative flex flex-1"
       :class="[
-        team === 'A'
-          ? position === 'a-side'
-            ? 'flex-col-reverse'
-            : 'flex-row-reverse'
-          : position === 'b-side'
-            ? 'flex-col'
-            : 'flex-row',
+        orientation === 'top'
+          ? 'flex-row-reverse'
+          : orientation === 'bottom'
+            ? 'flex-row'
+            : orientation === 'left'
+              ? 'flex-col-reverse'
+              : 'flex-col',
       ]"
     >
       <button
@@ -132,18 +151,14 @@ const colorVar = props.team === "A" ? "team-a" : "team-b";
         :aria-label="`Tap to score for ${cell.label || `team ${team}`}`"
         class="relative flex flex-1 flex-col items-center justify-center gap-2 px-4 py-4 transition-[background-color] duration-150 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-65"
         :class="[
-          // Centerline divider sits between the two cells. For Team A both
-          // layouts reverse, so idx 0 is the visually-second cell. For Team
-          // B no reverse, so idx 1 is the visually-second cell. Either way
-          // the leading edge of the second cell is the centerline.
-          (team === 'A' ? idx === 0 : idx > 0)
-            ? position.endsWith('-side')
+          isSecondVisualCell(idx)
+            ? isStacked(orientation)
               ? team === 'A'
-                ? 'border-t border-team-a/20'
-                : 'border-t border-team-b/20'
-              : team === 'A'
                 ? 'border-l border-team-a/20'
                 : 'border-l border-team-b/20'
+              : team === 'A'
+                ? 'border-t border-team-a/20'
+                : 'border-t border-team-b/20'
             : '',
         ]"
         @click="$emit('tap')"
@@ -166,6 +181,24 @@ const colorVar = props.team === "A" ? "team-a" : "team-b";
           <span class="size-[5px] rounded-full bg-white animate-pulse-soft" />
           Serves
         </div>
+      </button>
+
+      <!-- Doubles-only: swap of which partner starts on the right (server)
+           court. Sits on the centerline between the two cells. Distinct
+           icon (Users) so it's visually disambiguated from the sides-swap
+           button on the row centerline. -->
+      <button
+        v-if="canSwapPlayers"
+        type="button"
+        aria-label="Swap players on this side"
+        class="absolute left-1/2 top-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-border-strong bg-background/95 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-foreground shadow-md backdrop-blur-sm hover:bg-background"
+        @click.stop="$emit('swap-players')"
+      >
+        <ArrowLeftRight
+          class="size-3"
+          :class="isStacked(orientation) ? '' : 'rotate-90'"
+        />
+        Swap players
       </button>
     </div>
   </div>

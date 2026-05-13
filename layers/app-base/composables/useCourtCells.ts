@@ -45,6 +45,11 @@ const splitTeam = (joined: string): [string, string] => {
   return [parts[0] ?? "", parts[1] ?? ""];
 };
 
+// Display-only title case (mirrors useMatchMeta — kept inline to avoid a
+// cross-layer dep). "alice" → "Alice", "alice smith" → "Alice Smith".
+const titleCase = (s: string) =>
+  s ? s.replace(/(^|[^\p{L}])(\p{L})/gu, (_, p, c) => p + c.toUpperCase()) : s;
+
 export function useCourtCells(state: StateRef, meta: MetaRef) {
   const displayNameA = computed(
     () => meta.value.teamNames.a?.trim() || "Player 1",
@@ -65,10 +70,11 @@ export function useCourtCells(state: StateRef, meta: MetaRef) {
     const p = meta.value.players;
     const isDoubles = meta.value.isDoubles;
     return {
-      a1: p.a1?.trim() || aP1 || "Player 1",
-      a2: p.a2?.trim() || aP2 || "Player 2",
-      b1: p.b1?.trim() || bP1 || (isDoubles ? "Player 3" : "Player 2"),
-      b2: p.b2?.trim() || bP2 || (isDoubles ? "Player 4" : ""),
+      a1: titleCase(p.a1?.trim() || aP1) || "Player 1",
+      a2: titleCase(p.a2?.trim() || aP2) || "Player 2",
+      b1:
+        titleCase(p.b1?.trim() || bP1) || (isDoubles ? "Player 3" : "Player 2"),
+      b2: titleCase(p.b2?.trim() || bP2) || (isDoubles ? "Player 4" : ""),
     };
   });
 

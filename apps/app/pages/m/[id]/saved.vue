@@ -9,19 +9,13 @@ definePageMeta({ layout: false });
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
 
-// Reactive read of match metadata via useStorage — same pattern every other
-// surface uses, no manual JSON.parse boilerplate.
-const meta = useStorage<{
-  teamNames?: { a: string; b: string };
-  sport?: string;
-  sportPreset?: string;
-} | null>(
-  computed(() => `sb:meta:${matchId.value}`),
-  null,
-);
+// Meta now lives on the matches row in Supabase, so this page renders
+// correctly cross-device (a finished-match share link opened on a friend's
+// phone gets the names too). `teamNames` carries the placeholder fallbacks.
+const { meta, teamNames } = useMatchMeta(matchId);
 
 const sportLabel = computed(() =>
-  (meta.value?.sport ?? "badminton").toUpperCase(),
+  (meta.value.sport ?? "badminton").toUpperCase(),
 );
 
 const result = useStorage<{ a: number; b: number }[] | null>(
@@ -86,7 +80,7 @@ const copy = async (text: string, label = "Link") => {
         class="text-sm text-fg-muted mb-7 max-w-xs mx-auto"
       >
         <strong class="text-foreground">{{
-          winner.aWon ? meta.teamNames.a : meta.teamNames.b
+          winner.aWon ? teamNames.a : teamNames.b
         }}</strong>
         won {{ winner.score }}.
       </p>
@@ -115,7 +109,7 @@ const copy = async (text: string, label = "Link") => {
               ★ WINNER
             </div>
             <div class="text-[20px] font-semibold tracking-tight">
-              {{ meta.teamNames.a }}
+              {{ teamNames.a }}
             </div>
           </div>
           <span
@@ -136,7 +130,7 @@ const copy = async (text: string, label = "Link") => {
               class="text-lg font-medium"
               :class="winner?.aWon ? 'text-neutral-400' : 'text-neutral-50'"
             >
-              {{ meta.teamNames.b }}
+              {{ teamNames.b }}
             </div>
           </div>
           <span

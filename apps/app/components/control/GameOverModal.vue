@@ -2,7 +2,12 @@
 // Between-games dialog. Shows up after a game ends but before the next one
 // starts. Mirrors MatchOverModal's pattern + button affordances so the
 // operator gets the same visual rhythm at every game boundary.
+//
+// Includes an optional "Swap ends" action — BWF Law 9.4 mandates teams
+// change ends between games. Visual-only swap; server identity stays with
+// the engine. Operator can ignore it (common in club play).
 
+import { ArrowUpDown } from "lucide-vue-next";
 import { Button } from "@sb/layer-ui/components/ui/button";
 
 defineProps<{
@@ -11,10 +16,12 @@ defineProps<{
   gameScore: { winner: number; loser: number };
   matchScore: { a: number; b: number };
   nextGameNumber: number;
+  sidesSwapped: boolean;
 }>();
 
 defineEmits<{
   (e: "start-next"): void;
+  (e: "swap-sides"): void;
 }>();
 </script>
 
@@ -44,6 +51,17 @@ defineEmits<{
           >{{ matchScore.a }}–{{ matchScore.b }}</span
         >
       </div>
+      <Button
+        variant="outline"
+        class="h-10 w-full font-medium mb-2"
+        @click="$emit('swap-sides')"
+      >
+        <ArrowUpDown class="size-4" />
+        Swap ends
+        <span v-if="sidesSwapped" class="text-fg-subtle text-[11px] ml-1">
+          · swapped
+        </span>
+      </Button>
       <Button
         size="lg"
         class="h-12 w-full font-semibold"

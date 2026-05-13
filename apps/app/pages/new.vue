@@ -81,13 +81,10 @@ const themeDialogOpen = ref(false);
 const formatNames = (t: { p1: string; p2: string }) =>
   isDoubles.value && t.p2 ? `${t.p1} / ${t.p2}` : t.p1;
 
-// Storage refs share the same keys /m/[id]/* reads. useStorage swaps which
-// entry it writes whenever matchId.value changes, so a future "Start over"
-// button just mints a new ULID.
-const metaStorage = useStorage(
-  computed(() => `sb:meta:${matchId.value}`),
-  {} as Record<string, unknown>,
-);
+// Format selection stays in localStorage for the operator's session — the
+// format strip on /control reads from these keys. Cross-device format sync
+// (so OBS knows BO3 vs BO5) is a follow-up; today the matches.sport_preset
+// column carries enough for themes to render correctly.
 const presetStorage = useStorage<SportPresetId>(
   computed(() => `sb:format:preset:${matchId.value}`),
   "badminton-21",
@@ -98,28 +95,41 @@ const gamesToWinStorage = useStorage<number>(
 );
 
 watchEffect(() => {
-  metaStorage.value = {
-    sport: sport.value,
-    sportPreset: formatPreset.value,
-    isDoubles: isDoubles.value,
-    teamNames: { a: formatNames(teamA.value), b: formatNames(teamB.value) },
-    players: {
-      a1: teamA.value.p1,
-      a2: teamA.value.p2,
-      b1: teamB.value.p1,
-      b2: teamB.value.p2,
-    },
-    eventName: eventName.value.trim(),
-    round: round.value.trim(),
-    courtLabel: courtLabel.value.trim(),
-  };
   presetStorage.value = formatPreset.value;
   gamesToWinStorage.value = gamesToWin.value;
 });
 
-// Land on the match hub so the operator can grab overlay/scoreboard URLs
-// before opening control. Storage is already persisted; just navigate.
-const createMatch = () => navigateTo(`/m/${matchId.value}`);
+const supabase = useSupabaseClient();
+const supabaseUser = useSupabaseUser();
+
+// Persist meta + create the matches row, then navigate. This is the only
+// writer to the `matches` row at match creation — useEvents.ensureMatchRow
+// will short-circuit when it finds the row already exists.
+const createMatch = async () => {
+  const { error } = await supabase.from("matches").upsert(
+    {
+      id: matchId.value,
+      owner_id: supabaseUser.value?.id ?? null,
+      sport_family: "racquet",
+      sport_preset: formatPreset.value,
+      is_doubles: isDoubles.value,
+      team_name_a: formatNames(teamA.value).trim() || null,
+      team_name_b: formatNames(teamB.value).trim() || null,
+      players: {
+        a1: teamA.value.p1.trim(),
+        a2: teamA.value.p2.trim(),
+        b1: teamB.value.p1.trim(),
+        b2: teamB.value.p2.trim(),
+      },
+      event_name: eventName.value.trim() || null,
+      round: round.value.trim() || null,
+      court_label: courtLabel.value.trim() || null,
+    },
+    { onConflict: "id" },
+  );
+  if (error) console.warn("[/new] match upsert failed", error);
+  navigateTo(`/m/${matchId.value}`);
+};
 </script>
 
 <template>

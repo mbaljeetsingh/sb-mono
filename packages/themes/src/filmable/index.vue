@@ -7,6 +7,7 @@
 
 import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
+import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
 import { teamColor, useThemeState } from "../use-theme-state";
 
@@ -19,6 +20,7 @@ const {
   isServingSide,
   isLastGameWinner,
   isMatchWinner,
+  cards,
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
 
 const playersOf = (side: "a" | "b") =>
@@ -134,6 +136,7 @@ const previousGames = computed(() => {
             <span class="size-2 rounded-full bg-white animate-pulse-soft" />
             SERVE
           </span>
+          <PenaltyCards :cards="cards(side)" size="md" />
         </div>
         <div class="text-2xl font-semibold leading-snug uppercase">
           <template v-for="(p, idx) in playersOf(side)" :key="idx">
@@ -182,11 +185,14 @@ const previousGames = computed(() => {
       {{ state.servingSide }}
     </div>
 
-    <!-- Bottom strip: previous-game history + optional sponsor -->
+    <!-- Bottom strip: previous-game history + optional sponsor. Hidden
+         entirely when there's nothing to show (no completed games and no
+         sponsor) so we don't leave a label hanging over empty space. -->
     <div
+      v-if="previousGames.length || meta?.sponsorName"
       class="absolute bottom-0 inset-x-0 h-20 bg-neutral-950 border-t border-neutral-900 px-9 flex items-center justify-between"
     >
-      <div class="flex gap-4 items-center">
+      <div v-if="previousGames.length" class="flex gap-4 items-center">
         <span
           class="text-[11px] text-neutral-400 tracking-wider font-semibold uppercase"
           >HISTORY</span
@@ -201,6 +207,7 @@ const previousGames = computed(() => {
           </template>
         </span>
       </div>
+      <div v-else></div>
       <div v-if="meta?.sponsorName" class="flex items-center gap-2">
         <span
           class="text-[9px] text-neutral-600 tracking-[0.1em] font-semibold uppercase"

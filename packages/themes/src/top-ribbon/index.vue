@@ -5,6 +5,7 @@
 
 import { toRef } from "vue";
 import type { ThemeProps } from "../index";
+import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
 import {
   teamColor,
@@ -17,6 +18,7 @@ const props = defineProps<ThemeProps>();
 const {
   playersA,
   playersB,
+  cards,
   currentGame,
   priorGames,
   isServingSide,
@@ -89,6 +91,7 @@ const playersOf = (side: "a" | "b") =>
         <span class="size-1 rounded-full bg-white animate-pulse-soft" />
         SERVE
       </span>
+      <PenaltyCards :cards="cards(side)" size="xs" class="shrink-0" />
     </div>
 
     <!-- Center score: prior games stack small on either side, current in big -->

@@ -35,7 +35,7 @@ const sports: {
     label: "Table tennis",
     preset: "11pt, BO5",
     emoji: "🏓",
-    enabled: true,
+    enabled: false,
   },
   {
     id: "tennis",

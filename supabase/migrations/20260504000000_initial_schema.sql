@@ -24,6 +24,14 @@ create table public.matches (
     theme_id        text not null default 'broadcast-classic',
     colors          jsonb not null default '{"a": "#dc2626", "b": "#2563eb"}'::jsonb,
     started_at      bigint,                                 -- ms since epoch; null until first point
+    -- Display metadata mirrored from `sb:meta:{matchId}` localStorage so any
+    -- device opening the overlay (OBS on a laptop, phone of a co-scorer) can
+    -- render team / player / tournament info without sharing localStorage.
+    is_doubles      boolean not null default false,
+    team_name_a     text,
+    team_name_b     text,
+    players         jsonb not null default '{}'::jsonb,     -- { a1, a2, b1, b2 }
+    event_name      text,
     court_label     text,
     round           text,
     category        text,

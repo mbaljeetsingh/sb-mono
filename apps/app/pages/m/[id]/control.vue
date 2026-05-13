@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useStorage, useVibrate, useWakeLock } from "@vueuse/core";
+import { onLongPress, useStorage, useVibrate, useWakeLock } from "@vueuse/core";
 import {
   ArrowLeft,
+  ArrowLeftRight,
+  ArrowUpDown,
   Columns3,
   MoreHorizontal,
   Rows3,
@@ -16,7 +18,6 @@ import {
 } from "@sb/engine";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import TeamRow from "~/components/control/TeamRow.vue";
-import EventsSheet from "~/components/control/EventsSheet.vue";
 import MatchStateSheet from "~/components/control/MatchStateSheet.vue";
 import FormatSheet from "~/components/control/FormatSheet.vue";
 import ScoreCorrectSheet from "~/components/control/ScoreCorrectSheet.vue";
@@ -109,25 +110,118 @@ const onStartNextGame = () => {
   append({ type: "game.end" } as Omit<RacquetEvent, "id" | "ts">);
 };
 
-// Pre-rally starting-server swap. Only valid before the first point — once a
-// rally is scored, server identity is derived from the event log so we
-// shouldn't rewrite history. Replaces match.start (clear + append) so the
-// log stays clean and Supabase reflects the swap.
-const canSwapStartingServer = computed(
+// Pre-rally swaps. Only valid before the first point — once a rally is
+// scored, server identity is derived from the event log so we shouldn't
+// rewrite history.
+const canSwapInitial = computed(
   () => events.value.length === 1 && events.value[0]?.type === "match.start",
 );
-const swapStartingServer = () => {
-  const first = events.value[0];
-  if (!first || first.type !== "match.start") return;
-  const opposite: SideId = first.serverSide === "A" ? "B" : "A";
+
+// Sides swap: mirrors the entire pre-match setup. Flips which screen edge
+// each team occupies AND who serves first (operator realized they had it
+// backwards). Replaces match.start so the log stays clean.
+const sidesSwapped = useStorage<boolean>(
+  computed(() => `sb:control-sides-swapped:${matchId.value}`),
+  false,
+);
+// Visual-only ends swap. Used in GameOverModal between games and as the
+// post-rally swap action — engine state untouched, only `sidesSwapped`
+// flips. Operator decides per BWF Law 9.4 expectations vs. club practice.
+const swapSidesVisualOnly = () => {
   vibrate(10);
-  replace([]);
-  append({
-    type: "match.start",
-    serverSide: opposite,
-    serverCourt: "right",
-  } as Omit<RacquetEvent, "id" | "ts">);
+  sidesSwapped.value = !sidesSwapped.value;
 };
+
+const swapSides = () => {
+  const isPreMatch = canSwapInitial.value;
+  vibrate(10);
+  sidesSwapped.value = !sidesSwapped.value;
+  // Pre-match swap also mirrors who serves first (operator setup was
+  // backwards). Mid-game ends-change swap is visual only — server identity
+  // is derived from the event log and shouldn't be rewritten.
+  if (isPreMatch) {
+    const first = events.value[0];
+    if (first && first.type === "match.start") {
+      const opposite: SideId = first.serverSide === "A" ? "B" : "A";
+      replace([]);
+      append({
+        type: "match.start",
+        serverSide: opposite,
+        serverCourt: "right",
+      } as Omit<RacquetEvent, "id" | "ts">);
+    }
+  }
+};
+
+// Deciding-game ends-change. BWF Law 9.4: in the deciding game, players
+// change ends when the leading score reaches 11. We don't enforce it —
+// just expose the swap button again whenever it's relevant, since club
+// players often skip ends-change. The button stays visible from 11 until
+// the game ends so an operator who missed the moment can still act.
+const isDecidingGame = computed(
+  () =>
+    state.value.gamesWon.a === config.value.gamesToWin - 1 &&
+    state.value.gamesWon.b === config.value.gamesToWin - 1,
+);
+// Visible only at the interval moment in the deciding game (11 for BWF-21,
+// 8 for BWF-15 — `state.atInterval` is engine-derived from `cfg.intervalAt`
+// and is true only for the rally that crosses it, then false on the next
+// score). If the operator doesn't act before the next point is scored, the
+// button hides itself — matches club behavior where ends-change is often
+// skipped.
+const canSwapAtDecider = computed(
+  () =>
+    isDecidingGame.value &&
+    !state.value.matchOver &&
+    !state.value.betweenGames &&
+    state.value.atInterval,
+);
+// Start of any in-progress game (score still 0-0) is also a valid swap
+// moment — covers operators who clicked "Start Game N" without first
+// hitting the swap button in the GameOverModal, or who change their mind.
+const canSwapAtGameStart = computed(
+  () =>
+    !state.value.matchOver &&
+    !state.value.betweenGames &&
+    lastGame.value.a === 0 &&
+    lastGame.value.b === 0,
+);
+const canSwapSidesVisible = computed(
+  () =>
+    canSwapInitial.value || canSwapAtGameStart.value || canSwapAtDecider.value,
+);
+
+// Per-team player swap (doubles only, pre-match). Swaps a1↔a2 (or b1↔b2)
+// in meta — useCourtCells re-renders so the partner who was about to start
+// on the right (server) court is now on the left and vice versa. Service
+// still begins from the right court; this just picks which partner stands
+// there.
+const swapPlayers = (side: SideId) => {
+  if (!canSwapInitial.value && !canSwapAtGameStart.value) return;
+  const isDoubles = matchMeta.value.isDoubles ?? false;
+  if (!isDoubles) return;
+  vibrate(10);
+  const current = matchMeta.value.players ?? {
+    a1: "",
+    a2: "",
+    b1: "",
+    b2: "",
+  };
+  matchMeta.value = {
+    ...matchMeta.value,
+    players:
+      side === "A"
+        ? { ...current, a1: current.a2, a2: current.a1 }
+        : { ...current, b1: current.b2, b2: current.b1 },
+  };
+};
+
+const canSwapPlayersA = computed(
+  () =>
+    (canSwapInitial.value || canSwapAtGameStart.value) &&
+    (matchMeta.value.isDoubles ?? false),
+);
+const canSwapPlayersB = canSwapPlayersA;
 
 const isGlowing = computed<SideId | null>(() => {
   if (!state.value.isGamePoint && !state.value.isMatchPoint) return null;
@@ -177,27 +271,31 @@ const layout = useStorage<ControlLayout>(
 );
 
 // Sheets ────────────────────────────────────────────────────────────────────
-type SheetKind = "events" | "matchState" | "scoreCorrect" | "format" | null;
+type SheetKind = "matchState" | "scoreCorrect" | "format" | null;
 const openSheet = ref<SheetKind>(null);
 const closeSheet = () => {
   openSheet.value = null;
 };
 
-// Long-press on Undo opens the events sheet; short tap undoes last point.
-const undoTimer = ref<ReturnType<typeof setTimeout> | null>(null);
-const onUndoPointerDown = () => {
-  undoTimer.value = setTimeout(() => {
-    undoTimer.value = null;
-    openSheet.value = "events";
-  }, 400);
-};
-const onUndoPointerUp = () => {
-  if (undoTimer.value) {
-    clearTimeout(undoTimer.value);
-    undoTimer.value = null;
-    onUndo();
-  }
-};
+// Long-press on Undo escalates to score correction — the natural next step
+// when single-tap undo isn't enough. Short tap undoes the last point.
+// VueUse `onLongPress` handles the timer + pointer cancel/move edge cases
+// (small finger drift no longer fires the action). Threshold haptic fires
+// when the long-press triggers so the operator feels the cross.
+const undoBtn = ref<HTMLElement | null>(null);
+onLongPress(
+  undoBtn,
+  () => {
+    vibrate(15);
+    openSheet.value = "scoreCorrect";
+  },
+  {
+    delay: 400,
+    onMouseUp: (_duration, _distance, isLongPress) => {
+      if (!isLongPress) onUndo();
+    },
+  },
+);
 
 // Match-state actions
 const onWalkover = (winner: SideId) => {
@@ -236,14 +334,6 @@ const onResetGameFromSheet = () => {
   onResetCurrentGame();
   closeSheet();
 };
-const onUndoTo = (idx: number) => {
-  replace(events.value.slice(0, idx));
-  closeSheet();
-};
-const onUndoLast = () => {
-  onUndo();
-  closeSheet();
-};
 const onApplyScoreCorrect = (payload: {
   games: { a: number; b: number }[];
   gamesWon: { a: number; b: number };
@@ -261,13 +351,19 @@ const winnerName = computed(() =>
 );
 const goHome = () => navigateTo(`/m/${matchId.value}`);
 
-// Position prop for TeamRow: combines team identity + outer layout.
-const positionA = computed(() =>
-  layout.value === "sideBySide" ? "a-side" : "a-stacked",
-);
-const positionB = computed(() =>
-  layout.value === "sideBySide" ? "b-side" : "b-stacked",
-);
+// Orientation prop for TeamRow: geometric edge each team occupies. Combines
+// outer layout with the visual sides-swap toggle.
+type Orientation = "top" | "bottom" | "left" | "right";
+const orientationA = computed<Orientation>(() => {
+  if (layout.value === "sideBySide")
+    return sidesSwapped.value ? "right" : "left";
+  return sidesSwapped.value ? "bottom" : "top";
+});
+const orientationB = computed<Orientation>(() => {
+  if (layout.value === "sideBySide")
+    return sidesSwapped.value ? "left" : "right";
+  return sidesSwapped.value ? "top" : "bottom";
+});
 </script>
 
 <template>
@@ -352,15 +448,6 @@ const positionB = computed(() =>
             INTERVAL
           </span>
           <Button
-            v-if="canSwapStartingServer"
-            variant="outline"
-            size="sm"
-            class="h-6 px-2 text-[10px] font-bold tracking-wider uppercase"
-            @click="swapStartingServer"
-          >
-            {{ state.servingSide }} serves · swap
-          </Button>
-          <Button
             variant="link"
             size="sm"
             class="h-auto p-0 text-[11px] text-fg-muted hover:text-foreground"
@@ -393,64 +480,93 @@ const positionB = computed(() =>
       </div>
 
       <!-- Court frame. Two team rows separated by a 1px line over the dark
-           wrapper bg. Each row owns its own outer-ring highlight. -->
+           wrapper bg. Each row owns its own outer-ring highlight. Render
+           order follows `sidesSwapped` so the swap is a real DOM reorder,
+           not just a CSS reverse — TeamRow's orientation prop then anchors
+           each team's header to the correct screen edge. -->
       <div
-        class="m-2 flex flex-1 gap-px overflow-hidden rounded-lg bg-foreground/30 ring-1 ring-foreground/30"
+        class="relative m-2 flex flex-1 gap-px overflow-hidden rounded-lg bg-foreground/30 ring-1 ring-foreground/30"
         :class="layout === 'sideBySide' ? 'flex-row' : 'flex-col'"
       >
-        <TeamRow
-          team="A"
-          :position="positionA"
-          :score="score('A')"
-          :games-won="gamesWon.a"
-          :total-slots="config.gamesToWin + 1"
-          :is-serving-team="state.servingSide === 'A'"
-          :is-match-point="state.isMatchPoint"
-          :is-game-point="state.isGamePoint"
-          :cells="cellsA"
-          :match-over="state.matchOver"
-          :is-glowing="isGlowing === 'A'"
-          :last-winner="lastPointWinner === 'A'"
-          :cell-is-server="(court) => cellIsServer('A', court)"
-          @tap="onTap('A')"
-        />
-        <TeamRow
-          team="B"
-          :position="positionB"
-          :score="score('B')"
-          :games-won="gamesWon.b"
-          :total-slots="config.gamesToWin + 1"
-          :is-serving-team="state.servingSide === 'B'"
-          :is-match-point="state.isMatchPoint"
-          :is-game-point="state.isGamePoint"
-          :cells="cellsB"
-          :match-over="state.matchOver"
-          :is-glowing="isGlowing === 'B'"
-          :last-winner="lastPointWinner === 'B'"
-          :cell-is-server="(court) => cellIsServer('B', court)"
-          @tap="onTap('B')"
-        />
+        <template
+          v-for="team in sidesSwapped ? ['B', 'A'] : ['A', 'B']"
+          :key="team"
+        >
+          <TeamRow
+            v-if="team === 'A'"
+            team="A"
+            :orientation="orientationA"
+            :score="score('A')"
+            :games-won="gamesWon.a"
+            :total-slots="config.gamesToWin + 1"
+            :is-serving-team="state.servingSide === 'A'"
+            :is-match-point="state.isMatchPoint"
+            :is-game-point="state.isGamePoint"
+            :cells="cellsA"
+            :match-over="state.matchOver"
+            :is-glowing="isGlowing === 'A'"
+            :last-winner="lastPointWinner === 'A'"
+            :cell-is-server="(court) => cellIsServer('A', court)"
+            :can-swap-players="canSwapPlayersA"
+            :cards="state.cards.a"
+            @tap="onTap('A')"
+            @swap-players="swapPlayers('A')"
+          />
+          <TeamRow
+            v-else
+            team="B"
+            :orientation="orientationB"
+            :score="score('B')"
+            :games-won="gamesWon.b"
+            :total-slots="config.gamesToWin + 1"
+            :is-serving-team="state.servingSide === 'B'"
+            :is-match-point="state.isMatchPoint"
+            :is-game-point="state.isGamePoint"
+            :cells="cellsB"
+            :match-over="state.matchOver"
+            :is-glowing="isGlowing === 'B'"
+            :last-winner="lastPointWinner === 'B'"
+            :cell-is-server="(court) => cellIsServer('B', court)"
+            :can-swap-players="canSwapPlayersB"
+            :cards="state.cards.b"
+            @tap="onTap('B')"
+            @swap-players="swapPlayers('B')"
+          />
+        </template>
+
+        <!-- Sides swap. Sits centered on the line between the two team rows;
+             icon orientation follows the outer layout. Visible:
+              • pre-match (operator fixing setup — also mirrors server),
+              • in the deciding game from 11 onward (BWF ends-change moment;
+                visual only, optional — club play often skips it). -->
+        <button
+          v-if="canSwapSidesVisible"
+          type="button"
+          aria-label="Swap sides (put the other team on the other court)"
+          class="absolute left-1/2 top-1/2 z-20 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-border-strong bg-background/95 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-foreground shadow-lg backdrop-blur-sm hover:bg-background"
+          @click="swapSides"
+        >
+          <component
+            :is="layout === 'sideBySide' ? ArrowLeftRight : ArrowUpDown"
+            class="size-3"
+          />
+          Swap sides
+        </button>
       </div>
 
-      <!-- Bottom action bar -->
+      <!-- Bottom action bar. Single button — short tap undoes last point,
+           long-press escalates to score correction. Wider audit / multi-step
+           recovery lives in the 3-dot menu (match-state sheet). -->
       <footer
         class="h-14 flex-shrink-0 px-3 flex items-center justify-between border-t border-border"
       >
-        <Button
-          variant="outline"
-          size="sm"
-          class="select-none"
-          @pointerdown="onUndoPointerDown"
-          @pointerup="onUndoPointerUp"
-          @pointerleave="onUndoPointerUp"
-        >
+        <Button ref="undoBtn" variant="outline" size="sm" class="select-none">
           <Undo2 class="size-4" />
           Undo
         </Button>
-        <span class="text-[11px] text-fg-subtle">long-press for events</span>
-        <Button variant="outline" size="sm" @click="openSheet = 'matchState'">
-          Events
-        </Button>
+        <span class="text-[11px] text-fg-subtle"
+          >long-press to correct score</span
+        >
       </footer>
 
       <MatchOverModal
@@ -469,7 +585,9 @@ const positionB = computed(() =>
         :game-score="lastGameScore"
         :match-score="gamesWon"
         :next-game-number="games.length + 1"
+        :sides-swapped="sidesSwapped"
         @start-next="onStartNextGame"
+        @swap-sides="swapSidesVisualOnly"
       />
 
       <!-- Sheet backdrop -->
@@ -479,13 +597,6 @@ const positionB = computed(() =>
         @click="closeSheet"
       />
 
-      <EventsSheet
-        v-if="openSheet === 'events'"
-        :events="events"
-        @undo-to="onUndoTo"
-        @undo-last="onUndoLast"
-        @open-score-correct="openSheet = 'scoreCorrect'"
-      />
       <MatchStateSheet
         v-if="openSheet === 'matchState'"
         :team-names="{ a: displayNameA, b: displayNameB }"

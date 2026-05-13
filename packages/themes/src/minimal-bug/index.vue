@@ -5,11 +5,12 @@
 
 import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
+import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
 import { teamColor, useThemeState } from "../use-theme-state";
 
 const props = defineProps<ThemeProps>();
-const { currentGame, isServingSide, isWinningSide } = useThemeState(
+const { cards, currentGame, isServingSide, isWinningSide } = useThemeState(
   toRef(props, "state"),
   toRef(props, "teamNames"),
 );
@@ -53,6 +54,7 @@ const initials = computed(() => ({
         :class="side === 'a' ? 'text-right' : 'text-left'"
         >{{ currentGame[side] }}</span
       >
+      <PenaltyCards :cards="cards(side)" size="xs" class="shrink-0" />
       <span
         v-if="side === 'a'"
         aria-hidden="true"
