@@ -10,7 +10,13 @@ import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
 import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
-import { teamColor, useMetaLine, useThemeState } from "../use-theme-state";
+import {
+  endReasonLabel,
+  teamColor,
+  useMetaLine,
+  useStatusPill,
+  useThemeState,
+} from "../use-theme-state";
 
 const props = defineProps<ThemeProps>();
 const {
@@ -23,6 +29,8 @@ const {
   isMatchWinner,
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
 const meta = useMetaLine(toRef(props, "meta"));
+const status = useStatusPill(toRef(props, "state"));
+const endReason = computed(() => endReasonLabel(props.state.endReason));
 
 const playersOf = (side: "a" | "b") =>
   side === "a" ? playersA.value : playersB.value;
@@ -53,7 +61,30 @@ const sideLabel = (side: "a" | "b") => {
           />
           {{ meta }}
         </span>
-        <span v-if="state.matchOver" class="text-neutral-900">FINAL</span>
+        <span
+          v-if="state.matchOver"
+          class="inline-flex items-center gap-2 text-neutral-900"
+        >
+          FINAL
+          <span v-if="endReason" class="text-[10px] text-neutral-500">
+            · {{ endReason }}
+          </span>
+        </span>
+        <span
+          v-else-if="status"
+          :class="
+            status.tone === 'warn'
+              ? 'text-amber-700'
+              : status.tone === 'accent'
+                ? 'text-neutral-900'
+                : 'text-neutral-500'
+          "
+        >
+          {{ status.label }}
+          <span v-if="status.side" class="text-neutral-500">
+            · TEAM {{ status.side }}
+          </span>
+        </span>
         <span v-else>GAME {{ state.games.length }}</span>
       </div>
 

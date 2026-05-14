@@ -9,7 +9,12 @@ import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
 import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
-import { teamColor, useThemeState } from "../use-theme-state";
+import {
+  endReasonLabel,
+  teamColor,
+  useStatusPill,
+  useThemeState,
+} from "../use-theme-state";
 
 const props = defineProps<ThemeProps>();
 
@@ -22,6 +27,8 @@ const {
   isMatchWinner,
   cards,
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
+const status = useStatusPill(toRef(props, "state"));
+const endReason = computed(() => endReasonLabel(props.state.endReason));
 
 const playersOf = (side: "a" | "b") =>
   side === "a" ? playersA.value : playersB.value;
@@ -60,9 +67,15 @@ const previousGames = computed(() => {
       </div>
       <span
         v-if="state.matchOver"
-        class="text-base font-bold tracking-[0.18em] text-neutral-200"
+        class="inline-flex items-center gap-2 text-base font-bold tracking-[0.18em] text-neutral-200"
       >
         FINAL
+        <span
+          v-if="endReason"
+          class="text-[11px] font-semibold tracking-[0.14em] text-neutral-400 uppercase"
+        >
+          · {{ endReason }}
+        </span>
       </span>
       <span
         v-else
@@ -173,16 +186,28 @@ const previousGames = computed(() => {
       </div>
     </div>
 
-    <!-- GP/MP flash bar (only fires while a game/match point is live) -->
+    <!-- Status flash bar: surfaces every interruption + GP/MP. Tone-driven
+         colors so accent (GP/MP) reads team-colored while warn (timeout /
+         suspension) reads amber so the camera sees it from across the
+         venue. Muted (interval) takes a neutral grey. -->
     <div
-      v-if="(state.isGamePoint || state.isMatchPoint) && !state.matchOver"
+      v-if="status && !state.matchOver"
       class="absolute bottom-20 inset-x-0 h-7 text-white text-[13px] font-bold tracking-[0.18em] flex items-center justify-center gap-3"
-      :style="{
-        background: `linear-gradient(90deg, ${teamColor(state.servingSide)}, color-mix(in srgb, ${teamColor(state.servingSide)} 80%, black))`,
-      }"
+      :style="
+        status.tone === 'accent' && status.side
+          ? {
+              background: `linear-gradient(90deg, ${teamColor(status.side.toLowerCase() as 'a' | 'b')}, color-mix(in srgb, ${teamColor(status.side.toLowerCase() as 'a' | 'b')} 80%, black))`,
+            }
+          : status.tone === 'warn'
+            ? { background: 'linear-gradient(90deg, #f59e0b, #b45309)' }
+            : { background: '#27272a' }
+      "
     >
-      ⚡ {{ state.isMatchPoint ? "MATCH POINT" : "GAME POINT" }} · TEAM
-      {{ state.servingSide }}
+      {{
+        status.tone === "accent" ? "⚡" : status.tone === "warn" ? "⏸" : "·"
+      }}
+      {{ status.label }}
+      <span v-if="status.side">· TEAM {{ status.side }}</span>
     </div>
 
     <!-- Bottom strip: previous-game history + optional sponsor. Hidden

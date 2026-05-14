@@ -120,6 +120,25 @@ export type StatusPill = {
   side: "A" | "B" | null;
 };
 
+/**
+ * Phrase the match-end reason for theme footer / WINNER captions.
+ * Returns null when the match ended cleanly (or hasn't ended).
+ */
+export const endReasonLabel = (
+  reason: RacquetState["endReason"] | undefined,
+): string | null => {
+  switch (reason) {
+    case "walkover":
+      return "won by walkover";
+    case "retirement":
+      return "won by retirement";
+    case "default":
+      return "won by default";
+    default:
+      return null;
+  }
+};
+
 export function useStatusPill(stateRef: Ref<RacquetState>) {
   return computed<StatusPill | null>(() => {
     const s = stateRef.value;

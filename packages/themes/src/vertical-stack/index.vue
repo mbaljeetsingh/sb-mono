@@ -4,11 +4,17 @@
 // to hug the bottom safe area without covering player faces in the middle of
 // the frame.
 
-import { toRef } from "vue";
+import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
 import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
-import { teamColor, useMetaLine, useThemeState } from "../use-theme-state";
+import {
+  endReasonLabel,
+  teamColor,
+  useMetaLine,
+  useStatusPill,
+  useThemeState,
+} from "../use-theme-state";
 
 const props = defineProps<ThemeProps>();
 const {
@@ -22,6 +28,8 @@ const {
   isMatchWinner,
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
 const meta = useMetaLine(toRef(props, "meta"));
+const status = useStatusPill(toRef(props, "state"));
+const endReason = computed(() => endReasonLabel(props.state.endReason));
 
 const playersOf = (side: "a" | "b") =>
   side === "a" ? playersA.value : playersB.value;
@@ -40,11 +48,36 @@ const playersOf = (side: "a" | "b") =>
         <SportIcon :sport="config.sport" class="text-[12px] shrink-0" />
         <span class="truncate">{{ meta || "&nbsp;" }}</span>
       </span>
+      <!-- Status priority: match-over wins, then any active pause/GP/MP
+           via useStatusPill, falling back to the LIVE pulse. Pause states
+           (timeout, suspended) inherit warn tone so a portrait stream
+           viewer sees the interruption without checking the broadcast. -->
       <span
         v-if="state.matchOver"
-        class="text-white/90 tracking-[0.16em] shrink-0 ml-2"
-        >FINAL</span
+        class="inline-flex items-center gap-1.5 text-white/90 tracking-[0.16em] shrink-0 ml-2"
       >
+        FINAL
+        <span v-if="endReason" class="text-[9px] text-white/60">
+          · {{ endReason }}
+        </span>
+      </span>
+      <span
+        v-else-if="status"
+        class="inline-flex items-center gap-1.5 shrink-0 ml-2"
+        :class="
+          status.tone === 'warn'
+            ? 'text-amber-300'
+            : status.tone === 'accent'
+              ? 'text-white'
+              : 'text-white/70'
+        "
+      >
+        <span class="size-1.5 rounded-full bg-current animate-pulse-soft" />
+        {{ status.label }}
+        <span v-if="status.side" class="text-white/60"
+          >· {{ status.side }}</span
+        >
+      </span>
       <span
         v-else
         class="inline-flex items-center gap-1.5 text-white/80 shrink-0 ml-2"

@@ -6,11 +6,12 @@
 // prior-game scores, current game in big numerals, serve dot, penalty card
 // glyphs, and a context status pill (GP / MP / timeout / interval / suspension).
 
-import { toRef } from "vue";
+import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
 import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
 import {
+  endReasonLabel,
   teamColor,
   useMetaLine,
   useStatusPill,
@@ -18,6 +19,7 @@ import {
 } from "../use-theme-state";
 
 const props = defineProps<ThemeProps>();
+const endReason = computed(() => endReasonLabel(props.state.endReason));
 
 const {
   playersA,
@@ -121,10 +123,16 @@ const playersOf = (side: "a" | "b") =>
             </span>
             <span
               v-else-if="isMatchWinner(side)"
-              class="shrink-0 text-[9px] font-bold tracking-[0.16em] text-white px-1.5 py-0.5 rounded-sm"
+              class="shrink-0 inline-flex items-center gap-1.5 text-[9px] font-bold tracking-[0.16em] text-white px-1.5 py-0.5 rounded-sm"
               :style="{ background: teamColor(side) }"
             >
               WINNER
+              <span
+                v-if="endReason"
+                class="text-[8px] font-semibold tracking-[0.12em] text-white/80 uppercase"
+              >
+                · {{ endReason }}
+              </span>
             </span>
             <span
               v-else-if="isLastGameWinner(side)"

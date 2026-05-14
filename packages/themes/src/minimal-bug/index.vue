@@ -7,13 +7,20 @@ import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
 import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
-import { teamColor, useThemeState } from "../use-theme-state";
+import {
+  endReasonLabel,
+  teamColor,
+  useStatusPill,
+  useThemeState,
+} from "../use-theme-state";
 
 const props = defineProps<ThemeProps>();
 const { cards, currentGame, isServingSide, isWinningSide } = useThemeState(
   toRef(props, "state"),
   toRef(props, "teamNames"),
 );
+const status = useStatusPill(toRef(props, "state"));
+const endReason = computed(() => endReasonLabel(props.state.endReason));
 
 // Initial of first non-empty word, or "?" if empty. "Alice / Aiden" → "A",
 // "Bob Chen" → "B". Lowercase team names get capitalized.
@@ -61,11 +68,42 @@ const initials = computed(() => ({
         class="w-px h-3 bg-white/15 ml-1"
       />
     </div>
+    <!-- Status priority: match-over → pause icon → game number. Tiny
+         corner bug, so pauses get an icon only; the colored pulse signals
+         tone (amber = warn, white = accent) and the title attribute carries
+         the full label for hover/screen readers. End-reason squeezes in
+         as a 2-letter glyph after FINAL when applicable. -->
     <span
       v-if="state.matchOver"
       class="text-[9px] tracking-[0.14em] font-bold text-white/80 ml-1"
-      >FINAL · {{ isWinningSide("a") ? initials.a : initials.b }}</span
+      :title="endReason ?? undefined"
     >
+      FINAL · {{ isWinningSide("a") ? initials.a : initials.b }}
+      <span v-if="endReason" class="text-white/50">
+        ·
+        {{
+          props.state.endReason === "walkover"
+            ? "WO"
+            : props.state.endReason === "retirement"
+              ? "RET"
+              : "DEF"
+        }}
+      </span>
+    </span>
+    <span
+      v-else-if="status"
+      class="inline-flex items-center gap-1 text-[9px] font-bold tracking-wide ml-1"
+      :class="status.tone === 'warn' ? 'text-amber-300' : 'text-white/80'"
+      :title="`${status.label}${status.side ? ` · TEAM ${status.side}` : ''}`"
+    >
+      <span
+        class="size-1.5 rounded-full bg-current animate-pulse-soft"
+        aria-hidden="true"
+      />
+      {{
+        status.tone === "warn" ? "⏸" : status.tone === "accent" ? "⚡" : "·"
+      }}
+    </span>
     <span
       v-else
       class="text-[9px] font-mono font-bold tracking-wide text-white/60 ml-1"

@@ -7,6 +7,9 @@ import { Label } from "@sb/layer-ui/components/ui/label";
 const props = defineProps<{
   initialGames: { a: number; b: number }[];
   initialGamesWon: { a: number; b: number };
+  /** Total games needed to win the match. `1` = single-game format; the
+   *  games-won concept is meaningless and we hide that input. */
+  gamesToWin: number;
 }>();
 
 const emit = defineEmits<{
@@ -41,11 +44,14 @@ watch(
 );
 
 const apply = () => {
+  // Spread into plain objects — Vue reactive proxies aren't
+  // structured-cloneable, which breaks BroadcastChannel.postMessage in
+  // useEvents.append. Sending plain values keeps the event log clonable.
   emit("apply", {
     games: games.value
       .map((g) => ({ a: parseInt(g.a, 10) || 0, b: parseInt(g.b, 10) || 0 }))
       .filter((g) => g.a > 0 || g.b > 0),
-    gamesWon: gamesWon.value,
+    gamesWon: { a: gamesWon.value.a, b: gamesWon.value.b },
   });
 };
 </script>
@@ -85,28 +91,32 @@ const apply = () => {
       </div>
     </div>
 
-    <Label
-      class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
-    >
-      Games won
-    </Label>
-    <div class="flex gap-2 mb-4">
-      <Input
-        v-model.number="gamesWon.a"
-        type="number"
-        inputmode="numeric"
-        min="0"
-        class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
-      />
-      <span class="text-fg-muted self-center">vs</span>
-      <Input
-        v-model.number="gamesWon.b"
-        type="number"
-        inputmode="numeric"
-        min="0"
-        class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
-      />
-    </div>
+    <!-- Games-won input only makes sense in best-of formats. Single-game
+         matches have one game = one match, so this section is hidden. -->
+    <template v-if="props.gamesToWin > 1">
+      <Label
+        class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
+      >
+        Games won
+      </Label>
+      <div class="flex gap-2 mb-4">
+        <Input
+          v-model.number="gamesWon.a"
+          type="number"
+          inputmode="numeric"
+          min="0"
+          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
+        />
+        <span class="text-fg-muted self-center">vs</span>
+        <Input
+          v-model.number="gamesWon.b"
+          type="number"
+          inputmode="numeric"
+          min="0"
+          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
+        />
+      </div>
+    </template>
 
     <div class="flex gap-2">
       <Button variant="outline" class="flex-1 h-10" @click="emit('close')">

@@ -76,6 +76,10 @@ export function useMatchMeta(matchId: Ref<string>) {
   // suppress the originator's own UPDATE echoing back as a duplicate write.
   let lastSeenRemote: string | null = null;
   let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+  // Per-instance unique channel-name suffix — prevents collision when two
+  // pages with the same matchId mount in overlapping lifecycles (e.g.
+  // navigation /control → /m/[id]). See useEvents for the full rationale.
+  const channelSuffix = Math.random().toString(36).slice(2, 10);
 
   const applyRemote = (row: Parameters<typeof fromRow>[0]) => {
     const incoming = fromRow(row);
@@ -173,7 +177,7 @@ export function useMatchMeta(matchId: Ref<string>) {
     const id = matchId.value;
     if (!id) return;
     realtimeChannel = supabase
-      .channel(`match-meta:${id}`)
+      .channel(`match-meta:${id}:${channelSuffix}`)
       .on(
         "postgres_changes",
         {

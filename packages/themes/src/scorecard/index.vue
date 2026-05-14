@@ -11,6 +11,7 @@ import type { ThemeProps } from "../index";
 import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
 import {
+  endReasonLabel,
   teamColor,
   useMetaLine,
   useStatusPill,
@@ -29,6 +30,7 @@ const {
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
 const meta = useMetaLine(toRef(props, "meta"));
 const status = useStatusPill(toRef(props, "state"));
+const endReason = computed(() => endReasonLabel(props.state.endReason));
 
 const playersOf = (side: "a" | "b") =>
   side === "a" ? playersA.value : playersB.value;
@@ -70,7 +72,15 @@ const gridTemplate = computed(
           />
           {{ meta }}
         </span>
-        <span v-if="state.matchOver" class="text-neutral-900">FINAL</span>
+        <span
+          v-if="state.matchOver"
+          class="inline-flex items-center gap-2 text-neutral-900"
+        >
+          FINAL
+          <span v-if="endReason" class="text-[10px] text-neutral-500">
+            · {{ endReason }}
+          </span>
+        </span>
         <span v-else-if="status" class="text-neutral-900">{{
           status.label
         }}</span>

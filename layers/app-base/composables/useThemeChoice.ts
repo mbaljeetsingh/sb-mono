@@ -23,6 +23,8 @@ export function useThemeChoice(matchId: Ref<string>) {
   const scoreboard = ref<string>(DEFAULT_SCOREBOARD);
   let lastSeenRemote: string | null = null;
   let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+  // Per-instance unique channel-name suffix — see useEvents for rationale.
+  const channelSuffix = Math.random().toString(36).slice(2, 10);
 
   const snapshot = () =>
     JSON.stringify({ overlay: overlay.value, scoreboard: scoreboard.value });
@@ -88,7 +90,7 @@ export function useThemeChoice(matchId: Ref<string>) {
     const id = matchId.value;
     if (!id) return;
     realtimeChannel = supabase
-      .channel(`match-theme:${id}`)
+      .channel(`match-theme:${id}:${channelSuffix}`)
       .on(
         "postgres_changes",
         {

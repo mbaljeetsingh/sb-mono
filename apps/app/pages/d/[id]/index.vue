@@ -28,28 +28,28 @@ const overlayUrl = computed(() => {
   return `${window.location.origin}/d/${dynamicId.value}/overlay`;
 });
 
-// Recent matches from localStorage (anything matching sb:meta:*)
+// Recent matches from Supabase — most recently updated first. Replaces the
+// old localStorage scanner that broke when /new moved to a Supabase-only
+// write path. We pull only the columns we render so this stays cheap.
 type RecentMatch = { id: string; teamA: string; teamB: string };
+const supabase = useSupabaseClient();
 const recent = ref<RecentMatch[]>([]);
 
-const refreshRecent = () => {
-  if (typeof localStorage === "undefined") return;
-  const found: RecentMatch[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key?.startsWith("sb:meta:")) continue;
-    try {
-      const meta = JSON.parse(localStorage.getItem(key) ?? "{}");
-      if (meta?.teamNames) {
-        found.push({
-          id: key.replace("sb:meta:", ""),
-          teamA: meta.teamNames.a,
-          teamB: meta.teamNames.b,
-        });
-      }
-    } catch {}
+const refreshRecent = async () => {
+  const { data, error } = await supabase
+    .from("matches")
+    .select("id, team_name_a, team_name_b")
+    .order("updated_at", { ascending: false })
+    .limit(10);
+  if (error) {
+    console.warn("[d/index] recent fetch failed", error);
+    return;
   }
-  recent.value = found.slice(-10).reverse();
+  recent.value = (data ?? []).map((r) => ({
+    id: r.id,
+    teamA: r.team_name_a ?? "",
+    teamB: r.team_name_b ?? "",
+  }));
 };
 
 onMounted(refreshRecent);

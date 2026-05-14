@@ -24,6 +24,8 @@ export function useFormat(matchId: Ref<string>) {
   const gamesToWin = ref<number>(1);
   let lastSeenRemote: string | null = null;
   let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+  // Per-instance unique channel-name suffix — see useEvents for rationale.
+  const channelSuffix = Math.random().toString(36).slice(2, 10);
 
   const snapshot = () =>
     JSON.stringify({ preset: preset.value, gamesToWin: gamesToWin.value });
@@ -99,7 +101,7 @@ export function useFormat(matchId: Ref<string>) {
     const id = matchId.value;
     if (!id) return;
     realtimeChannel = supabase
-      .channel(`match-format:${id}`)
+      .channel(`match-format:${id}:${channelSuffix}`)
       .on(
         "postgres_changes",
         {

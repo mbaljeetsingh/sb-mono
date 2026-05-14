@@ -622,6 +622,7 @@ const orientationB = computed<Orientation>(() => {
         v-if="openSheet === 'scoreCorrect'"
         :initial-games="state.games"
         :initial-games-won="state.gamesWon"
+        :games-to-win="config.gamesToWin"
         @apply="onApplyScoreCorrect"
         @close="closeSheet"
       />

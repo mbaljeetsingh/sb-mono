@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useClipboard, useStorage } from "@vueuse/core";
+import { useClipboard } from "@vueuse/core";
 import { Clipboard, X } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import { Button } from "@sb/layer-ui/components/ui/button";
@@ -9,18 +9,20 @@ definePageMeta({ layout: false });
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
 
-// Meta now lives on the matches row in Supabase, so this page renders
-// correctly cross-device (a finished-match share link opened on a friend's
-// phone gets the names too). `teamNames` carries the placeholder fallbacks.
+// Meta + game state both live in Supabase, so this page renders correctly
+// cross-device — a finished-match share link opened on a friend's phone
+// gets the names AND the per-game scores. Derive `result` from
+// `useMatchState` rather than a separate `sb:result:` key (which nothing
+// was writing anyway).
 const { meta, teamNames } = useMatchMeta(matchId);
+const { state } = useMatchState(matchId);
 
 const sportLabel = computed(() =>
   (meta.value.sport ?? "badminton").toUpperCase(),
 );
 
-const result = useStorage<{ a: number; b: number }[] | null>(
-  computed(() => `sb:result:${matchId.value}`),
-  null,
+const result = computed(() =>
+  state.value.matchOver ? state.value.games : null,
 );
 
 const winner = computed(() => {

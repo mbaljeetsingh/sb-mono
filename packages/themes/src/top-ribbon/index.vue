@@ -3,11 +3,12 @@
 // in the middle, team blocks left/right. Brand-neutral (no amber/yellow); the
 // only chrome is a single subtle bottom border.
 
-import { toRef } from "vue";
+import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
 import PenaltyCards from "../penalty-cards.vue";
 import SportIcon from "../sport-icon.vue";
 import {
+  endReasonLabel,
   teamColor,
   useMetaLine,
   useStatusPill,
@@ -27,6 +28,7 @@ const {
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
 const meta = useMetaLine(toRef(props, "meta"));
 const status = useStatusPill(toRef(props, "state"));
+const endReason = computed(() => endReasonLabel(props.state.endReason));
 
 const playersOf = (side: "a" | "b") =>
   side === "a" ? playersA.value : playersB.value;
@@ -129,9 +131,13 @@ const playersOf = (side: "a" | "b") =>
     </span>
     <span
       v-if="state.matchOver"
-      class="text-white tracking-[0.16em] font-bold shrink-0 ml-3"
-      >FINAL</span
+      class="inline-flex items-center gap-1.5 text-white tracking-[0.16em] font-bold shrink-0 ml-3"
     >
+      FINAL
+      <span v-if="endReason" class="text-[9px] text-white/70">
+        · {{ endReason }}
+      </span>
+    </span>
     <span
       v-else-if="status"
       class="inline-flex items-center gap-1.5 font-bold shrink-0 ml-3"

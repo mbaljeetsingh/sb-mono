@@ -80,6 +80,12 @@ export function useEvents(matchId: Ref<string>) {
 
   let channel: BroadcastChannel | null = null;
   let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+  // Per-instance unique channel-name suffix. Without this, when the user
+  // navigates between two pages that both call this composable with the
+  // same matchId (e.g., /control → /m/[id]), the source page hasn't
+  // unmounted yet, supabase.channel(sameName) returns the existing
+  // already-subscribed instance, and `.on()` errors.
+  const channelSuffix = Math.random().toString(36).slice(2, 10);
 
   const sortById = (a: RacquetEvent, b: RacquetEvent) =>
     a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
@@ -159,7 +165,12 @@ export function useEvents(matchId: Ref<string>) {
   // ─── Public API ───────────────────────────────────────────────────────────
 
   const append = (partial: Omit<RacquetEvent, "id" | "ts">): RacquetEvent => {
-    const ev = { id: ulid(), ts: Date.now(), ...partial } as RacquetEvent;
+    // JSON round-trip strips Vue reactive proxies (which `structuredClone`
+    // can't clone) — callers can pass reactive state directly without
+    // hitting `DataCloneError` on the BroadcastChannel hop below.
+    const ev = JSON.parse(
+      JSON.stringify({ id: ulid(), ts: Date.now(), ...partial }),
+    ) as RacquetEvent;
     events.value = [...events.value, ev].sort(sortById);
     persist();
     channel?.postMessage({ type: "append", event: ev });
@@ -215,7 +226,7 @@ export function useEvents(matchId: Ref<string>) {
       realtimeChannel = null;
     }
     realtimeChannel = supabase
-      .channel(`match:${matchId.value}`)
+      .channel(`match:${matchId.value}:${channelSuffix}`)
       .on(
         "postgres_changes",
         {
