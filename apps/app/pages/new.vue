@@ -7,6 +7,7 @@ import {
   defaultPresetBySport,
   sportPresets,
 } from "@sb/engine";
+import { themes as themeRegistry } from "@sb/themes";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import { Input } from "@sb/layer-ui/components/ui/input";
 import { Label } from "@sb/layer-ui/components/ui/label";
@@ -69,12 +70,21 @@ const presetsInSport = computed(() =>
   Object.values(sportPresets).filter((p) => p.sport === sport.value),
 );
 
-const {
-  overlay: overlayTheme,
-  scoreboard: scoreboardTheme,
-  overlayName,
-  scoreboardName,
-} = useThemeChoice(matchId);
+// /new uses local refs for theme choice rather than `useThemeChoice` —
+// the matches row doesn't exist yet, so there's nothing to sync. Avoids
+// a Realtime channel-name collision with /m/[id]'s `useThemeChoice` when
+// navigating: both subscribe to `match-theme:{id}` and the source page
+// hasn't unmounted yet, so supabase returns the same already-subscribed
+// channel and `.on()` errors. The selected values are persisted via the
+// `createMatch()` upsert below.
+const overlayTheme = ref<string>("broadcast-classic");
+const scoreboardTheme = ref<string>("filmable");
+const overlayName = computed(
+  () => themeRegistry[overlayTheme.value]?.manifest.name ?? "—",
+);
+const scoreboardName = computed(
+  () => themeRegistry[scoreboardTheme.value]?.manifest.name ?? "—",
+);
 const themeDialogOpen = ref(false);
 
 const formatNames = (t: { p1: string; p2: string }) =>
@@ -108,6 +118,8 @@ const createMatch = async () => {
       sport_family: "racquet",
       sport_preset: formatPreset.value,
       config: { gamesToWin: gamesToWin.value },
+      overlay_theme_id: overlayTheme.value,
+      scoreboard_theme_id: scoreboardTheme.value,
       is_doubles: isDoubles.value,
       team_name_a: formatNames(teamA.value).trim() || null,
       team_name_b: formatNames(teamB.value).trim() || null,

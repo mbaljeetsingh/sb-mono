@@ -82,15 +82,16 @@ export type Database = {
           event_name: string | null
           id: string
           is_doubles: boolean
+          overlay_theme_id: string
           owner_id: string | null
           players: Json
           round: string | null
+          scoreboard_theme_id: string
           sport_family: string
           sport_preset: string
           started_at: number | null
           team_name_a: string | null
           team_name_b: string | null
-          theme_id: string
           updated_at: string
           venue: string | null
         }
@@ -103,15 +104,16 @@ export type Database = {
           event_name?: string | null
           id: string
           is_doubles?: boolean
+          overlay_theme_id?: string
           owner_id?: string | null
           players?: Json
           round?: string | null
+          scoreboard_theme_id?: string
           sport_family: string
           sport_preset: string
           started_at?: number | null
           team_name_a?: string | null
           team_name_b?: string | null
-          theme_id?: string
           updated_at?: string
           venue?: string | null
         }
@@ -124,15 +126,16 @@ export type Database = {
           event_name?: string | null
           id?: string
           is_doubles?: boolean
+          overlay_theme_id?: string
           owner_id?: string | null
           players?: Json
           round?: string | null
+          scoreboard_theme_id?: string
           sport_family?: string
           sport_preset?: string
           started_at?: number | null
           team_name_a?: string | null
           team_name_b?: string | null
-          theme_id?: string
           updated_at?: string
           venue?: string | null
         }

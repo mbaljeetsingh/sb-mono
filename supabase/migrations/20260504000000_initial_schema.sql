@@ -21,7 +21,8 @@ create table public.matches (
     sport_family    text not null check (sport_family in ('racquet')),
     sport_preset    text not null,                          -- e.g., 'badminton-21', 'badminton-15'
     config          jsonb not null default '{}'::jsonb,
-    theme_id        text not null default 'broadcast-classic',
+    overlay_theme_id    text not null default 'broadcast-classic',
+    scoreboard_theme_id text not null default 'filmable',
     colors          jsonb not null default '{"a": "#dc2626", "b": "#2563eb"}'::jsonb,
     started_at      bigint,                                 -- ms since epoch; null until first point
     -- Display metadata mirrored from `sb:meta:{matchId}` localStorage so any

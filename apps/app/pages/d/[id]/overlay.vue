@@ -25,17 +25,13 @@ const { state, config } = useMatchState(matchIdRef as Ref<string>);
 const { teamNames } = useMatchMeta(matchIdRef as Ref<string>);
 
 // Theme: ?theme= query param wins, then the bound match's stored choice
-// (sb:theme:{matchId}.overlay), then hardcoded baseline.
-const themeChoice = useStorage(
-  computed(() =>
-    matchIdRef.value ? `sb:theme:${matchIdRef.value}` : "sb:theme:__none__",
-  ),
-  { overlay: "broadcast-classic", scoreboard: "filmable" },
-);
+// (Supabase via useThemeChoice — live-syncs when operator swaps themes),
+// then hardcoded baseline.
+const { overlay: overlayTheme } = useThemeChoice(matchIdRef as Ref<string>);
 const themeId = computed(
   () =>
     String(route.query.theme ?? "") ||
-    themeChoice.value.overlay ||
+    overlayTheme.value ||
     "broadcast-classic",
 );
 

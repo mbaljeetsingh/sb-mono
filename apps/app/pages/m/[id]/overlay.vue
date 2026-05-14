@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useStorage } from "@vueuse/core";
 import { getTheme } from "@sb/themes";
 
 definePageMeta({ layout: false });
@@ -7,18 +6,16 @@ definePageMeta({ layout: false });
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
 
-// Theme resolution order: ?theme= query param (per-link override) →
-// `sb:theme:{id}.overlay` (the choice the operator made on /m/[id] or /new) →
-// hardcoded fallback. Means a fresh /m/{id}/overlay link without query string
-// still honors the chosen theme.
-const themeChoice = useStorage(
-  computed(() => `sb:theme:${matchId.value}`),
-  { overlay: "broadcast-classic", scoreboard: "filmable" },
-);
+// Theme resolution order: ?theme= query param (per-link override) → the
+// matches row in Supabase (useThemeChoice — operator's choice + live sync)
+// → hardcoded fallback. A fresh /m/{id}/overlay link without a query string
+// hydrates whichever theme the operator picked on /m/[id], and tracks
+// changes in real time if they switch themes mid-match.
+const { overlay: overlayTheme } = useThemeChoice(matchId);
 const themeId = computed(
   () =>
     String(route.query.theme ?? "") ||
-    themeChoice.value.overlay ||
+    overlayTheme.value ||
     "broadcast-classic",
 );
 

@@ -1,23 +1,21 @@
 import { computed, type Ref } from "vue";
 
-// Build the shareable per-match URLs in one place. Theme refs are optional —
-// when supplied, overlay/scoreboard URLs carry `?theme=` so OBS / venue TV
-// pick up the operator's choice without an extra hop.
-export function useMatchUrls(
-  matchId: Ref<string>,
-  themes?: { overlay: Ref<string>; scoreboard: Ref<string> },
-) {
+// Build the shareable per-match URLs in one place. Themes are now stored on
+// the matches row in Supabase, so the canonical URLs don't need `?theme=`
+// — every device opening the URL hydrates the operator's chosen theme.
+// Themes are still accepted as a query param override at the page level
+// (preview / "force this theme" scenarios), but they're no longer part of
+// the URL we put on the operator's clipboard.
+export function useMatchUrls(matchId: Ref<string>) {
   const baseUrl = computed(() =>
     typeof window === "undefined" ? "" : window.location.origin,
   );
   return computed(() => {
     const base = `${baseUrl.value}/m/${matchId.value}`;
-    const o = themes?.overlay.value;
-    const s = themes?.scoreboard.value;
     return {
       control: `${base}/control`,
-      overlay: o ? `${base}/overlay?theme=${o}` : `${base}/overlay`,
-      scoreboard: s ? `${base}/scoreboard?theme=${s}` : `${base}/scoreboard`,
+      overlay: `${base}/overlay`,
+      scoreboard: `${base}/scoreboard`,
     };
   });
 }

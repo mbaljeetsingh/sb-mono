@@ -113,14 +113,15 @@ on conflict (user_id, role) do nothing;
 -- Match 3: Anonymous match (Persona A — Sunday phone streamer)
 
 insert into public.matches
-  (id, owner_id, sport_family, sport_preset, config, theme_id, colors,
+  (id, owner_id, sport_family, sport_preset, config,
+   overlay_theme_id, scoreboard_theme_id, colors,
    started_at, court_label, round, category, venue)
 values
   ('01HZSBM00000DEMOLIVE0000001',
    'a0000000-0000-4000-8000-000000000003'::uuid,
    'racquet', 'badminton-21',
    '{"sport":"badminton","displayName":"Badminton (21-point, BWF)","pointsPerGame":21,"winBy":2,"cap":30,"gamesToWin":2,"intervalAt":11}'::jsonb,
-   'broadcast-classic',
+   'broadcast-classic', 'filmable',
    '{"a":"#dc2626","b":"#2563eb"}'::jsonb,
    1000, 'Court 3', 'QF', 'Men''s Doubles U-19', 'Xperience Academy'),
 
@@ -128,7 +129,7 @@ values
    'a0000000-0000-4000-8000-000000000002'::uuid,
    'racquet', 'badminton-21',
    '{"sport":"badminton","displayName":"Badminton (21-point, BWF)","pointsPerGame":21,"winBy":2,"cap":30,"gamesToWin":2,"intervalAt":11}'::jsonb,
-   'filmable',
+   'broadcast-classic', 'filmable',
    '{"a":"#dc2626","b":"#2563eb"}'::jsonb,
    1000, 'Court 1', 'F', 'Mixed Doubles', 'Xperience Academy'),
 
@@ -136,7 +137,7 @@ values
    null,
    'racquet', 'badminton-21',
    '{"sport":"badminton","displayName":"Badminton (21-point, BWF)","pointsPerGame":21,"winBy":2,"cap":30,"gamesToWin":2,"intervalAt":11}'::jsonb,
-   'broadcast-classic',
+   'broadcast-classic', 'filmable',
    '{"a":"#dc2626","b":"#2563eb"}'::jsonb,
    1000, 'Court 2', null, null, null);
 

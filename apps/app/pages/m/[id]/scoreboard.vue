@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useStorage } from "@vueuse/core";
 import { getTheme } from "@sb/themes";
 
 definePageMeta({ layout: false });
@@ -7,17 +6,12 @@ definePageMeta({ layout: false });
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
 
-// Same resolution order as the overlay surface — query string wins, stored
-// choice next, hardcoded fallback last.
-const themeChoice = useStorage(
-  computed(() => `sb:theme:${matchId.value}`),
-  { overlay: "broadcast-classic", scoreboard: "filmable" },
-);
+// Same resolution order as the overlay surface — query string wins, the
+// Supabase-backed useThemeChoice next, hardcoded fallback last. Live syncs
+// when the operator changes themes on another device.
+const { scoreboard: scoreboardTheme } = useThemeChoice(matchId);
 const themeId = computed(
-  () =>
-    String(route.query.theme ?? "") ||
-    themeChoice.value.scoreboard ||
-    "filmable",
+  () => String(route.query.theme ?? "") || scoreboardTheme.value || "filmable",
 );
 
 const { state, config } = useMatchState(matchId);

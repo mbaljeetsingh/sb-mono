@@ -33,10 +33,7 @@ const {
   overlayName,
   scoreboardName,
 } = useThemeChoice(matchId);
-const urls = useMatchUrls(matchId, {
-  overlay: overlayTheme,
-  scoreboard: scoreboardTheme,
-});
+const urls = useMatchUrls(matchId);
 
 const showAllUrls = ref(false);
 const themeSheetOpen = ref(false);
