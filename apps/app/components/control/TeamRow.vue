@@ -169,18 +169,31 @@ const isSecondVisualCell = (idx: number) =>
         >
           {{ cell.label }}
         </span>
-        <div
-          v-if="cellIsServer(cell.court)"
-          class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-          :class="
-            team === 'A'
-              ? 'bg-team-a text-team-a-foreground'
-              : 'bg-team-b text-team-b-foreground'
-          "
+        <!-- Service-over cue: when the pill moves between cells (partner
+             swap on serve) or jumps teams (receiver won the rally), a fade
+             + slight slide draws the operator's eye. Without this the pill
+             teleports and is easy to miss in fast rallies. -->
+        <Transition
+          enter-active-class="transition duration-200 ease-out"
+          enter-from-class="opacity-0 scale-90"
+          enter-to-class="opacity-100 scale-100"
+          leave-active-class="transition duration-150 ease-in"
+          leave-from-class="opacity-100"
+          leave-to-class="opacity-0"
         >
-          <span class="size-[5px] rounded-full bg-white animate-pulse-soft" />
-          Serves
-        </div>
+          <div
+            v-if="cellIsServer(cell.court)"
+            class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+            :class="
+              team === 'A'
+                ? 'bg-team-a text-team-a-foreground'
+                : 'bg-team-b text-team-b-foreground'
+            "
+          >
+            <span class="size-[5px] rounded-full bg-white animate-pulse-soft" />
+            Serves
+          </div>
+        </Transition>
       </button>
 
       <!-- Doubles-only: swap of which partner starts on the right (server)

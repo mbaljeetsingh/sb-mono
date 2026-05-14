@@ -196,9 +196,13 @@ export function useEvents(matchId: Ref<string>) {
     const after = new Set(next.map((e) => e.id));
     const removed = [...before].filter((id) => !after.has(id));
 
-    events.value = [...next].sort(sortById);
+    // JSON round-trip strips Vue reactive proxies — same defense as
+    // `append()`. Callers can pass the existing reactive `events.value`
+    // (or a slice of it) without `BroadcastChannel.postMessage` failing.
+    const plain = JSON.parse(JSON.stringify(next)) as RacquetEvent[];
+    events.value = [...plain].sort(sortById);
     persist();
-    channel?.postMessage({ type: "replace", events: next });
+    channel?.postMessage({ type: "replace", events: plain });
 
     // Propagate deletions to Supabase so cross-device viewers see the undo.
     if (removed.length) {

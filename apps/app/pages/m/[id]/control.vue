@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { onLongPress, useStorage, useVibrate, useWakeLock } from "@vueuse/core";
 import {
   ArrowLeft,
@@ -78,6 +78,23 @@ const onTap = (side: SideId) => {
   vibrate(10);
   append({ type: "point", side } as Omit<RacquetEvent, "id" | "ts">);
 };
+
+// Service-over haptic cue. Fires whenever the active server cell changes
+// (team flip OR partner-swap on serve). The visual transition in TeamRow
+// catches the eye; the soft second vibrate confirms the change to the
+// operator without looking. Skip the first tick so opening a page doesn't
+// buzz on initial server assignment.
+const serveSignature = computed(
+  () => `${state.value.servingSide}-${state.value.serverCourt}`,
+);
+let serveWatchSkippedFirst = false;
+watch(serveSignature, () => {
+  if (!serveWatchSkippedFirst) {
+    serveWatchSkippedFirst = true;
+    return;
+  }
+  vibrate(8);
+});
 
 const onUndo = () => {
   vibrate(20);
