@@ -121,6 +121,18 @@ Phase gates from BRD §13 control progression. Don't start phase N+1 until phase
 
 ---
 
+## Backlog · AI / automation (unscheduled)
+
+> Ideas worth keeping but not committed to a phase. Promote into a phase when validated.
+
+| Idea | What it covers |
+|---|---|
+| **B-AI.1 · Voice scoring** | `useSpeechRecognition` composable + command grammar ("left", "right", "undo", "service") emitting into `useEvents`. Cheapest hands-free win; ship as opt-in toggle on `control.vue`. Fails in noisy gyms — keep manual taps as fallback. |
+| **B-AI.2 · CV-assisted scoring (suggest + confirm)** | Phone-camera rally detector: shuttle + player pose + calibrated top-view court (RallyLens-style, ref `https://www.youtube.com/watch?v=fKwac0CsBLc`). Outputs rally-winner suggestions; operator confirms with a tap when confidence < threshold, auto-commits when high. Never full-auto — one wrong point destroys trust. Needs (1) rally state machine, (2) in/out via point-in-polygon on calibrated court, (3) last-hit attribution (hardest in doubles). |
+| **B-AI.3 · Auto-highlights from event log + video** | Pair `events` timestamps with uploaded match video; cut clips around long rallies, game points, match point. Pairs naturally with E2.10 (post-production burn-in). |
+
+---
+
 ## Cross-cutting (any phase, ongoing)
 
 | Track | Description |
