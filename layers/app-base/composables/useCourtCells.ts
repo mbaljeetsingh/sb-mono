@@ -6,17 +6,6 @@ import { computed, type ComputedRef, type Ref } from "vue";
 // whenever the team scores on serve, matching the BWF rule that partners
 // swap courts each time their team wins on serve. The Serves pill follows
 // `serverCourt` directly because the cell IS the court.
-//
-// Trace (doubles): A=0, partnerOnRight.a=1 → right cell shows Player 1, left
-// cell shows Player 2, pill on right cell. A wins → A=1, partnerOnRight.a=2 →
-// right cell shows Player 2, left cell shows Player 1, pill moves to left
-// cell. Player 1 is now visually on the left side, still serving. ✓
-//
-// Singles: still 2 cells so the operator sees the court split, but the name
-// only appears in the active cell. For the serving team that's the cell
-// matching `serverCourt`; for the receiving team it's the diagonal opposite
-// (BWF: receiver stands diagonally across from server, which lands on the
-// same court name because the teams face each other).
 
 export type Cell = {
   key: string;
@@ -36,45 +25,21 @@ type MetaRef = ComputedRef<{
   players: { a1: string; a2: string; b1: string; b2: string };
 }>;
 
-const splitTeam = (joined: string): [string, string] => {
-  if (!joined) return ["", ""];
-  const parts = joined
-    .split(/\s*\/\s*/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return [parts[0] ?? "", parts[1] ?? ""];
-};
-
-// Display-only title case (mirrors useMatchMeta — kept inline to avoid a
-// cross-layer dep). "alice" → "Alice", "alice smith" → "Alice Smith".
+// Display-only title case. Storage keeps user input as-is.
 const titleCase = (s: string) =>
   s ? s.replace(/(^|[^\p{L}])(\p{L})/gu, (_, p, c) => p + c.toUpperCase()) : s;
 
 export function useCourtCells(state: StateRef, meta: MetaRef) {
-  const displayNameA = computed(
-    () => meta.value.teamNames.a?.trim() || "Player 1",
-  );
-  const displayNameB = computed(
-    () => meta.value.teamNames.b?.trim() || "Player 2",
-  );
+  const displayNameA = computed(() => titleCase(meta.value.teamNames.a.trim()));
+  const displayNameB = computed(() => titleCase(meta.value.teamNames.b.trim()));
 
-  // Per-player labels (doubles).
-  // Source order:
-  //   1. Per-player fields persisted by /new (`players.a1` etc).
-  //   2. Split joined `teamNames.a` ("Foo / Bar") — covers older matches and
-  //      the case where the user typed a doubles team as one string.
-  //   3. "Player N" placeholder.
   const playerLabels = computed(() => {
-    const [aP1, aP2] = splitTeam(meta.value.teamNames.a);
-    const [bP1, bP2] = splitTeam(meta.value.teamNames.b);
     const p = meta.value.players;
-    const isDoubles = meta.value.isDoubles;
     return {
-      a1: titleCase(p.a1?.trim() || aP1) || "Player 1",
-      a2: titleCase(p.a2?.trim() || aP2) || "Player 2",
-      b1:
-        titleCase(p.b1?.trim() || bP1) || (isDoubles ? "Player 3" : "Player 2"),
-      b2: titleCase(p.b2?.trim() || bP2) || (isDoubles ? "Player 4" : ""),
+      a1: titleCase(p.a1.trim()),
+      a2: titleCase(p.a2.trim()),
+      b1: titleCase(p.b1.trim()),
+      b2: titleCase(p.b2.trim()),
     };
   });
 

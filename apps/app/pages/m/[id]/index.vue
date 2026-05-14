@@ -4,9 +4,11 @@ import { useClipboard } from "@vueuse/core";
 import { ChevronDown, ChevronUp, Clipboard, Settings } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import { type ThemeSurface } from "@sb/themes";
+import type { MatchMeta } from "@sb/layer-app-base/composables/useMatchMeta";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import MatchHeroCard from "~/components/match/MatchHeroCard.vue";
 import LookAndFeelCards from "~/components/match/LookAndFeelCards.vue";
+import SettingsSheet from "~/components/match/SettingsSheet.vue";
 import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
 
 useSeoMeta({ title: "Match" });
@@ -14,7 +16,17 @@ useSeoMeta({ title: "Match" });
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
 const { state, config, events } = useMatchState(matchId);
-const { teamNames } = useMatchMeta(matchId);
+const { meta, teamNames } = useMatchMeta(matchId);
+
+// Explicit handler — relying on `v-model:meta="meta"` to auto-translate
+// `meta = $event` to `meta.value = $event` is unreliable in template event
+// handlers for top-level setup refs. Wiring the setter from setup-script
+// JS removes the ambiguity: meta.value gets reassigned, the watch fires.
+const onMetaUpdate = (v: MatchMeta) => {
+  meta.value = v;
+};
+
+const settingsOpen = ref(false);
 const {
   overlay: overlayTheme,
   scoreboard: scoreboardTheme,
@@ -76,9 +88,9 @@ const onPickTheme = ({
       <Button
         variant="ghost"
         size="icon"
-        aria-label="Settings (coming in v1.x)"
-        title="Match settings (court, round, category, venue) — coming in v1.x"
-        disabled
+        aria-label="Match settings"
+        title="Match settings — edit team names, tournament info"
+        @click="settingsOpen = true"
       >
         <Settings class="size-4" />
       </Button>
@@ -267,6 +279,13 @@ const onPickTheme = ({
       :overlay-theme="overlayTheme"
       :scoreboard-theme="scoreboardTheme"
       @pick="onPickTheme"
+    />
+
+    <SettingsSheet
+      v-if="settingsOpen"
+      :meta="meta"
+      @update:meta="onMetaUpdate"
+      @close="settingsOpen = false"
     />
   </div>
 </template>

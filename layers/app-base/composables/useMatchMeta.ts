@@ -1,18 +1,21 @@
-import { computed, onMounted, ref, watch, type Ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch, type Ref } from "vue";
 import { watchDebounced } from "@vueuse/core";
 
 // useMatchMeta — per-match display metadata (team / player names + tournament
-// info). Backed by the `matches` row in Supabase so any device that opens the
-// match URL (OBS overlay on a laptop, phone of a co-scorer, browser source on
-// another machine) renders the same names without sharing localStorage.
+// info). Backed by the `matches` row in Supabase + a Realtime UPDATE
+// subscription so any device that opens the match URL stays live-in-sync
+// with the operator's edits (typo fix on phone → OBS overlay re-renders).
 //
-// Read path: fetch the row on mount + on matchId change.
-// Write path: deep watch on `meta`, debounced upsert. Hydration is gated so
-// the initial fetch doesn't echo straight back as a write.
+// Write path: deep watch on `meta` → debounced upsert.
+// Read path: initial fetch on mount + Realtime UPDATE listener thereafter.
+// Echo prevention: track the last-seen-remote snapshot; upsert skips when
+// the current state equals what we just received from Supabase, breaking
+// the write-back loop without time-based heuristics.
 //
-// Events (the scoring stream) still use localStorage-first for fast taps +
-// offline tolerance — that asymmetry is intentional. Meta is read-once per
-// page load; the round-trip is fine. See useEvents for the high-write path.
+// Events (the scoring stream) keep their localStorage-first pattern in
+// useEvents — that asymmetry is intentional. Meta is rarely edited but
+// needs cross-device consistency; events tap-rate + offline tolerance
+// justifies a separate caching strategy there.
 
 export type MatchMeta = {
   sport?: string;
@@ -68,9 +71,19 @@ const fromRow = (row: {
 export function useMatchMeta(matchId: Ref<string>) {
   const supabase = useSupabaseClient();
   const meta = ref<MatchMeta>({});
-  // Gate writes during hydration so the initial fetch doesn't immediately
-  // echo back as an upsert. Cleared once Vue's reactive flush has run.
-  let hydrating = false;
+  // Snapshot of the last value applied from Supabase. The watch-driven
+  // upsert compares to this and skips when they match — that's how we
+  // suppress the originator's own UPDATE echoing back as a duplicate write.
+  let lastSeenRemote: string | null = null;
+  let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+
+  const applyRemote = (row: Parameters<typeof fromRow>[0]) => {
+    const incoming = fromRow(row);
+    const incomingStr = JSON.stringify(incoming);
+    if (incomingStr === JSON.stringify(meta.value)) return;
+    lastSeenRemote = incomingStr;
+    meta.value = incoming;
+  };
 
   const fetchRemote = async () => {
     const id = matchId.value;
@@ -86,23 +99,15 @@ export function useMatchMeta(matchId: Ref<string>) {
       console.warn("[useMatchMeta] fetch failed", error);
       return;
     }
-    if (!data) return;
-    hydrating = true;
-    meta.value = fromRow(data);
-    // Release after the debounce window so the trailing watch tick is
-    // suppressed too. 600ms > the 500ms debounce below.
-    setTimeout(() => {
-      hydrating = false;
-    }, 600);
+    if (data) applyRemote(data);
   };
 
   const upsertRemote = async () => {
-    if (hydrating) return;
     const id = matchId.value;
     if (!id) return;
     const m = meta.value;
-    // Don't create an empty row just because the composable mounted on a
-    // surface with no data to persist (e.g. an overlay reading remote).
+    // Empty-content guard — don't create a stub row just because a viewer
+    // mounted the composable with nothing to persist (e.g. overlay-only).
     const hasContent =
       m.teamNames?.a ||
       m.teamNames?.b ||
@@ -115,6 +120,27 @@ export function useMatchMeta(matchId: Ref<string>) {
       m.category ||
       m.courtLabel;
     if (!hasContent) return;
+    // Echo guard — current state was just hydrated from Supabase; nothing
+    // new to push back. Realtime UPDATE round-trips of our own writes are
+    // skipped here so we don't loop.
+    const currentStr = JSON.stringify({
+      sport: "racquet",
+      sportPreset: m.sportPreset,
+      isDoubles: m.isDoubles ?? false,
+      teamNames: { a: m.teamNames?.a ?? "", b: m.teamNames?.b ?? "" },
+      players: {
+        a1: m.players?.a1 ?? "",
+        a2: m.players?.a2 ?? "",
+        b1: m.players?.b1 ?? "",
+        b2: m.players?.b2 ?? "",
+      },
+      eventName: m.eventName,
+      round: m.round,
+      category: m.category,
+      courtLabel: m.courtLabel,
+    });
+    if (currentStr === lastSeenRemote) return;
+
     const { error } = await supabase.from("matches").upsert(
       {
         id,
@@ -131,24 +157,60 @@ export function useMatchMeta(matchId: Ref<string>) {
       },
       { onConflict: "id" },
     );
-    if (error) console.warn("[useMatchMeta] upsert failed", error);
+    if (error) {
+      console.warn("[useMatchMeta] upsert failed", error);
+      return;
+    }
+    // Remember what we sent so the realtime echo skips itself.
+    lastSeenRemote = currentStr;
+  };
+
+  const subscribeRealtime = () => {
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+    const id = matchId.value;
+    if (!id) return;
+    realtimeChannel = supabase
+      .channel(`match-meta:${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "matches",
+          filter: `id=eq.${id}`,
+        },
+        (payload) => applyRemote(payload.new as Parameters<typeof fromRow>[0]),
+      )
+      .subscribe();
   };
 
   onMounted(() => {
     fetchRemote();
+    subscribeRealtime();
   });
 
   watch(matchId, () => {
     fetchRemote();
+    subscribeRealtime();
+  });
+
+  onUnmounted(() => {
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
   });
 
   watchDebounced(meta, () => upsertRemote(), { debounce: 500, deep: true });
 
-  // Display names with placeholder fallback. Empty user input is treated as
-  // "no name given" — themes show "Team A" / "Team B" rather than literal blanks.
+  // Display names — title-cased exactly as typed. No placeholder fallback;
+  // /new always seeds these. An empty string flows through unchanged.
   const teamNames = computed(() => ({
-    a: titleCase(meta.value.teamNames?.a?.trim() || "") || "Team A",
-    b: titleCase(meta.value.teamNames?.b?.trim() || "") || "Team B",
+    a: titleCase(meta.value.teamNames?.a?.trim() ?? ""),
+    b: titleCase(meta.value.teamNames?.b?.trim() ?? ""),
   }));
 
   return { meta, teamNames };

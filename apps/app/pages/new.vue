@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, watchEffect } from "vue";
-import { useStorage } from "@vueuse/core";
+import { computed, ref, watch } from "vue";
 import { Minus, Play, Plus } from "lucide-vue-next";
 import { ulid } from "ulid";
 import {
@@ -24,9 +23,9 @@ useSeoMeta({ title: "New match" });
 type MatchLength = "single" | "best-of";
 
 // Pre-generate the match id on form mount. Form fields bind to local refs;
-// a watchEffect syncs them into useStorage refs keyed by this id, so each
-// keystroke auto-persists and `/m/[id]` is ready the moment we navigate.
-// Free crash recovery — re-opening the same id picks up where we left off.
+// nothing persists until `createMatch()` upserts a single matches row to
+// Supabase and we navigate. Backing out of /new without submitting leaves
+// no orphan data anywhere.
 const matchId = ref(ulid());
 
 const sport = ref<SportId>("badminton");
@@ -81,37 +80,34 @@ const themeDialogOpen = ref(false);
 const formatNames = (t: { p1: string; p2: string }) =>
   isDoubles.value && t.p2 ? `${t.p1} / ${t.p2}` : t.p1;
 
-// Format selection stays in localStorage for the operator's session — the
-// format strip on /control reads from these keys. Cross-device format sync
-// (so OBS knows BO3 vs BO5) is a follow-up; today the matches.sport_preset
-// column carries enough for themes to render correctly.
-const presetStorage = useStorage<SportPresetId>(
-  computed(() => `sb:format:preset:${matchId.value}`),
-  "badminton-21",
-);
-const gamesToWinStorage = useStorage<number>(
-  computed(() => `sb:format:gamesToWin:${matchId.value}`),
-  1,
-);
-
-watchEffect(() => {
-  presetStorage.value = formatPreset.value;
-  gamesToWinStorage.value = gamesToWin.value;
-});
-
 const supabase = useSupabaseClient();
 const supabaseUser = useSupabaseUser();
 
-// Persist meta + create the matches row, then navigate. This is the only
-// writer to the `matches` row at match creation — useEvents.ensureMatchRow
-// will short-circuit when it finds the row already exists.
+// Persist meta + format + create the matches row, then navigate. This is
+// the only writer to the `matches` row at match creation — useEvents
+// .ensureMatchRow will short-circuit when it finds the row already exists.
+// useMatchMeta / useFormat on /m/[id] hydrate from this row across every
+// device that opens the URL (OBS overlay on a laptop, co-scorer's phone).
+// Names required to create. Singles: 1 name per team. Doubles: 2 per team
+// — the cell-level partner-swap UX needs per-player identity to be
+// meaningful, so all four are mandatory in that mode. Empty strings get
+// trimmed before the check so a single space doesn't count.
+const canCreate = computed(() => {
+  if (!teamA.value.p1.trim() || !teamB.value.p1.trim()) return false;
+  if (isDoubles.value && (!teamA.value.p2.trim() || !teamB.value.p2.trim()))
+    return false;
+  return true;
+});
+
 const createMatch = async () => {
+  if (!canCreate.value) return;
   const { error } = await supabase.from("matches").upsert(
     {
       id: matchId.value,
       owner_id: supabaseUser.value?.id ?? null,
       sport_family: "racquet",
       sport_preset: formatPreset.value,
+      config: { gamesToWin: gamesToWin.value },
       is_doubles: isDoubles.value,
       team_name_a: formatNames(teamA.value).trim() || null,
       team_name_b: formatNames(teamB.value).trim() || null,
@@ -357,10 +353,11 @@ const createMatch = async () => {
         type="button"
         size="lg"
         class="w-full h-12 text-base font-semibold"
+        :disabled="!canCreate"
         @click="createMatch"
       >
         <Play class="size-4" />
-        Create match
+        {{ canCreate ? "Create match" : "Enter team names to continue" }}
       </Button>
     </footer>
   </div>
