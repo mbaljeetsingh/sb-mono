@@ -92,10 +92,10 @@ set session_replication_role = default;
 -- Re-create the rows it would have inserted so the seed is consistent end-state.
 
 insert into public.users (id, email, display_name, avatar_url) values
-  ('a0000000-0000-4000-8000-000000000001'::uuid, 'admin@scoreboard.com',    'Admin',                  null),
-  ('a0000000-0000-4000-8000-000000000002'::uuid, 'coach@scoreboard.com',    'Coach Sharma',           null),
-  ('a0000000-0000-4000-8000-000000000003'::uuid, 'streamer@scoreboard.com', 'Arjun (OBS streamer)',   null),
-  ('a0000000-0000-4000-8000-000000000004'::uuid, 'player@scoreboard.com',   'Priya',                  null)
+  ('a0000000-0000-4000-8000-000000000001'::uuid, 'admin@scoreboard.com',    split_part('admin@scoreboard.com',    '@', 1), null),
+  ('a0000000-0000-4000-8000-000000000002'::uuid, 'coach@scoreboard.com',    split_part('coach@scoreboard.com',    '@', 1), null),
+  ('a0000000-0000-4000-8000-000000000003'::uuid, 'streamer@scoreboard.com', split_part('streamer@scoreboard.com', '@', 1), null),
+  ('a0000000-0000-4000-8000-000000000004'::uuid, 'player@scoreboard.com',   split_part('player@scoreboard.com',   '@', 1), null)
 on conflict (id) do nothing;
 
 insert into public.user_roles (user_id, role) values

@@ -190,6 +190,11 @@ BEGIN
         user_meta ->> 'name'
     );
 
+    -- Fallback: extract prefix from email (before @) for email signups with no provider name.
+    IF derived_name IS NULL AND user_email IS NOT NULL THEN
+        derived_name := split_part(user_email, '@', 1);
+    END IF;
+
     derived_avatar := COALESCE(
         user_meta ->> 'avatar_url',
         user_meta ->> 'picture'

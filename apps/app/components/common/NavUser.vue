@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { LogOut, User as UserIcon, ShieldCheck } from "lucide-vue-next";
+import { LogOut, User as UserIcon } from "lucide-vue-next";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import {
   DropdownMenu,
@@ -25,7 +25,6 @@ const displayName = computed(
 const email = computed(
   () => profile.value?.email || userStore.currentUser?.email || "",
 );
-const role = computed(() => userStore.userRole);
 </script>
 
 <template>
@@ -58,12 +57,6 @@ const role = computed(() => userStore.userRole);
         <NuxtLink to="/profile" class="flex w-full items-center gap-2">
           <UserIcon class="h-4 w-4" />
           Profile
-        </NuxtLink>
-      </DropdownMenuItem>
-      <DropdownMenuItem v-if="role === 'admin'" as-child>
-        <NuxtLink to="/admin" class="flex w-full items-center gap-2">
-          <ShieldCheck class="h-4 w-4" />
-          Admin
         </NuxtLink>
       </DropdownMenuItem>
       <DropdownMenuSeparator />
