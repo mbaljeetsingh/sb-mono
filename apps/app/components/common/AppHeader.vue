@@ -14,6 +14,12 @@ const userStore = useUserStore();
 
     <div class="flex items-center gap-3">
       <template v-if="userStore.isAuthenticated">
+        <NuxtLink
+          to="/matches"
+          class="text-sm font-medium text-fg-muted underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Matches
+        </NuxtLink>
         <NavUser />
       </template>
       <template v-else>

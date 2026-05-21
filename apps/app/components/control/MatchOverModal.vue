@@ -14,7 +14,7 @@ defineProps<{
 }>();
 
 defineEmits<{
-  (e: "new-match"): void;
+  (e: "rematch"): void;
   (e: "back"): void;
 }>();
 
@@ -51,9 +51,9 @@ const labels = {
         <Button
           size="lg"
           class="h-12 w-full font-semibold"
-          @click="$emit('new-match')"
+          @click="$emit('rematch')"
         >
-          New match
+          Rematch — same teams
         </Button>
         <Button variant="ghost" class="w-full" @click="$emit('back')">
           Back to dashboard

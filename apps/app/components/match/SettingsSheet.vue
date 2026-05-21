@@ -10,17 +10,30 @@
 // doubles); format changes belong in the /control FormatSheet because
 // that's where the operator already is when adjusting mid-match.
 
-import { X } from "lucide-vue-next";
+import { Trash2, X } from "lucide-vue-next";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import { Input } from "@sb/layer-ui/components/ui/input";
 import { Label } from "@sb/layer-ui/components/ui/label";
+import DeleteMatchDialog from "~/components/match/DeleteMatchDialog.vue";
 import type { MatchMeta } from "@sb/layer-app-base/composables/useMatchMeta";
+
+const props = defineProps<{ matchId: string }>();
 
 const meta = defineModel<MatchMeta>("meta", { required: true });
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "close"): void;
+  (e: "deleted"): void;
 }>();
+
+const matchLabel = computed(() => {
+  const a = meta.value.teamNames?.a?.trim();
+  const b = meta.value.teamNames?.b?.trim();
+  if (a && b) return `${a} vs ${b}`;
+  return "";
+});
+
+const onDeleted = () => emit("deleted");
 
 const updateString = (path: keyof MatchMeta, value: string) => {
   meta.value = { ...meta.value, [path]: value };
@@ -233,6 +246,27 @@ const updateTeamName = (side: "a" | "b", value: string) => {
       <Button variant="ghost" class="w-full" @click="$emit('close')">
         Done
       </Button>
+
+      <!-- Danger zone -->
+      <section class="mt-6 border-t pt-4">
+        <div
+          class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
+        >
+          Danger zone
+        </div>
+        <DeleteMatchDialog
+          :match-id="props.matchId"
+          :match-label="matchLabel"
+          @deleted="onDeleted"
+        >
+          <template #trigger>
+            <Button variant="destructive" class="w-full gap-2">
+              <Trash2 class="size-4" />
+              Delete match
+            </Button>
+          </template>
+        </DeleteMatchDialog>
+      </section>
     </div>
   </div>
 </template>

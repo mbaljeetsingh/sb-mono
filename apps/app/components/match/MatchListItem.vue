@@ -1,0 +1,114 @@
+<script setup lang="ts">
+// Single row in the signed-in user's match list. Owns the row layout, the
+// kebab-menu actions, and the delete-confirmation flow — so the parent
+// `/matches` page stays a thin list shell that just fetches + paginates.
+
+import { computed } from "vue";
+import { MoreVertical, Trash2 } from "lucide-vue-next";
+import { Button } from "@sb/layer-ui/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@sb/layer-ui/components/ui/dropdown-menu";
+import DeleteMatchDialog from "~/components/match/DeleteMatchDialog.vue";
+
+const props = defineProps<{
+  id: string;
+  sportPreset: string;
+  gamesToWin: number;
+  teamNameA: string | null;
+  teamNameB: string | null;
+  eventName: string | null;
+  courtLabel: string | null;
+  updatedAt: string;
+}>();
+
+const formatBadge = computed(() => {
+  if (props.gamesToWin <= 1) return null;
+  return `BO${props.gamesToWin * 2 - 1}`;
+});
+
+const emit = defineEmits<{
+  (e: "deleted", id: string): void;
+}>();
+
+const label = computed(() => {
+  const a = props.teamNameA?.trim() || "Team A";
+  const b = props.teamNameB?.trim() || "Team B";
+  return `${a} vs ${b}`;
+});
+
+const sportLabel = computed(() => props.sportPreset.replace(/-/g, " "));
+
+const formattedDate = computed(() => {
+  const d = new Date(props.updatedAt);
+  const diffMin = Math.floor((Date.now() - d.getTime()) / 60_000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return d.toLocaleDateString();
+});
+
+const onDeleted = () => emit("deleted", props.id);
+</script>
+
+<template>
+  <li
+    class="rounded-lg border border-border bg-surface transition hover:border-border-strong"
+  >
+    <div class="flex items-center gap-2 pr-2">
+      <NuxtLink :to="`/m/${id}/control`" class="min-w-0 flex-1 px-4 py-3">
+        <div class="flex items-center gap-2">
+          <span class="truncate text-[15px] font-medium">{{ label }}</span>
+          <span
+            v-if="formatBadge"
+            class="shrink-0 rounded-sm bg-brand/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-brand"
+          >
+            {{ formatBadge }}
+          </span>
+        </div>
+        <div class="mt-0.5 flex items-center gap-2 text-xs text-fg-muted">
+          <span class="capitalize">{{ sportLabel }}</span>
+          <span v-if="eventName">· {{ eventName }}</span>
+          <span v-if="courtLabel">· {{ courtLabel }}</span>
+          <span>· {{ formattedDate }}</span>
+        </div>
+      </NuxtLink>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Match actions"
+            @click.stop
+          >
+            <MoreVertical class="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" class="w-44">
+          <DeleteMatchDialog
+            :match-id="id"
+            :match-label="label"
+            @deleted="onDeleted"
+          >
+            <template #trigger>
+              <DropdownMenuItem
+                class="text-destructive focus:text-destructive"
+                @select.prevent
+              >
+                <Trash2 class="mr-2 size-4" />
+                Delete
+              </DropdownMenuItem>
+            </template>
+          </DeleteMatchDialog>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  </li>
+</template>

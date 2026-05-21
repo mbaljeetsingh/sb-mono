@@ -368,6 +368,13 @@ const winnerName = computed(() =>
 );
 const goHome = () => navigateTo(`/m/${matchId.value}`);
 
+// "New match" used to wipe events in-place via replace([]) — destructive,
+// erased the finished match from history. Rematch now navigates to /new
+// with the source id so the form pre-fills the same teams/format/court;
+// submitting creates a new match row, preserving the just-played one.
+const onRematch = () =>
+  navigateTo({ path: "/new", query: { rematch: matchId.value } });
+
 // Orientation prop for TeamRow: geometric edge each team occupies. Combines
 // outer layout with the visual sides-swap toggle.
 type Orientation = "top" | "bottom" | "left" | "right";
@@ -591,7 +598,7 @@ const orientationB = computed<Orientation>(() => {
         :end-reason="state.endReason"
         :winner-name="winnerName"
         :games-won="gamesWon"
-        @new-match="onReset"
+        @rematch="onRematch"
         @back="goHome"
       />
 
@@ -640,6 +647,7 @@ const orientationB = computed<Orientation>(() => {
         :initial-games="state.games"
         :initial-games-won="state.gamesWon"
         :games-to-win="config.gamesToWin"
+        :team-names="{ a: displayNameA, b: displayNameB }"
         @apply="onApplyScoreCorrect"
         @close="closeSheet"
       />

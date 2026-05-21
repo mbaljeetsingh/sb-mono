@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { Minus, Play, Plus } from "lucide-vue-next";
 import { ulid } from "ulid";
 import {
@@ -18,6 +18,7 @@ import {
 import SportPicker, { type SportId } from "~/components/match/SportPicker.vue";
 import LookAndFeelCards from "~/components/match/LookAndFeelCards.vue";
 import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
+import { useUserStore } from "~/stores/user";
 
 useSeoMeta({ title: "New match" });
 
@@ -87,11 +88,82 @@ const scoreboardName = computed(
 );
 const themeDialogOpen = ref(false);
 
+// Rematch prefill — when ?rematch={sourceMatchId} is present, copy the
+// source match's settings into this form. New ULID + new row; the source
+// match stays untouched in /matches history.
+const route = useRoute();
+const supabase = useSupabaseClient();
+
+const rematchSourceId = computed(() => {
+  const raw = route.query.rematch;
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+});
+
+const splitPlayers = (joined: string | null | undefined): [string, string] => {
+  if (!joined) return ["", ""];
+  const parts = joined.split(/\s*\/\s*/);
+  return [parts[0] ?? "", parts[1] ?? ""];
+};
+
+onMounted(async () => {
+  const src = rematchSourceId.value;
+  if (!src) return;
+  const { data, error } = await supabase
+    .from("matches")
+    .select(
+      "sport_preset, config, is_doubles, players, team_name_a, team_name_b, overlay_theme_id, scoreboard_theme_id, event_name, round, court_label",
+    )
+    .eq("id", src)
+    .maybeSingle();
+  if (error || !data) return;
+
+  const preset = data.sport_preset as SportPresetId;
+  const entry = sportPresets[preset];
+  if (entry) {
+    sport.value = entry.sport as SportId;
+    // Wait for the sport-watch to fire (it snaps formatPreset + matchLength
+    // to that sport's natural defaults) before overwriting with the source
+    // match's actual values, so our prefill wins.
+    await nextTick();
+    formatPreset.value = preset;
+  }
+  const gw = Number((data.config as { gamesToWin?: number })?.gamesToWin ?? 1);
+  if (gw <= 1) {
+    matchLength.value = "single";
+  } else {
+    matchLength.value = "best-of";
+    bestOfN.value = gw * 2 - 1;
+  }
+  isDoubles.value = !!data.is_doubles;
+  const players = (data.players ?? {}) as {
+    a1?: string;
+    a2?: string;
+    b1?: string;
+    b2?: string;
+  };
+  if (data.is_doubles) {
+    teamA.value = { p1: players.a1 ?? "", p2: players.a2 ?? "" };
+    teamB.value = { p1: players.b1 ?? "", p2: players.b2 ?? "" };
+  } else {
+    const [a1] = splitPlayers(data.team_name_a);
+    const [b1] = splitPlayers(data.team_name_b);
+    teamA.value = { p1: a1 || players.a1 || "", p2: "" };
+    teamB.value = { p1: b1 || players.b1 || "", p2: "" };
+  }
+  overlayTheme.value = data.overlay_theme_id ?? "broadcast-classic";
+  scoreboardTheme.value = data.scoreboard_theme_id ?? "filmable";
+  eventName.value = data.event_name ?? "";
+  round.value = data.round ?? "";
+  courtLabel.value = data.court_label ?? "";
+});
+
 const formatNames = (t: { p1: string; p2: string }) =>
   isDoubles.value && t.p2 ? `${t.p1} / ${t.p2}` : t.p1;
 
-const supabase = useSupabaseClient();
-const supabaseUser = useSupabaseUser();
+// Use the user store (hydrated by the global auth middleware) rather than
+// useSupabaseUser() — the latter can lag on first paint and result in
+// owner_id=null even when the user is signed in.
+const userStore = useUserStore();
 
 // Persist meta + format + create the matches row, then navigate. This is
 // the only writer to the `matches` row at match creation — useEvents
@@ -114,7 +186,7 @@ const createMatch = async () => {
   const { error } = await supabase.from("matches").upsert(
     {
       id: matchId.value,
-      owner_id: supabaseUser.value?.id ?? null,
+      owner_id: userStore.currentUser?.id ?? null,
       sport_family: "racquet",
       sport_preset: formatPreset.value,
       config: { gamesToWin: gamesToWin.value },

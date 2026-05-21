@@ -10,6 +10,7 @@ import MatchHeroCard from "~/components/match/MatchHeroCard.vue";
 import LookAndFeelCards from "~/components/match/LookAndFeelCards.vue";
 import SettingsSheet from "~/components/match/SettingsSheet.vue";
 import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
+import { useUserStore } from "~/stores/user";
 
 useSeoMeta({ title: "Match" });
 
@@ -27,6 +28,12 @@ const onMetaUpdate = (v: MatchMeta) => {
 };
 
 const settingsOpen = ref(false);
+
+const userStore = useUserStore();
+const onMatchDeleted = () => {
+  settingsOpen.value = false;
+  navigateTo(userStore.isAuthenticated ? "/matches" : "/");
+};
 const {
   overlay: overlayTheme,
   scoreboard: scoreboardTheme,
@@ -280,9 +287,11 @@ const onPickTheme = ({
 
     <SettingsSheet
       v-if="settingsOpen"
+      :match-id="matchId"
       :meta="meta"
       @update:meta="onMetaUpdate"
       @close="settingsOpen = false"
+      @deleted="onMatchDeleted"
     />
   </div>
 </template>

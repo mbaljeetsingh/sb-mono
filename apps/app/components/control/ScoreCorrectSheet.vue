@@ -10,6 +10,7 @@ const props = defineProps<{
   /** Total games needed to win the match. `1` = single-game format; the
    *  games-won concept is meaningless and we hide that input. */
   gamesToWin: number;
+  teamNames: { a: string; b: string };
 }>();
 
 const emit = defineEmits<{
@@ -70,6 +71,19 @@ const apply = () => {
     >
       Set correct scores
     </div>
+    <!-- Team-name header so the operator knows which column is which. The
+         per-row inputs reuse the same column geometry + team-color left
+         borders so it stays obvious as they scroll through games. -->
+    <div class="flex items-center gap-2 mb-1.5">
+      <div class="w-8" />
+      <div class="flex-1 truncate text-[11px] font-semibold text-team-a">
+        {{ teamNames.a || "Team A" }}
+      </div>
+      <span class="w-3" />
+      <div class="flex-1 truncate text-[11px] font-semibold text-team-b">
+        {{ teamNames.b || "Team B" }}
+      </div>
+    </div>
     <div class="flex flex-col gap-2 mb-3 flex-1 overflow-y-auto">
       <div v-for="(g, i) in games" :key="i" class="flex items-center gap-2">
         <div class="w-8 text-[11px] font-semibold text-fg-subtle">
@@ -79,14 +93,14 @@ const apply = () => {
           v-model="g.a"
           type="number"
           inputmode="numeric"
-          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
+          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums border-l-4 border-l-team-a"
         />
         <span class="text-fg-muted">—</span>
         <Input
           v-model="g.b"
           type="number"
           inputmode="numeric"
-          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
+          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums border-l-4 border-l-team-b"
         />
       </div>
     </div>
@@ -105,7 +119,7 @@ const apply = () => {
           type="number"
           inputmode="numeric"
           min="0"
-          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
+          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums border-l-4 border-l-team-a"
         />
         <span class="text-fg-muted self-center">vs</span>
         <Input
@@ -113,7 +127,7 @@ const apply = () => {
           type="number"
           inputmode="numeric"
           min="0"
-          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums"
+          class="flex-1 h-10 text-center font-mono text-base font-semibold tabular-nums border-l-4 border-l-team-b"
         />
       </div>
     </template>

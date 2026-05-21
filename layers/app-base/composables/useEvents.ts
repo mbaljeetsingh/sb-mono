@@ -134,7 +134,12 @@ export function useEvents(matchId: Ref<string>) {
     }
     if (existing) return;
 
-    const ownerId = supabaseUser.value?.id ?? null;
+    // Read from getSession() rather than the reactive `useSupabaseUser()` —
+    // on first paint the ref can still be null even when the cookie session
+    // is valid, which would orphan the row with owner_id=null.
+    const { data: sessionData } = await supabase.auth.getSession();
+    const ownerId =
+      sessionData.session?.user?.id ?? supabaseUser.value?.id ?? null;
     const { error: insertError } = await supabase.from("matches").insert({
       id,
       owner_id: ownerId,

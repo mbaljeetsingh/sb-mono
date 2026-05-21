@@ -169,7 +169,13 @@ export const wouldWinGameWithPoint = (
 };
 
 /**
- * Trim the most recent point or game.end event so callers can re-reduce for a true undo.
+ * Trim the most recent state-changing event so callers can re-reduce for a true undo.
+ *
+ * Recognized as "the last thing the operator did": point | game.end | score.correct.
+ * Undoing a `score.correct` reverts the snapshot — without this, Undo after a
+ * correction silently no-ops because the correction keeps stomping the trimmed
+ * point's contribution on every replay.
+ *
  * Pure: returns a new array.
  */
 export const trimLastPointOrGameEnd = (
@@ -177,7 +183,7 @@ export const trimLastPointOrGameEnd = (
 ): RacquetEvent[] => {
   for (let i = events.length - 1; i >= 0; i--) {
     const t = events[i]!.type;
-    if (t === "point" || t === "game.end") {
+    if (t === "point" || t === "game.end" || t === "score.correct") {
       return [...events.slice(0, i), ...events.slice(i + 1)];
     }
   }
