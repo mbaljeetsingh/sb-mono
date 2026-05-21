@@ -2,7 +2,7 @@
 import { useStorage } from "@vueuse/core";
 import { getTheme } from "@sb/themes";
 
-definePageMeta({ layout: false });
+definePageMeta({ layout: false, colorMode: "light" });
 
 const route = useRoute();
 const dynamicId = computed(() => String(route.params.id ?? ""));

@@ -6,7 +6,21 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineNuxtConfig({
   extends: ["../../layers/app-base", "../../layers/ui"],
-  modules: ["@nuxtjs/supabase", "shadcn-nuxt", "@vite-pwa/nuxt"],
+  modules: [
+    "@nuxtjs/supabase",
+    "shadcn-nuxt",
+    "@vite-pwa/nuxt",
+    "@nuxtjs/color-mode",
+  ],
+  // Dark-mode handling. Broadcast surfaces (scoreboard / overlay / control)
+  // opt out per-page via `definePageMeta({ colorMode: 'light' })` so the
+  // user's preference never tints an OBS feed or venue TV.
+  colorMode: {
+    classSuffix: "",
+    storageKey: "sb:theme",
+    preference: "system",
+    fallback: "light",
+  },
   devtools: { enabled: true },
   // Some shadcn-vue components in `layers/ui` import via the bare path
   // `layers/ui/components/ui/...` (a quirk of the shadcn-vue --cwd behavior

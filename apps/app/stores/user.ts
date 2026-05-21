@@ -6,6 +6,7 @@ import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 import { useDocumentVisibility } from "@vueuse/core";
 import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
+import { claimAnonymousMatches } from "~/lib/localMatches";
 
 interface UserProfile {
   id: string;
@@ -214,10 +215,19 @@ export const useUserStore = defineStore("user", () => {
     if (!listenersReady) {
       listenersReady = true;
       supabase.auth.onAuthStateChange(
-        (_event: AuthChangeEvent, _session: Session | null) => {
+        (event: AuthChangeEvent, session: Session | null) => {
           // setTimeout avoids the well-known Supabase deadlock when calling auth in the listener.
           setTimeout(() => {
             synchronizeUserState().catch(console.error);
+            // Claim any anonymous matches this browser scored before signing in.
+            // SIGNED_IN fires on every fresh sign-in / token refresh after a sign-in;
+            // the UPDATE is idempotent (rows already claimed are filtered by the
+            // `owner_id IS NULL` guard inside claimAnonymousMatches).
+            if (event === "SIGNED_IN" && session?.user?.id) {
+              claimAnonymousMatches(supabase, session.user.id).catch(
+                console.error,
+              );
+            }
           }, 0);
         },
       );

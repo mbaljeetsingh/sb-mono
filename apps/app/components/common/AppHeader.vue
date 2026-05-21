@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import AppLogo from "~/components/common/AppLogo.vue";
 import NavUser from "~/components/common/NavUser.vue";
+import ThemeToggle from "~/components/common/ThemeToggle.vue";
+import { Separator } from "@sb/layer-ui/components/ui/separator";
 import { useUserStore } from "~/stores/user";
 
 const userStore = useUserStore();
@@ -13,13 +15,14 @@ const userStore = useUserStore();
     <AppLogo link-to="/" size="md" />
 
     <div class="flex items-center gap-3">
+      <NuxtLink
+        to="/matches"
+        class="text-sm font-medium text-fg-muted underline-offset-4 hover:text-foreground hover:underline"
+      >
+        Matches
+      </NuxtLink>
+      <Separator orientation="vertical" class="h-5" />
       <template v-if="userStore.isAuthenticated">
-        <NuxtLink
-          to="/matches"
-          class="text-sm font-medium text-fg-muted underline-offset-4 hover:text-foreground hover:underline"
-        >
-          Matches
-        </NuxtLink>
         <NavUser />
       </template>
       <template v-else>
@@ -30,6 +33,7 @@ const userStore = useUserStore();
           Sign in
         </NuxtLink>
       </template>
+      <ThemeToggle />
     </div>
   </header>
 </template>

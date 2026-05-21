@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, useTemplateRef } from "vue";
+import { ref, computed, useTemplateRef, watch } from "vue";
 import { useInfiniteScroll } from "@vueuse/core";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import MatchListItem from "~/components/match/MatchListItem.vue";
 import { useUserStore } from "~/stores/user";
+import { readLocalMatches } from "~/lib/localMatches";
 
-definePageMeta({ requiresAuth: true });
 useSeoMeta({ title: "Matches · Scoreboard" });
 
 type MatchRow = {
@@ -24,13 +24,14 @@ const PAGE_SIZE = 20;
 const supabase = useSupabaseClient();
 const userStore = useUserStore();
 const ownerId = computed(() => userStore.currentUser?.id ?? "");
+const isAuthed = computed(() => userStore.isAuthenticated);
 
 const matches = ref<MatchRow[]>([]);
 const loading = ref(false);
 const done = ref(false);
 const error = ref<string | null>(null);
 
-const loadMore = async () => {
+const loadRemote = async () => {
   if (loading.value || done.value || !ownerId.value) return;
   loading.value = true;
   const from = matches.value.length;
@@ -53,13 +54,42 @@ const loadMore = async () => {
   if (rows.length < PAGE_SIZE) done.value = true;
 };
 
+// Signed-out: list matches scored on this device from localStorage. No
+// pagination needed — local lists are tiny and finite.
+const loadLocal = () => {
+  matches.value = readLocalMatches();
+  done.value = true;
+};
+
+const reload = () => {
+  matches.value = [];
+  done.value = false;
+  error.value = null;
+  if (isAuthed.value) loadRemote();
+  else loadLocal();
+};
+
 const scroller = useTemplateRef<HTMLElement>("scroller");
-useInfiniteScroll(scroller, loadMore, { distance: 200 });
-onMounted(loadMore);
+useInfiniteScroll(
+  scroller,
+  () => {
+    if (isAuthed.value) loadRemote();
+  },
+  { distance: 200 },
+);
+
+onMounted(reload);
+// Re-source the list when auth state flips (sign-in claim → matches return
+// from Supabase; sign-out → fall back to localStorage view).
+watch(isAuthed, reload);
 
 const onMatchDeleted = (id: string) => {
   matches.value = matches.value.filter((m) => m.id !== id);
 };
+
+const emptyLabel = computed(() =>
+  isAuthed.value ? "No matches yet." : "No matches on this device yet.",
+);
 </script>
 
 <template>
@@ -76,6 +106,15 @@ const onMatchDeleted = (id: string) => {
         Start a match →
       </NuxtLink>
     </header>
+
+    <p
+      v-if="!isAuthed"
+      class="mb-4 rounded-md border border-dashed border-border-strong bg-surface px-3 py-2 text-xs text-fg-muted"
+    >
+      Showing matches scored on this device.
+      <NuxtLink to="/auth/signin" class="underline">Sign in</NuxtLink>
+      to sync them to your account and access from anywhere.
+    </p>
 
     <div
       v-if="error"
@@ -104,7 +143,7 @@ const onMatchDeleted = (id: string) => {
       v-if="!loading && matches.length === 0 && !error"
       class="rounded-md border border-dashed border-border-strong bg-surface px-4 py-10 text-center text-sm text-fg-muted"
     >
-      No matches yet.
+      {{ emptyLabel }}
       <NuxtLink to="/new" class="underline">Start your first match →</NuxtLink>
     </div>
 
@@ -113,18 +152,18 @@ const onMatchDeleted = (id: string) => {
     </div>
 
     <div
-      v-else-if="done && matches.length > 0"
+      v-else-if="done && matches.length > 0 && isAuthed"
       class="py-4 text-center text-xs text-fg-subtle"
     >
       End of list
     </div>
 
     <Button
-      v-if="!loading && !done && matches.length > 0"
+      v-if="!loading && !done && matches.length > 0 && isAuthed"
       variant="outline"
       size="sm"
       class="mx-auto mt-4 flex"
-      @click="loadMore"
+      @click="loadRemote"
     >
       Load more
     </Button>

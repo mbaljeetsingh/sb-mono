@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@nuxtjs/color-mode": "^4.0.0",
     "@sb/engine": "workspace:*",
     "@sb/layer-app-base": "workspace:*",
     "@sb/layer-ui": "workspace:*",

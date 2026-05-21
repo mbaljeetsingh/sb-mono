@@ -21,7 +21,7 @@ import {
 import { createError } from "#app";
 import { toast } from "vue-sonner";
 
-definePageMeta({ layout: false, requiresAuth: true });
+definePageMeta({ layout: false, requiresAuth: true, colorMode: "light" });
 useSeoMeta({ title: "Render · Scoreboard" });
 
 const { isAdmin } = useRolePermissions();

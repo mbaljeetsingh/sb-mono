@@ -68,6 +68,9 @@ importers:
 
   apps/app:
     dependencies:
+      '@nuxtjs/color-mode':
+        specifier: ^4.0.0
+        version: 4.0.0(magicast@0.5.2)
       '@sb/engine':
         specifier: workspace:*
         version: link:../../packages/engine
@@ -1490,6 +1493,9 @@ packages:
         optional: true
       rollup-plugin-visualizer:
         optional: true
+
+  '@nuxtjs/color-mode@4.0.0':
+    resolution: {integrity: sha512-xyaVR/TPLdMuRa2VOgH6b75jvmFEsn9QKL6ISldaAw38ooFJfWY1ts2F3ye43wcT/goCbcuvPuskF2f8yUZhlw==}
 
   '@nuxtjs/supabase@2.0.6':
     resolution: {integrity: sha512-w0KSh4OKOxAkX5Dg6RfwyrG71HbCqXMfELHSKgOcl1MdO1Okwv+SItWD3mezc6q4J0tKtb0pw2KZDQ0F3FPIdA==}
@@ -8038,6 +8044,16 @@ snapshots:
       - vti
       - vue-tsc
       - yaml
+
+  '@nuxtjs/color-mode@4.0.0(magicast@0.5.2)':
+    dependencies:
+      '@nuxt/kit': 4.4.4(magicast@0.5.2)
+      exsolve: 1.0.8
+      pathe: 2.0.3
+      pkg-types: 2.3.1
+      semver: 7.7.4
+    transitivePeerDependencies:
+      - magicast
 
   '@nuxtjs/supabase@2.0.6':
     dependencies:

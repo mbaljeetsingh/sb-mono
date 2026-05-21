@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { getTheme } from "@sb/themes";
 
-definePageMeta({ layout: false });
+definePageMeta({ layout: false, colorMode: "light" });
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));

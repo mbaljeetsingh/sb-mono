@@ -309,6 +309,16 @@ CREATE POLICY "matches_delete_owner" ON public.matches
         AND (SELECT public.authorize('match.delete.own'))
     );
 
+-- Anonymous and authenticated users may delete anonymous matches (URL = access
+-- token). Mirrors the anon/authed UPDATE policies; events cascade via FK.
+CREATE POLICY "matches_delete_anon" ON public.matches
+    FOR DELETE TO anon
+    USING (owner_id IS NULL);
+
+CREATE POLICY "matches_delete_anon_authed" ON public.matches
+    FOR DELETE TO authenticated
+    USING (owner_id IS NULL);
+
 
 -- EVENTS ---------------------------------------------------------------------
 

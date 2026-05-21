@@ -24,7 +24,7 @@ import ScoreCorrectSheet from "~/components/control/ScoreCorrectSheet.vue";
 import GameOverModal from "~/components/control/GameOverModal.vue";
 import MatchOverModal from "~/components/control/MatchOverModal.vue";
 
-definePageMeta({ layout: false });
+definePageMeta({ layout: false, colorMode: "light" });
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
