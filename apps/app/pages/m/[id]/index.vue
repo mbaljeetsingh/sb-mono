@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useClipboard } from "@vueuse/core";
-import { ChevronDown, ChevronUp, Clipboard, Settings } from "lucide-vue-next";
+import {
+  ChevronDown,
+  ChevronUp,
+  Clipboard,
+  Film,
+  Settings,
+} from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import { type ThemeSurface } from "@sb/themes";
 import type { MatchMeta } from "@sb/layer-app-base/composables/useMatchMeta";
@@ -11,6 +17,7 @@ import LookAndFeelCards from "~/components/match/LookAndFeelCards.vue";
 import SettingsSheet from "~/components/match/SettingsSheet.vue";
 import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
 import { useUserStore } from "~/stores/user";
+import { useRolePermissions } from "~/composables/useRolePermissions";
 
 useSeoMeta({ title: "Match" });
 
@@ -30,6 +37,7 @@ const onMetaUpdate = (v: MatchMeta) => {
 const settingsOpen = ref(false);
 
 const userStore = useUserStore();
+const { isAdmin } = useRolePermissions();
 const onMatchDeleted = () => {
   settingsOpen.value = false;
   navigateTo(userStore.isAuthenticated ? "/matches" : "/");
@@ -89,15 +97,27 @@ const onPickTheme = ({
       <span class="text-[13px] font-semibold text-fg-subtle">
         Match · {{ matchId.slice(0, 8) }}…
       </span>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Match settings"
-        title="Match settings — edit team names, tournament info"
-        @click="settingsOpen = true"
-      >
-        <Settings class="size-4" />
-      </Button>
+      <div class="flex items-center gap-1">
+        <Button
+          v-if="isAdmin"
+          variant="ghost"
+          size="icon"
+          aria-label="Render video"
+          title="Post-game render (beta · admin only)"
+          @click="navigateTo(`/m/${matchId}/render`)"
+        >
+          <Film class="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Match settings"
+          title="Match settings — edit team names, tournament info"
+          @click="settingsOpen = true"
+        >
+          <Settings class="size-4" />
+        </Button>
+      </div>
     </div>
 
     <div class="px-4 pt-2 pb-4">

@@ -62,7 +62,7 @@ const onDeleted = () => emit("deleted", props.id);
     class="rounded-lg border border-border bg-surface transition hover:border-border-strong"
   >
     <div class="flex items-center gap-2 pr-2">
-      <NuxtLink :to="`/m/${id}/control`" class="min-w-0 flex-1 px-4 py-3">
+      <NuxtLink :to="`/m/${id}`" class="min-w-0 flex-1 px-4 py-3">
         <div class="flex items-center gap-2">
           <span class="truncate text-[15px] font-medium">{{ label }}</span>
           <span

@@ -344,20 +344,20 @@ const createMatch = async () => {
           for="team-a-p1"
           class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
         >
-          Team A
+          {{ isDoubles ? "Team A" : "Player 1" }}
         </Label>
         <Input
           id="team-a-p1"
           v-model="teamA.p1"
           type="text"
-          placeholder="Player 1"
+          :placeholder="isDoubles ? 'Player 1' : 'Name'"
           class="h-11"
         />
         <Input
           v-if="isDoubles"
           v-model="teamA.p2"
           type="text"
-          placeholder="Player 2 (doubles)"
+          placeholder="Player 2"
           class="h-11 mt-2"
         />
       </section>
@@ -367,20 +367,20 @@ const createMatch = async () => {
           for="team-b-p1"
           class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
         >
-          Team B
+          {{ isDoubles ? "Team B" : "Player 2" }}
         </Label>
         <Input
           id="team-b-p1"
           v-model="teamB.p1"
           type="text"
-          placeholder="Player 1"
+          :placeholder="isDoubles ? 'Player 1' : 'Name'"
           class="h-11"
         />
         <Input
           v-if="isDoubles"
           v-model="teamB.p2"
           type="text"
-          placeholder="Player 2 (doubles)"
+          placeholder="Player 2"
           class="h-11 mt-2"
         />
       </section>
