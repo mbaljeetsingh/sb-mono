@@ -6,6 +6,7 @@ import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 import { useDocumentVisibility } from "@vueuse/core";
 import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
+import { toast } from "vue-sonner";
 import { claimAnonymousMatches } from "~/lib/localMatches";
 
 interface UserProfile {
@@ -224,9 +225,21 @@ export const useUserStore = defineStore("user", () => {
             // the UPDATE is idempotent (rows already claimed are filtered by the
             // `owner_id IS NULL` guard inside claimAnonymousMatches).
             if (event === "SIGNED_IN" && session?.user?.id) {
-              claimAnonymousMatches(supabase, session.user.id).catch(
-                console.error,
-              );
+              claimAnonymousMatches(supabase, session.user.id)
+                .then((claimed) => {
+                  if (claimed > 0) {
+                    toast.success(
+                      claimed === 1
+                        ? "Claimed 1 match from this device"
+                        : `Claimed ${claimed} matches from this device`,
+                      {
+                        description:
+                          "They're now linked to your account and synced across devices.",
+                      },
+                    );
+                  }
+                })
+                .catch(console.error);
             }
           }, 0);
         },
