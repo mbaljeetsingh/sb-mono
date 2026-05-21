@@ -7,12 +7,17 @@
 // later (current themes are DOM, not canvas, so in-browser compositing
 // needs html2canvas-class machinery or a theme-renderer port).
 
-import { ref, computed, watch } from "vue";
+import { ref, computed, nextTick, watch } from "vue";
 import { Download, Film, Upload } from "lucide-vue-next";
+import { domToCanvas } from "modern-screenshot";
 import { getTheme } from "@sb/themes";
 import { Button } from "@sb/layer-ui/components/ui/button";
+import { Progress } from "@sb/layer-ui/components/ui/progress";
 import { useRolePermissions } from "~/composables/useRolePermissions";
-import { useVideoRender } from "~/composables/useVideoRender";
+import {
+  useVideoRenderWebCodecs,
+  type OverlaySnapshot,
+} from "~/composables/useVideoRenderWebCodecs";
 import { createError } from "#app";
 import { toast } from "vue-sonner";
 
@@ -138,14 +143,14 @@ const clearAnchor = (gameIndex: number) => {
   anchors.value = next;
 };
 
-// Render — sync-gated. Snapshot every event whose game has an anchor, and
-// composite via ffmpeg.wasm. If only G1 is synced, the render covers only
-// G1's events (G2/G3 won't be drawn).
-const { render, progress, outputUrl } = useVideoRender({ videoEl, overlayEl });
+// WebCodecs render — accepts pre-collected overlay bitmaps from this page.
+// The page drives the snapshot loop itself (no video seek; just push the
+// reactive state forward) so snapshotting is dramatically faster.
+const { render, progress, outputUrl } = useVideoRenderWebCodecs();
 
 // Map an event's ts to its position in the video using the anchor for the
 // game it belongs to. Events in games without anchors return null and are
-// skipped from the render.
+// skipped from the render — at least one game must be synced.
 const eventToVideoTimeSec = (
   ev: { ts: number },
   gameIndex: number,
@@ -155,8 +160,13 @@ const eventToVideoTimeSec = (
   return (a.videoMs + (ev.ts - a.eventTs)) / 1000;
 };
 
-const renderableSnapshotTimes = computed<number[]>(() => {
-  const times: number[] = [];
+// Snapshot plan: each entry pairs the video-time the overlay should appear
+// with the engine-time required to compute that overlay state. We snapshot
+// by writing the engine-time into `replayTimeMs` directly — no video seek.
+type SnapshotPlan = { videoTimeSec: number; replayTimeMs: number };
+
+const snapshotPlan = computed<SnapshotPlan[]>(() => {
+  const plan: SnapshotPlan[] = [];
   let currentGame = 0;
   for (const ev of events.value) {
     if (ev.type === "game.end") {
@@ -165,24 +175,67 @@ const renderableSnapshotTimes = computed<number[]>(() => {
     }
     if (ev.type !== "point" && ev.type !== "match.start") continue;
     const t = eventToVideoTimeSec(ev, currentGame);
-    if (t !== null && t >= 0) times.push(t);
+    if (t === null) continue;
+    // Clamp pre-anchor events (typically `match.start`, which fires a few
+    // seconds before the first rally ends) to t=0 so the initial 0–0
+    // state has a snapshot at the video's start — otherwise the overlay's
+    // first-frame draw is whatever the first POSITIVE-time snapshot
+    // captured (usually 1-0 after the first point lands).
+    plan.push({ videoTimeSec: Math.max(0, t), replayTimeMs: ev.ts });
   }
-  return times;
+  return plan;
 });
 
 const canRender = computed(
-  () => !!videoFile.value && renderableSnapshotTimes.value.length > 0,
+  () => !!videoFile.value && snapshotPlan.value.length > 0,
 );
+
+const snapshotting = ref(false);
+const snapshotProgress = ref({ done: 0, total: 0 });
+
+// Rasterize the overlay at each plan point. Drives the reactive state via
+// `replayTimeMs` directly — the video element doesn't move, no expensive
+// seek, no decoder cache flush. Just push, await DOM, snapshot, repeat.
+const collectOverlayBitmaps = async (): Promise<OverlaySnapshot[]> => {
+  const overlay = overlayEl.value;
+  const video = videoEl.value;
+  if (!overlay || !video) throw new Error("overlay or video not mounted");
+
+  const overlayRect = overlay.getBoundingClientRect();
+  const videoW = video.videoWidth || overlayRect.width;
+  const scale = overlayRect.width > 0 ? videoW / overlayRect.width : 1;
+
+  snapshotting.value = true;
+  snapshotProgress.value = { done: 0, total: snapshotPlan.value.length };
+
+  const out: OverlaySnapshot[] = [];
+  for (let i = 0; i < snapshotPlan.value.length; i++) {
+    const p = snapshotPlan.value[i]!;
+    replayTimeMs.value = p.replayTimeMs;
+    await nextTick();
+    const canvas = await domToCanvas(overlay, {
+      scale,
+      backgroundColor: undefined,
+    });
+    const bitmap = await createImageBitmap(canvas);
+    out.push({ videoTimeSec: p.videoTimeSec, bitmap });
+    snapshotProgress.value = { done: i + 1, total: snapshotPlan.value.length };
+  }
+  snapshotting.value = false;
+  return out;
+};
 
 const onRender = async () => {
   if (!videoFile.value) return;
   try {
+    const bitmaps = await collectOverlayBitmaps();
     await render({
       videoBlob: videoFile.value,
-      snapshotTimes: renderableSnapshotTimes.value,
+      overlaySnapshots: bitmaps,
     });
     toast.success("Render complete");
   } catch (err) {
+    snapshotting.value = false;
     console.warn("[render] failed", err);
     toast.error(`Render failed: ${(err as Error).message}`);
   }
@@ -341,13 +394,15 @@ const meta = computed(() => ({
           </div>
         </div>
 
-        <!-- Render — ffmpeg.wasm + html-to-image composite. Only renders
-             events whose game has a sync anchor. -->
+        <!-- Render — WebCodecs (hardware H.264) + modern-screenshot for the
+             overlay rasterization. Only renders events whose game has a
+             sync anchor. -->
         <div class="rounded-lg border border-border bg-surface p-4 space-y-3">
           <div class="flex items-center gap-3 flex-wrap">
             <Button
               :disabled="
                 !canRender ||
+                snapshotting ||
                 (progress.stage !== 'idle' &&
                   progress.stage !== 'done' &&
                   progress.stage !== 'error')
@@ -358,9 +413,9 @@ const meta = computed(() => ({
               Render video
             </Button>
             <span class="text-xs text-fg-muted">
-              {{ renderableSnapshotTimes.length }}
-              event{{ renderableSnapshotTimes.length === 1 ? "" : "s" }} from
-              synced games will be drawn. Games without a sync row above are
+              {{ snapshotPlan.length }}
+              event{{ snapshotPlan.length === 1 ? "" : "s" }} will be drawn.
+              Sync at least one game above; games without a sync row are
               skipped.
             </span>
             <Button
@@ -374,34 +429,35 @@ const meta = computed(() => ({
             </Button>
           </div>
 
-          <!-- Progress. `ratio` (0..1) drives loading-ffmpeg and encoding
-               stages; `currentSnapshot / totalSnapshots` drives snapshotting.
-               Without either, the bar shows an indeterminate pulse so users
-               know it's working. -->
+          <!-- Snapshotting progress (driven by the page, not the composable). -->
           <div
-            v-if="progress.stage !== 'idle'"
-            class="rounded-md border border-border bg-background px-3 py-2 text-xs font-mono text-fg-muted"
+            v-if="snapshotting"
+            class="rounded-md border border-border bg-background px-3 py-2 text-xs font-mono text-fg-muted space-y-2"
+          >
+            <div>
+              Snapshot {{ snapshotProgress.done }}/{{ snapshotProgress.total }}
+            </div>
+            <Progress
+              :model-value="
+                (snapshotProgress.done / Math.max(1, snapshotProgress.total)) *
+                100
+              "
+              class="h-1.5"
+            />
+          </div>
+
+          <!-- Composable progress (demux / encode / finalize). -->
+          <div
+            v-if="!snapshotting && progress.stage !== 'idle'"
+            class="rounded-md border border-border bg-background px-3 py-2 text-xs font-mono text-fg-muted space-y-2"
           >
             <div>{{ progress.message }}</div>
-            <div class="mt-1 h-1 w-full bg-border rounded overflow-hidden">
-              <div
-                v-if="progress.totalSnapshots"
-                class="h-full bg-brand rounded transition-[width]"
-                :style="{
-                  width: `${
-                    ((progress.currentSnapshot ?? 0) /
-                      (progress.totalSnapshots || 1)) *
-                    100
-                  }%`,
-                }"
-              />
-              <div
-                v-else-if="progress.ratio !== undefined"
-                class="h-full bg-brand rounded transition-[width]"
-                :style="{ width: `${progress.ratio * 100}%` }"
-              />
-              <div v-else class="h-full w-1/3 bg-brand rounded animate-pulse" />
-            </div>
+            <Progress
+              :model-value="
+                progress.ratio !== undefined ? progress.ratio * 100 : null
+              "
+              class="h-1.5"
+            />
           </div>
 
           <!-- Output preview -->
