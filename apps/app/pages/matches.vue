@@ -107,14 +107,20 @@ const emptyLabel = computed(() =>
       </NuxtLink>
     </header>
 
-    <p
+    <div
       v-if="!isAuthed"
       class="mb-4 rounded-md border border-dashed border-border-strong bg-surface px-3 py-2 text-xs text-fg-muted"
     >
-      Showing matches scored on this device.
-      <NuxtLink to="/auth/signin" class="underline">Sign in</NuxtLink>
-      to sync them to your account and access from anywhere.
-    </p>
+      <p>
+        Showing matches scored on this device.
+        <NuxtLink to="/auth/signin" class="underline">Sign in</NuxtLink>
+        to sync them to your account and access from anywhere.
+      </p>
+      <p class="mt-1 text-fg-subtle">
+        Anonymous matches expire after 30 days. Signed-in matches are kept
+        indefinitely.
+      </p>
+    </div>
 
     <div
       v-if="error"

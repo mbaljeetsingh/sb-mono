@@ -1,13 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useClipboard } from "@vueuse/core";
-import {
-  ChevronDown,
-  ChevronUp,
-  Clipboard,
-  Film,
-  Settings,
-} from "lucide-vue-next";
+import { Film, QrCode, Settings } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import { type ThemeSurface } from "@sb/themes";
 import type { MatchMeta } from "@sb/layer-app-base/composables/useMatchMeta";
@@ -16,6 +10,7 @@ import MatchHeroCard from "~/components/match/MatchHeroCard.vue";
 import LookAndFeelCards from "~/components/match/LookAndFeelCards.vue";
 import SettingsSheet from "~/components/match/SettingsSheet.vue";
 import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
+import QrDialog from "~/components/match/QrDialog.vue";
 import { useUserStore } from "~/stores/user";
 import { useRolePermissions } from "~/composables/useRolePermissions";
 
@@ -50,8 +45,27 @@ const {
 } = useThemeChoice(matchId);
 const urls = useMatchUrls(matchId);
 
-const showAllUrls = ref(false);
 const themeSheetOpen = ref(false);
+
+// Shared QR enlarge dialog. Each Get Setup row opens it with the right URL +
+// per-surface description; the dialog itself shows the big scannable QR + copy.
+const qrOpen = ref(false);
+const qrUrl = ref("");
+const qrTitle = ref("");
+const qrDescription = ref<string | undefined>(undefined);
+const qrSensitive = ref(false);
+const openQr = (opts: {
+  url: string;
+  title: string;
+  description?: string;
+  sensitive?: boolean;
+}) => {
+  qrUrl.value = opts.url;
+  qrTitle.value = opts.title;
+  qrDescription.value = opts.description;
+  qrSensitive.value = !!opts.sensitive;
+  qrOpen.value = true;
+};
 
 const score = (side: "a" | "b") => {
   const last = state.value.games[state.value.games.length - 1];
@@ -141,14 +155,11 @@ const onPickTheme = ({
         Get set up
       </div>
       <div class="flex flex-col gap-2">
-        <Button
-          as="a"
-          variant="outline"
-          :href="`/m/${matchId}/control`"
-          class="h-auto justify-start gap-3 p-3 text-left whitespace-normal"
+        <div
+          class="p-3 bg-surface border border-border rounded-md flex gap-3 items-center"
         >
           <span
-            class="size-7 rounded-full bg-surface-2 text-fg-muted inline-flex items-center justify-center text-[13px] font-bold shrink-0"
+            class="size-7 rounded-full bg-surface-2 text-fg-muted inline-flex items-center justify-center text-[13px] font-bold flex-shrink-0"
           >
             1
           </span>
@@ -156,16 +167,37 @@ const onPickTheme = ({
             <span class="block text-sm font-semibold">
               Score from your phone
             </span>
-            <span class="block text-xs text-fg-muted mt-0.5 font-normal">
-              Open Control on this device · ⌘/Ctrl+click for new tab
+            <span class="block text-xs text-fg-muted mt-0.5">
+              Open on this device, or scan to score from another
             </span>
           </span>
-          <span
-            class="px-3 h-8 inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-semibold"
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Show Control URL as QR code"
+            title="Scan with another device to score there"
+            @click="
+              openQr({
+                url: urls.control,
+                title: 'Control',
+                description: 'Scan with the device you want to score on.',
+                sensitive: true,
+              })
+            "
+          >
+            <QrCode class="size-4" />
+          </Button>
+          <Button
+            as="a"
+            type="button"
+            variant="default"
+            size="sm"
+            :href="`/m/${matchId}/control`"
           >
             Open Control
-          </span>
-        </Button>
+          </Button>
+        </div>
 
         <div
           class="p-3 bg-surface border border-border rounded-md flex gap-3 items-center"
@@ -191,11 +223,8 @@ const onPickTheme = ({
           </Button>
         </div>
 
-        <a
-          :href="urls.scoreboard"
-          target="_blank"
-          rel="noopener"
-          class="p-3 bg-surface border border-border rounded-md flex gap-3 items-center hover:bg-surface-2 transition-colors no-underline text-foreground"
+        <div
+          class="p-3 bg-surface border border-border rounded-md flex gap-3 items-center"
         >
           <span
             class="size-7 rounded-full bg-surface-2 text-fg-muted inline-flex items-center justify-center text-[13px] font-bold flex-shrink-0"
@@ -205,87 +234,37 @@ const onPickTheme = ({
           <span class="flex-1 min-w-0">
             <span class="block text-sm font-semibold">Show on venue TV</span>
             <span class="block text-xs text-fg-muted mt-0.5">
-              Fullscreen scoreboard on a tablet/TV
+              Scan from a TV/tablet, or open here
             </span>
           </span>
-          <span
-            class="px-3 h-8 inline-flex items-center justify-center rounded-md bg-secondary text-secondary-foreground text-xs font-semibold"
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Show Scoreboard URL as QR code"
+            title="Scan from a TV / second screen"
+            @click="
+              openQr({
+                url: urls.scoreboard,
+                title: 'Scoreboard',
+                description:
+                  'Scan from a TV / second screen to display the live scoreboard.',
+              })
+            "
+          >
+            <QrCode class="size-4" />
+          </Button>
+          <Button
+            as="a"
+            type="button"
+            variant="secondary"
+            size="sm"
+            :href="urls.scoreboard"
+            target="_blank"
+            rel="noopener"
           >
             Open
-          </span>
-        </a>
-      </div>
-    </div>
-
-    <div class="px-4 pb-4">
-      <Button
-        type="button"
-        variant="secondary"
-        class="w-full justify-between font-medium"
-        @click="showAllUrls = !showAllUrls"
-      >
-        <span>Show all URLs &amp; QR codes</span>
-        <component :is="showAllUrls ? ChevronUp : ChevronDown" class="size-4" />
-      </Button>
-      <div v-if="showAllUrls" class="mt-2.5 flex flex-col gap-2">
-        <div class="p-3 bg-surface border border-warning rounded-md">
-          <div class="flex justify-between items-center mb-1">
-            <span
-              class="inline-flex gap-1.5 items-center text-[13px] font-semibold"
-            >
-              Control
-              <span
-                class="px-1.5 py-0.5 rounded-sm bg-warning-soft text-warning text-[10px] font-bold tracking-[0.06em]"
-              >
-                Sensitive
-              </span>
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Copy"
-              @click="copy(urls.control, 'Control URL')"
-            >
-              <Clipboard class="size-4" />
-            </Button>
-          </div>
-          <div class="font-mono text-[11px] text-fg-muted break-all">
-            {{ urls.control }}
-          </div>
-          <div class="text-[10px] text-fg-subtle mt-1">
-            Sensitive — share with care
-          </div>
-        </div>
-
-        <div
-          v-for="(label, key) in {
-            Overlay: 'overlay',
-            Scoreboard: 'scoreboard',
-          }"
-          :key="key"
-          class="p-3 bg-surface border border-border rounded-md"
-        >
-          <div class="flex justify-between items-center mb-1">
-            <span class="text-[13px] font-semibold">{{ key }}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Copy"
-              @click="copy(urls[label as keyof typeof urls], `${key} URL`)"
-            >
-              <Clipboard class="size-4" />
-            </Button>
-          </div>
-          <div class="font-mono text-[11px] text-fg-muted break-all">
-            {{ urls[label as keyof typeof urls] }}
-          </div>
-          <div class="text-[10px] text-fg-subtle mt-1">
-            {{
-              label === "overlay" ? "OBS browser source" : "Public — TV / share"
-            }}
-          </div>
+          </Button>
         </div>
       </div>
     </div>
@@ -312,6 +291,14 @@ const onPickTheme = ({
       @update:meta="onMetaUpdate"
       @close="settingsOpen = false"
       @deleted="onMatchDeleted"
+    />
+
+    <QrDialog
+      v-model:open="qrOpen"
+      :url="qrUrl"
+      :title="qrTitle"
+      :description="qrDescription"
+      :sensitive="qrSensitive"
     />
   </div>
 </template>
