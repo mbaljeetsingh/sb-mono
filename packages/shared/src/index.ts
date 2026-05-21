@@ -20,8 +20,8 @@ export type MatchRecord = {
   theme_id: string;
   /** Hex colors per side. */
   colors: { a: string; b: string };
-  /** ms since epoch when the match was actually started; null until first event. */
-  started_at: number | null;
+  /** ISO 8601 timestamp when the match was actually started; null until first event. */
+  started_at: string | null;
 };
 
 export type EventRecord = {
@@ -29,8 +29,8 @@ export type EventRecord = {
   match_id: string;
   /** Originating device — used for offline-merge tie-breaks. */
   device_id: string;
-  /** ms since epoch (Date.now() at write time). */
-  ts: number;
+  /** ISO 8601 timestamp at write time (client clock). */
+  ts: string;
   /** Discriminator — one of the sport-family event types. */
   type: string;
   /** Event-specific payload (everything except id, ts, type). */

@@ -123,7 +123,7 @@ values
    '{"sport":"badminton","displayName":"Badminton (21-point, BWF)","pointsPerGame":21,"winBy":2,"cap":30,"gamesToWin":2,"intervalAt":11}'::jsonb,
    'broadcast-classic', 'filmable',
    '{"a":"#dc2626","b":"#2563eb"}'::jsonb,
-   1000, 'Court 3', 'QF', 'Men''s Doubles U-19', 'Xperience Academy'),
+   to_timestamp(1), 'Court 3', 'QF', 'Men''s Doubles U-19', 'Xperience Academy'),
 
   ('01HZSBM00000DEMODONE0000002',
    'a0000000-0000-4000-8000-000000000002'::uuid,
@@ -131,7 +131,7 @@ values
    '{"sport":"badminton","displayName":"Badminton (21-point, BWF)","pointsPerGame":21,"winBy":2,"cap":30,"gamesToWin":2,"intervalAt":11}'::jsonb,
    'broadcast-classic', 'filmable',
    '{"a":"#dc2626","b":"#2563eb"}'::jsonb,
-   1000, 'Court 1', 'F', 'Mixed Doubles', 'Xperience Academy'),
+   to_timestamp(1), 'Court 1', 'F', 'Mixed Doubles', 'Xperience Academy'),
 
   ('01HZSBM00000DEMOANON0000003',
    null,
@@ -139,7 +139,7 @@ values
    '{"sport":"badminton","displayName":"Badminton (21-point, BWF)","pointsPerGame":21,"winBy":2,"cap":30,"gamesToWin":2,"intervalAt":11}'::jsonb,
    'broadcast-classic', 'filmable',
    '{"a":"#dc2626","b":"#2563eb"}'::jsonb,
-   1000, 'Court 2', null, null, null);
+   to_timestamp(1), 'Court 2', null, null, null);
 
 -- ────────────────────────────────────────────────────────────────────────────
 --  EVENTS — replay each match's history
@@ -147,31 +147,31 @@ values
 
 -- Match 1 (live, mid-game): A leading 5–1 in game 1
 insert into public.events (id, match_id, device_id, ts, type, payload) values
-  ('01HZSBME00000LIVE000000M001', '01HZSBM00000DEMOLIVE0000001', 'seed', 1000,
+  ('01HZSBME00000LIVE000000M001', '01HZSBM00000DEMOLIVE0000001', 'seed', to_timestamp(1),
    'match.start', '{"serverSide":"A","serverCourt":"right"}'::jsonb),
-  ('01HZSBME00000LIVE000000P001', '01HZSBM00000DEMOLIVE0000001', 'seed', 1100,
+  ('01HZSBME00000LIVE000000P001', '01HZSBM00000DEMOLIVE0000001', 'seed', to_timestamp(1.1),
    'point', '{"side":"A"}'::jsonb),
-  ('01HZSBME00000LIVE000000P002', '01HZSBM00000DEMOLIVE0000001', 'seed', 1200,
+  ('01HZSBME00000LIVE000000P002', '01HZSBM00000DEMOLIVE0000001', 'seed', to_timestamp(1.2),
    'point', '{"side":"A"}'::jsonb),
-  ('01HZSBME00000LIVE000000P003', '01HZSBM00000DEMOLIVE0000001', 'seed', 1300,
+  ('01HZSBME00000LIVE000000P003', '01HZSBM00000DEMOLIVE0000001', 'seed', to_timestamp(1.3),
    'point', '{"side":"B"}'::jsonb),
-  ('01HZSBME00000LIVE000000P004', '01HZSBM00000DEMOLIVE0000001', 'seed', 1400,
+  ('01HZSBME00000LIVE000000P004', '01HZSBM00000DEMOLIVE0000001', 'seed', to_timestamp(1.4),
    'point', '{"side":"A"}'::jsonb),
-  ('01HZSBME00000LIVE000000P005', '01HZSBM00000DEMOLIVE0000001', 'seed', 1500,
+  ('01HZSBME00000LIVE000000P005', '01HZSBM00000DEMOLIVE0000001', 'seed', to_timestamp(1.5),
    'point', '{"side":"A"}'::jsonb),
-  ('01HZSBME00000LIVE000000P006', '01HZSBM00000DEMOLIVE0000001', 'seed', 1600,
+  ('01HZSBME00000LIVE000000P006', '01HZSBM00000DEMOLIVE0000001', 'seed', to_timestamp(1.6),
    'point', '{"side":"A"}'::jsonb);
 
 -- Match 2 (completed): authoritative score.correct sets the final state.
 -- This proves event-sourcing works end-to-end without 42 individual point events.
 insert into public.events (id, match_id, device_id, ts, type, payload) values
-  ('01HZSBME00000DONE000000M001', '01HZSBM00000DEMODONE0000002', 'seed', 1000,
+  ('01HZSBME00000DONE000000M001', '01HZSBM00000DEMODONE0000002', 'seed', to_timestamp(1),
    'match.start', '{"serverSide":"A","serverCourt":"right"}'::jsonb),
-  ('01HZSBME00000DONE000000C001', '01HZSBM00000DEMODONE0000002', 'seed', 1500,
+  ('01HZSBME00000DONE000000C001', '01HZSBM00000DEMODONE0000002', 'seed', to_timestamp(1.5),
    'score.correct',
    '{"games":[{"a":21,"b":17},{"a":21,"b":14}],"gamesWon":{"a":2,"b":0}}'::jsonb);
 
 -- Match 3 (anonymous, just started): 0–0 fresh match
 insert into public.events (id, match_id, device_id, ts, type, payload) values
-  ('01HZSBME00000ANON000000M001', '01HZSBM00000DEMOANON0000003', 'seed', 1000,
+  ('01HZSBME00000ANON000000M001', '01HZSBM00000DEMOANON0000003', 'seed', to_timestamp(1),
    'match.start', '{"serverSide":"A","serverCourt":"right"}'::jsonb);

@@ -217,5 +217,11 @@ export function useMatchMeta(matchId: Ref<string>) {
     b: titleCase(meta.value.teamNames?.b?.trim() ?? ""),
   }));
 
-  return { meta, teamNames };
+  // Force an immediate upsert, bypassing the 500ms debounce. Used when the
+  // user closes the settings sheet and we want the matches list (or any
+  // other reader) to see the change on the very next fetch — without this
+  // flush, fast nav (sheet close → /matches) races the debounce.
+  const flush = () => upsertRemote();
+
+  return { meta, teamNames, flush };
 }

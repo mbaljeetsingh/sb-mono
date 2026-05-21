@@ -3,6 +3,8 @@ import { useClipboard, useStorage } from "@vueuse/core";
 import { ArrowLeft } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import { Button } from "@sb/layer-ui/components/ui/button";
+import { useUserStore } from "~/stores/user";
+import { collectLocalMatchIds } from "~/lib/localMatches";
 
 definePageMeta({ layout: false });
 
@@ -28,19 +30,35 @@ const overlayUrl = computed(() => {
   return `${window.location.origin}/d/${dynamicId.value}/overlay`;
 });
 
-// Recent matches from Supabase — most recently updated first. Replaces the
-// old localStorage scanner that broke when /new moved to a Supabase-only
-// write path. We pull only the columns we render so this stays cheap.
+// Recent matches from Supabase — most recently updated first. Same scoping
+// as /matches: signed-in users see only their own rows (owner_id = uid);
+// signed-out users see only matches scored on this device (filtered by the
+// IDs we have in localStorage). Without this filter the permissive
+// matches_read_by_id RLS would leak every other user's team names here.
 type RecentMatch = { id: string; teamA: string; teamB: string };
 const supabase = useSupabaseClient();
+const userStore = useUserStore();
 const recent = ref<RecentMatch[]>([]);
 
 const refreshRecent = async () => {
-  const { data, error } = await supabase
+  let query = supabase
     .from("matches")
     .select("id, team_name_a, team_name_b")
     .order("updated_at", { ascending: false })
     .limit(10);
+
+  if (userStore.isAuthenticated && userStore.currentUser?.id) {
+    query = query.eq("owner_id", userStore.currentUser.id);
+  } else {
+    const ids = collectLocalMatchIds();
+    if (ids.length === 0) {
+      recent.value = [];
+      return;
+    }
+    query = query.in("id", ids);
+  }
+
+  const { data, error } = await query;
   if (error) {
     console.warn("[d/index] recent fetch failed", error);
     return;
@@ -53,6 +71,8 @@ const refreshRecent = async () => {
 };
 
 onMounted(refreshRecent);
+// Re-source when auth state flips (sign-in/out while on this page).
+watch(() => userStore.isAuthenticated, refreshRecent);
 
 // useStorage auto-persists assignments — `null` clears the entry as expected.
 const bind = (matchId: string) => {

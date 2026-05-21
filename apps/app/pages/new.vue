@@ -441,7 +441,13 @@ const createMatch = async () => {
         @click="createMatch"
       >
         <Play class="size-4" />
-        {{ canCreate ? "Create match" : "Enter team names to continue" }}
+        {{
+          canCreate
+            ? "Create match"
+            : isDoubles
+              ? "Enter team names to continue"
+              : "Enter player names to continue"
+        }}
       </Button>
     </footer>
   </div>

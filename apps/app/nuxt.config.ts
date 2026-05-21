@@ -9,7 +9,8 @@ export default defineNuxtConfig({
   modules: [
     "@nuxtjs/supabase",
     "shadcn-nuxt",
-    "@vite-pwa/nuxt",
+    // "@vite-pwa/nuxt", // Disabled for now — install-prompt UX and final
+    // icon set will be revisited closer to launch. See pwa config below.
     "@nuxtjs/color-mode",
   ],
   // Dark-mode handling. Broadcast surfaces (scoreboard / overlay / control)
@@ -57,7 +58,7 @@ export default defineNuxtConfig({
           content:
             "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover",
         },
-        { name: "theme-color", content: "#3d6b4a" },
+        { name: "theme-color", content: "#0d1b4a" },
         { name: "mobile-web-app-capable", content: "yes" },
         { name: "apple-mobile-web-app-capable", content: "yes" },
         {
@@ -65,7 +66,10 @@ export default defineNuxtConfig({
           content: "black-translucent",
         },
       ],
-      link: [{ rel: "icon", type: "image/svg+xml", href: "/icon.svg" }],
+      link: [
+        { rel: "icon", type: "image/png", href: "/favicon.png" },
+        { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      ],
     },
   },
   // Supabase Auth — anonymous-OK app (Option A). Auth is optional and unlocks ownership;
@@ -86,23 +90,27 @@ export default defineNuxtConfig({
     // supabase calls fall back to `Database = unknown`, which is fine for v1.
     types: false,
   },
-  pwa: {
-    registerType: "autoUpdate",
-    manifest: {
-      name: "Scoreboard",
-      short_name: "Scoreboard",
-      description: "Live scorecards for racquet sports.",
-      theme_color: "#3d6b4a",
-      background_color: "#f7f5ed",
-      display: "standalone",
-      orientation: "any",
-      icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
-    },
-    workbox: {
-      navigateFallback: "/",
-      globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-    },
-    devOptions: { enabled: false },
-  },
+  // PWA disabled for now — re-enable once the install-prompt UX + final
+  // icon set (favicon + maskable 192/512 from logo.png) are ready.
+  // pwa: {
+  //   registerType: "autoUpdate",
+  //   manifest: {
+  //     name: "Scoreboard",
+  //     short_name: "Scoreboard",
+  //     description: "Live scorecards for racquet sports.",
+  //     theme_color: "#0d1b4a",
+  //     background_color: "#ffffff",
+  //     display: "standalone",
+  //     orientation: "any",
+  //     icons: [
+  //       { src: "/logo.png", sizes: "any", type: "image/png" },
+  //     ],
+  //   },
+  //   workbox: {
+  //     navigateFallback: "/",
+  //     globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+  //   },
+  //   devOptions: { enabled: false },
+  // },
   compatibilityDate: "2024-10-01",
 });

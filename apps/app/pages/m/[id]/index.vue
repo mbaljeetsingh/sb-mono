@@ -19,7 +19,7 @@ useSeoMeta({ title: "Match" });
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
 const { state, config, events } = useMatchState(matchId);
-const { meta, teamNames } = useMatchMeta(matchId);
+const { meta, teamNames, flush: flushMeta } = useMatchMeta(matchId);
 
 // Explicit handler — relying on `v-model:meta="meta"` to auto-translate
 // `meta = $event` to `meta.value = $event` is unreliable in template event
@@ -30,6 +30,18 @@ const onMetaUpdate = (v: MatchMeta) => {
 };
 
 const settingsOpen = ref(false);
+
+// Flushing the debounced upsert here means closing the sheet awaits the
+// Supabase write — so the matches list (or any other reader fetched right
+// after) reflects the new team names instead of the "Team A / Team B"
+// placeholder fallback.
+const onSettingsClose = async () => {
+  try {
+    await flushMeta();
+  } finally {
+    settingsOpen.value = false;
+  }
+};
 
 const userStore = useUserStore();
 const { isAdmin } = useRolePermissions();
@@ -289,7 +301,7 @@ const onPickTheme = ({
       :match-id="matchId"
       :meta="meta"
       @update:meta="onMetaUpdate"
-      @close="settingsOpen = false"
+      @close="onSettingsClose"
       @deleted="onMatchDeleted"
     />
 

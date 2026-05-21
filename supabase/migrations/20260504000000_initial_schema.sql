@@ -24,7 +24,7 @@ create table public.matches (
     overlay_theme_id    text not null default 'broadcast-classic',
     scoreboard_theme_id text not null default 'filmable',
     colors          jsonb not null default '{"a": "#dc2626", "b": "#2563eb"}'::jsonb,
-    started_at      bigint,                                 -- ms since epoch; null until first point
+    started_at      timestamptz,                            -- null until first point
     -- Display metadata mirrored from `sb:meta:{matchId}` localStorage so any
     -- device opening the overlay (OBS on a laptop, phone of a co-scorer) can
     -- render team / player / tournament info without sharing localStorage.
@@ -46,7 +46,7 @@ create table public.events (
     id              text primary key,                       -- ULID, sortable + globally unique
     match_id        text not null references public.matches(id) on delete cascade,
     device_id       text not null,
-    ts              bigint not null,                        -- ms since epoch (Date.now() at write time)
+    ts              timestamptz not null,                   -- client clock at write time
     type            text not null,
     payload         jsonb not null default '{}'::jsonb,
     inserted_at     timestamptz not null default now()
@@ -54,6 +54,23 @@ create table public.events (
 
 create index events_match_id_ts_idx on public.events (match_id, ts);
 create index events_match_id_id_idx on public.events (match_id, id);
+
+-- Bump matches.updated_at on row update so the "recent matches" list (sorted
+-- by updated_at desc) reflects actual recency, not just creation order.
+create or replace function public.matches_bump_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+    new.updated_at = now();
+    return new;
+end;
+$$;
+
+drop trigger if exists matches_bump_updated_at on public.matches;
+create trigger matches_bump_updated_at
+    before update on public.matches
+    for each row execute function public.matches_bump_updated_at();
 
 -- Realtime: enable for both tables so subscribers can watch events appended in real time.
 alter publication supabase_realtime add table public.matches;

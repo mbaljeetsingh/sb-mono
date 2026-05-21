@@ -4,7 +4,7 @@ import { useInfiniteScroll } from "@vueuse/core";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import MatchListItem from "~/components/match/MatchListItem.vue";
 import { useUserStore } from "~/stores/user";
-import { readLocalMatches } from "~/lib/localMatches";
+import { collectLocalMatchIds } from "~/lib/localMatches";
 
 useSeoMeta({ title: "Matches · Scoreboard" });
 
@@ -54,10 +54,32 @@ const loadRemote = async () => {
   if (rows.length < PAGE_SIZE) done.value = true;
 };
 
-// Signed-out: list matches scored on this device from localStorage. No
-// pagination needed — local lists are tiny and finite.
-const loadLocal = () => {
-  matches.value = readLocalMatches();
+// Signed-out: same Supabase query as signed-in, but filtered to the match
+// IDs this device scored (collected from sb:events:* / sb:meta:* keys).
+// Supabase is the single source of display data; localStorage just tells us
+// which rows to fetch. No pagination — local lists are tiny and finite.
+const loadLocalScoped = async () => {
+  loading.value = true;
+  const ids = collectLocalMatchIds();
+  if (ids.length === 0) {
+    matches.value = [];
+    done.value = true;
+    loading.value = false;
+    return;
+  }
+  const { data, error: err } = await supabase
+    .from("matches")
+    .select(
+      "id, sport_preset, config, team_name_a, team_name_b, event_name, court_label, updated_at",
+    )
+    .in("id", ids)
+    .order("updated_at", { ascending: false });
+  loading.value = false;
+  if (err) {
+    error.value = err.message;
+    return;
+  }
+  matches.value = (data ?? []) as MatchRow[];
   done.value = true;
 };
 
@@ -66,7 +88,7 @@ const reload = () => {
   done.value = false;
   error.value = null;
   if (isAuthed.value) loadRemote();
-  else loadLocal();
+  else loadLocalScoped();
 };
 
 const scroller = useTemplateRef<HTMLElement>("scroller");

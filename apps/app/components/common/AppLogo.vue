@@ -1,6 +1,10 @@
 <script setup lang="ts">
-// Minimal app logo. Click → navigate to linkTo (defaults to "/").
-withDefaults(
+// App logo. Renders the icon mark (public/logo.png) + the "Scoreboard"
+// wordmark next to it. np-mono pattern: image is height-driven, width auto.
+
+import { computed } from "vue";
+
+const props = withDefaults(
   defineProps<{
     linkTo?: string;
     size?: "sm" | "md" | "lg" | "xl";
@@ -9,42 +13,41 @@ withDefaults(
   { linkTo: "/", size: "md", emphasized: false },
 );
 
-const sizeClasses: Record<string, string> = {
-  sm: "text-base",
-  md: "text-lg",
-  lg: "text-xl",
-  xl: "text-2xl",
-};
+const sizeClasses = computed(() => {
+  const sizes = {
+    sm: { gap: "gap-2", img: "h-6", text: "text-sm" },
+    md: { gap: "gap-2", img: "h-8", text: "text-lg" },
+    lg: { gap: "gap-3", img: "h-12", text: "text-xl" },
+    xl: { gap: "gap-4", img: "h-16", text: "text-2xl" },
+  };
+  const base = sizes[props.size];
+  if (props.emphasized) {
+    const emphasizedText = {
+      sm: "text-base",
+      md: "text-xl",
+      lg: "text-2xl",
+      xl: "text-3xl",
+    }[props.size];
+    return { ...base, text: emphasizedText };
+  }
+  return base;
+});
 </script>
 
 <template>
   <NuxtLink
     :to="linkTo"
-    class="inline-flex items-center gap-2 font-semibold tracking-tight"
-    :class="[
-      sizeClasses[size],
-      emphasized ? 'text-foreground' : 'text-foreground/90',
-    ]"
+    class="inline-flex items-center font-semibold tracking-tight text-foreground"
+    :class="sizeClasses.gap"
   >
-    <span
-      class="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground shadow-sm"
-      aria-hidden="true"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2.4"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <rect x="3" y="5" width="18" height="14" rx="2" />
-        <path d="M7 9v6M17 9v6M12 5v14" />
-      </svg>
+    <img
+      src="/logo.png"
+      alt="Scoreboard"
+      class="w-auto rounded-lg"
+      :class="sizeClasses.img"
+    />
+    <span :class="[sizeClasses.text, emphasized ? 'font-bold' : 'font-medium']">
+      Scoreboard
     </span>
-    <span>Scoreboard</span>
   </NuxtLink>
 </template>

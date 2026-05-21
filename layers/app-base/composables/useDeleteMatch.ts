@@ -1,18 +1,12 @@
 // useDeleteMatch — single source of truth for tearing down a match.
 //
 // Deletes the matches row in Supabase (events cascade via FK ON DELETE CASCADE)
-// and wipes all per-match localStorage keys listed in CLAUDE.md so a stale
-// entry doesn't linger and resurrect the match in client-side composables.
+// and wipes the per-match localStorage keys that we actually write. Meta /
+// format / theme / result are Supabase-backed and have no local cache; only
+// the event log (offline-first by design) and the per-device control-layout
+// preference live in localStorage.
 
-const PER_MATCH_KEYS = [
-  "sb:meta:",
-  "sb:events:",
-  "sb:format:preset:",
-  "sb:format:gamesToWin:",
-  "sb:theme:",
-  "sb:control-layout:",
-  "sb:result:",
-];
+const PER_MATCH_KEYS = ["sb:events:", "sb:control-layout:"];
 
 export function useDeleteMatch() {
   const supabase = useSupabaseClient();

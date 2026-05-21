@@ -41,7 +41,7 @@ export type Database = {
           inserted_at: string
           match_id: string
           payload: Json
-          ts: number
+          ts: string
           type: string
         }
         Insert: {
@@ -50,7 +50,7 @@ export type Database = {
           inserted_at?: string
           match_id: string
           payload?: Json
-          ts: number
+          ts: string
           type: string
         }
         Update: {
@@ -59,7 +59,7 @@ export type Database = {
           inserted_at?: string
           match_id?: string
           payload?: Json
-          ts?: number
+          ts?: string
           type?: string
         }
         Relationships: [
@@ -89,7 +89,7 @@ export type Database = {
           scoreboard_theme_id: string
           sport_family: string
           sport_preset: string
-          started_at: number | null
+          started_at: string | null
           team_name_a: string | null
           team_name_b: string | null
           updated_at: string
@@ -111,7 +111,7 @@ export type Database = {
           scoreboard_theme_id?: string
           sport_family: string
           sport_preset: string
-          started_at?: number | null
+          started_at?: string | null
           team_name_a?: string | null
           team_name_b?: string | null
           updated_at?: string
@@ -133,7 +133,7 @@ export type Database = {
           scoreboard_theme_id?: string
           sport_family?: string
           sport_preset?: string
-          started_at?: number | null
+          started_at?: string | null
           team_name_a?: string | null
           team_name_b?: string | null
           updated_at?: string
@@ -215,6 +215,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      cleanup_anonymous_matches: { Args: never; Returns: undefined }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       get_my_permissions: { Args: never; Returns: string[] }
     }

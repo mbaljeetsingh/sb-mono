@@ -57,7 +57,7 @@ When you do update, do it in the same commit as the code, and keep the entry con
 - **Auto-imports are limited** to `apps/app/components/**`, plus Nuxt framework standards (`useRoute`, `definePageMeta`, `useSeoMeta`, `useSupabaseClient`, `navigateTo`, `useHead`, `computed`, `ref`, `onMounted`, `watch`, `watchEffect`).
 - **Use VueUse, not raw browser APIs.** `useStorage` over `localStorage.getItem/setItem`. `useClipboard({ legacy: true })` over `navigator.clipboard.writeText`. `useVibrate` over `navigator.vibrate`. `useWakeLock` over the wake-lock API. `useElementSize` over manual `ResizeObserver`. The legacy clipboard fallback matters for HTTP captive portals + in-app webviews.
 - **`useStorage` defaults must be plain values, not computeds.** It writes back to apply `mergeDefaults`, which errors on readonly computeds. Pass the literal default; if you need a meta-driven seed, write it from the source (e.g. `/new` writing to the same key) so storage is populated before the consumer mounts.
-- **Reactive storage keys.** `useStorage(computed(() => \`sb:meta:\${id.value}\`), default)` — the composable swaps which entry it reads/writes when the key changes. Use this whenever the matchId/dynamicId is reactive.
+- **Reactive storage keys.** `useStorage(computed(() => \`sb:control-layout:\${id.value}\`), default)` — the composable swaps which entry it reads/writes when the key changes. Use this whenever the matchId/dynamicId is reactive.
 
 ### Vue conventions
 - **Composition API + `<script setup lang="ts">` only.** Organize: imports → composables → props/emits → refs/computed → watchers → lifecycle → helpers.
@@ -76,15 +76,14 @@ When you do update, do it in the same commit as the code, and keep the entry con
 
 ### Engine & sync
 - **Engine config** is in `packages/engine/src/registry.ts` — every shipped preset (badminton-21, badminton-15, tennis-basic, pickleball-classic, pickleball-rally, table-tennis) maps to `{ config, reducer, sport, displayName }`. Adding a sport in the racquet family = one entry. New family = sibling reducer + entries.
-- **Per-match storage keys** (single source of truth — these are the contract between `/new`, `useMatchState`, `control.vue`, overlay, scoreboard):
-  - `sb:meta:{matchId}` — sport, sportPreset, isDoubles, teamNames, players (`useMatchMeta`)
-  - `sb:format:preset:{matchId}` — chosen `SportPresetId` (e.g. "badminton-15")
-  - `sb:format:gamesToWin:{matchId}` — match length (1 = single, 2 = BO3, 3 = BO5…)
-  - `sb:theme:{matchId}` — `{ overlay, scoreboard }` chosen theme ids
-  - `sb:control-layout:{matchId}` — `'stacked' | 'sideBySide'`
-  - `sb:result:{matchId}` — final-result entry (saved.vue)
-  - `sb:dynamic:{dynamicId}` — currently bound match for `/d/{id}` URLs
-- **Theme resolution order** in overlay/scoreboard surfaces: `?theme=` query param → `sb:theme:{id}.{surface}` → hardcoded baseline (`broadcast-classic` / `filmable`).
+- **Source of truth = the `matches` row in Supabase.** Meta (team names, players, tournament fields), format (sport_preset + config.gamesToWin), and theme choice (overlay_theme_id + scoreboard_theme_id) all live in the row and sync cross-device via Realtime UPDATE. `useMatchMeta`, `useFormat`, and `useThemeChoice` are the consumer composables — none of them write to localStorage.
+- **localStorage is used only for:**
+  - `sb:events:{matchId}` — the event log (local-first by design — fast paint, offline tolerance). `useEvents` mirrors to Supabase + BroadcastChannel for cross-tab.
+  - `sb:control-layout:{matchId}` — per-device operator UI preference (`'stacked' | 'sideBySide'`). Not synced; each device picks its own.
+  - `sb:dynamic:{dynamicId}` — v1 binding for `/d/{id}` dynamic URLs. ARCHITECTURE.md §6 moves this to a `dynamic_urls` table in v1.x.
+  - `sb:device-id` — stable per-browser ULID used for event provenance.
+  - `sb:theme` — color-mode user preference (light/dark/system), set by `@nuxtjs/color-mode`.
+- **Theme resolution order** in overlay/scoreboard surfaces: `?theme=` query param → `useThemeChoice` (Supabase) → hardcoded baseline (`broadcast-classic` / `filmable`).
 - **Event sync.** `useEvents` writes locally first (localStorage + BroadcastChannel for same-device cross-tab) then to Supabase, and subscribes to Realtime INSERT + DELETE for cross-device sync. Match rows are created lazily on first event with `owner_id` from current auth state.
 
 ### Pre-merge validation

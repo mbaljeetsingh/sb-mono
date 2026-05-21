@@ -20,16 +20,17 @@ const STORAGE_PREFIX = "sb:events:";
 
 type ParsedEvent = RacquetEvent;
 
-// Supabase events row → in-memory RacquetEvent. The DB stores type + payload split.
+// Supabase events row → in-memory RacquetEvent. The DB stores type + payload
+// split; ts is timestamptz (ISO 8601) on the wire, but the engine works in ms.
 const fromRow = (row: {
   id: string;
-  ts: number | string;
+  ts: string;
   type: string;
   payload: Record<string, unknown> | null;
 }): ParsedEvent => {
   return {
     id: row.id,
-    ts: typeof row.ts === "string" ? Number(row.ts) : row.ts,
+    ts: Date.parse(row.ts),
     type: row.type,
     ...(row.payload ?? {}),
   } as ParsedEvent;
@@ -44,7 +45,7 @@ const toRow = (
   id: string;
   match_id: string;
   device_id: string;
-  ts: number;
+  ts: string;
   type: string;
   payload: Record<string, unknown>;
 } => {
@@ -53,7 +54,7 @@ const toRow = (
     id,
     match_id: matchId,
     device_id: deviceId,
-    ts,
+    ts: new Date(ts).toISOString(),
     type,
     payload: rest as Record<string, unknown>,
   };

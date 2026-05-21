@@ -1,7 +1,7 @@
 -- Retention sweep for anonymous matches.
 --
 -- Policy (single source of truth for cleanup):
---   * Anon + zero events: hard-delete after 24h. These are almost always
+--   * Anon + zero events: hard-delete after 1h. These are almost always
 --     accidental /new clicks the user never returned to.
 --   * Anon + has events: hard-delete after 30 days. Matches the copy
 --     surfaced on /m/[...notfound] ("Anonymous matches are kept for 30 days").
@@ -28,10 +28,10 @@ security definer
 set search_path = ''
 as $$
 begin
-  -- Bucket 1: empty anon matches > 24h old.
+  -- Bucket 1: empty anon matches > 1h old.
   delete from public.matches m
   where m.owner_id is null
-    and m.created_at < (now() - interval '24 hours')
+    and m.created_at < (now() - interval '1 hour')
     and not exists (
       select 1 from public.events e where e.match_id = m.id
     );

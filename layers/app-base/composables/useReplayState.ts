@@ -14,7 +14,7 @@ import { getPreset, type RacquetEvent } from "@sb/engine";
 
 type EventRow = {
   id: string;
-  ts: number | string;
+  ts: string;
   type: string;
   payload: Record<string, unknown> | null;
 };
@@ -22,7 +22,7 @@ type EventRow = {
 const fromRow = (row: EventRow): RacquetEvent =>
   ({
     id: row.id,
-    ts: typeof row.ts === "string" ? Number(row.ts) : row.ts,
+    ts: Date.parse(row.ts),
     type: row.type,
     ...(row.payload ?? {}),
   }) as RacquetEvent;
@@ -49,7 +49,7 @@ export function useReplayState(
       .eq("id", matchId.value)
       .maybeSingle();
     matchStartedAt.value = matchRow?.started_at
-      ? Number(matchRow.started_at)
+      ? Date.parse(matchRow.started_at)
       : null;
 
     const { data: rows, error } = await supabase
