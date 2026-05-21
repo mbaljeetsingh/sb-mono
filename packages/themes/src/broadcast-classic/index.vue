@@ -56,7 +56,7 @@ const playersOf = (side: "a" | "b") =>
         v-if="state.matchOver"
         class="text-[10px] font-bold tracking-[0.14em] text-white/90 shrink-0 ml-2"
       >
-        FINAL
+        {{ config.gamesToWin > 1 ? "FINAL" : "GAME" }}
       </span>
       <span
         v-else

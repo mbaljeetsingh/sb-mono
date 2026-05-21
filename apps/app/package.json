@@ -12,6 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "@sb/engine": "workspace:*",
     "@sb/layer-app-base": "workspace:*",
     "@sb/layer-ui": "workspace:*",
@@ -19,6 +21,7 @@
     "@sb/themes": "workspace:*",
     "@vueuse/core": "^14.2.1",
     "browser-image-compression": "^2.0.2",
+    "html-to-image": "^1.11.13",
     "lucide-vue-next": "^0.475.0",
     "vue-sonner": "^2.0.9"
   },

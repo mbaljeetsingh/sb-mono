@@ -8,11 +8,13 @@
 // needs html2canvas-class machinery or a theme-renderer port).
 
 import { ref, computed, watch } from "vue";
-import { Upload } from "lucide-vue-next";
+import { Download, Film, Upload } from "lucide-vue-next";
 import { getTheme } from "@sb/themes";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import { useRolePermissions } from "~/composables/useRolePermissions";
+import { useVideoRender } from "~/composables/useVideoRender";
 import { createError } from "#app";
+import { toast } from "vue-sonner";
 
 definePageMeta({ layout: false, requiresAuth: true });
 useSeoMeta({ title: "Render · Scoreboard" });
@@ -32,6 +34,7 @@ const matchId = computed(() => String(route.params.id ?? ""));
 const videoFile = ref<File | null>(null);
 const videoUrl = ref<string | null>(null);
 const videoEl = ref<HTMLVideoElement | null>(null);
+const overlayEl = ref<HTMLElement | null>(null);
 
 const onPickVideo = (e: Event) => {
   const file = (e.target as HTMLInputElement).files?.[0];
@@ -135,6 +138,66 @@ const clearAnchor = (gameIndex: number) => {
   anchors.value = next;
 };
 
+// Render — sync-gated. Snapshot every event whose game has an anchor, and
+// composite via ffmpeg.wasm. If only G1 is synced, the render covers only
+// G1's events (G2/G3 won't be drawn).
+const { render, progress, outputUrl } = useVideoRender({ videoEl, overlayEl });
+
+// Map an event's ts to its position in the video using the anchor for the
+// game it belongs to. Events in games without anchors return null and are
+// skipped from the render.
+const eventToVideoTimeSec = (
+  ev: { ts: number },
+  gameIndex: number,
+): number | null => {
+  const a = anchors.value[gameIndex];
+  if (!a) return null;
+  return (a.videoMs + (ev.ts - a.eventTs)) / 1000;
+};
+
+const renderableSnapshotTimes = computed<number[]>(() => {
+  const times: number[] = [];
+  let currentGame = 0;
+  for (const ev of events.value) {
+    if (ev.type === "game.end") {
+      currentGame += 1;
+      continue;
+    }
+    if (ev.type !== "point" && ev.type !== "match.start") continue;
+    const t = eventToVideoTimeSec(ev, currentGame);
+    if (t !== null && t >= 0) times.push(t);
+  }
+  return times;
+});
+
+const canRender = computed(
+  () => !!videoFile.value && renderableSnapshotTimes.value.length > 0,
+);
+
+const onRender = async () => {
+  if (!videoFile.value) return;
+  try {
+    await render({
+      videoBlob: videoFile.value,
+      snapshotTimes: renderableSnapshotTimes.value,
+    });
+    toast.success("Render complete");
+  } catch (err) {
+    console.warn("[render] failed", err);
+    toast.error(`Render failed: ${(err as Error).message}`);
+  }
+};
+
+const downloadOutput = () => {
+  if (!outputUrl.value || !videoFile.value) return;
+  const a = document.createElement("a");
+  a.href = outputUrl.value;
+  a.download = videoFile.value.name.replace(/\.[^.]+$/, "") + "-overlay.mp4";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+};
+
 const formatTime = (ms: number) => {
   const total = Math.round(ms / 1000);
   const m = Math.floor(total / 60);
@@ -211,9 +274,11 @@ const meta = computed(() => ({
             @seeked="onTimeUpdate"
           />
           <!-- Overlay layered on top. pointer-events:none so video controls
-               stay tappable. -->
+               stay tappable. `overlayEl` ref is what html-to-image snapshots
+               during render. -->
           <div
             v-if="loaded && themeEntry"
+            ref="overlayEl"
             class="pointer-events-none absolute inset-0"
           >
             <component
@@ -276,27 +341,80 @@ const meta = computed(() => ({
           </div>
         </div>
 
-        <!-- Recording instructions (in-browser composite render is a
-             follow-up). -->
-        <div
-          class="rounded-lg border border-border bg-surface p-4 text-sm space-y-2"
-        >
-          <p class="font-medium">To export the combined video:</p>
-          <ol class="ml-4 list-decimal space-y-1 text-fg-muted">
-            <li>
-              Start an OS screen recording (Cmd-Shift-5 on Mac, OBS, etc.)
-              targeted at the video frame above.
-            </li>
-            <li>Click play on the video. Walk away if it's a long match.</li>
-            <li>
-              Stop recording when the video ends. You'll get an MP4/MOV with the
-              overlay baked in.
-            </li>
-          </ol>
-          <p class="text-xs text-fg-subtle pt-1">
-            In-browser one-click render is on the roadmap — the current
-            broadcast themes are DOM-based, and faithful canvas compositing
-            needs more plumbing to ship.
+        <!-- Render — ffmpeg.wasm + html-to-image composite. Only renders
+             events whose game has a sync anchor. -->
+        <div class="rounded-lg border border-border bg-surface p-4 space-y-3">
+          <div class="flex items-center gap-3 flex-wrap">
+            <Button
+              :disabled="
+                !canRender ||
+                (progress.stage !== 'idle' &&
+                  progress.stage !== 'done' &&
+                  progress.stage !== 'error')
+              "
+              @click="onRender"
+            >
+              <Film class="size-4 mr-2" />
+              Render video
+            </Button>
+            <span class="text-xs text-fg-muted">
+              {{ renderableSnapshotTimes.length }}
+              event{{ renderableSnapshotTimes.length === 1 ? "" : "s" }} from
+              synced games will be drawn. Games without a sync row above are
+              skipped.
+            </span>
+            <Button
+              v-if="outputUrl"
+              variant="secondary"
+              class="ml-auto"
+              @click="downloadOutput"
+            >
+              <Download class="size-4 mr-2" />
+              Download MP4
+            </Button>
+          </div>
+
+          <!-- Progress. `ratio` (0..1) drives loading-ffmpeg and encoding
+               stages; `currentSnapshot / totalSnapshots` drives snapshotting.
+               Without either, the bar shows an indeterminate pulse so users
+               know it's working. -->
+          <div
+            v-if="progress.stage !== 'idle'"
+            class="rounded-md border border-border bg-background px-3 py-2 text-xs font-mono text-fg-muted"
+          >
+            <div>{{ progress.message }}</div>
+            <div class="mt-1 h-1 w-full bg-border rounded overflow-hidden">
+              <div
+                v-if="progress.totalSnapshots"
+                class="h-full bg-brand rounded transition-[width]"
+                :style="{
+                  width: `${
+                    ((progress.currentSnapshot ?? 0) /
+                      (progress.totalSnapshots || 1)) *
+                    100
+                  }%`,
+                }"
+              />
+              <div
+                v-else-if="progress.ratio !== undefined"
+                class="h-full bg-brand rounded transition-[width]"
+                :style="{ width: `${progress.ratio * 100}%` }"
+              />
+              <div v-else class="h-full w-1/3 bg-brand rounded animate-pulse" />
+            </div>
+          </div>
+
+          <!-- Output preview -->
+          <video
+            v-if="outputUrl"
+            :src="outputUrl"
+            controls
+            class="w-full rounded-md border border-border bg-black"
+          />
+
+          <p class="text-[11px] text-fg-subtle">
+            Beta · ffmpeg.wasm runs in your browser. Long matches take real time
+            to encode; watch progress above.
           </p>
         </div>
       </section>
