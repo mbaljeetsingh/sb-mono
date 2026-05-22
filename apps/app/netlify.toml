@@ -4,11 +4,7 @@
 [build.environment]
   NODE_VERSION = "22"
 
-# SPA fallback — ssr:false means all client routes resolve to index.html
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+# SPA fallback is auto-handled by Nuxt's generated 200.html — no redirect needed.
 
 [[headers]]
   for = "/*"
