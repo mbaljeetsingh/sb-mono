@@ -1,6 +1,4 @@
 [build]
-  command = "pnpm --filter @sb/app generate"
-  publish = "apps/app/.output/public"
   ignore = "bash scripts/netlify-ignore.sh app"
 
 [build.environment]
