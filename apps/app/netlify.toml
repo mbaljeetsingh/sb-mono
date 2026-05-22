@@ -1,11 +1,12 @@
 [build]
-  command = "pnpm --filter @sb/app generate"
-  publish = "apps/app/.output/public"
+  command = "pnpm generate"
+  publish = ".output/public"
+  ignore = "bash scripts/netlify-ignore.sh app"
 
 [build.environment]
   NODE_VERSION = "22"
 
-# SPA fallback — Nuxt is ssr:false, so all client routes resolve to index.html
+# SPA fallback — ssr:false means all client routes resolve to index.html
 [[redirects]]
   from = "/*"
   to = "/index.html"
