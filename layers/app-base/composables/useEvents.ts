@@ -14,7 +14,7 @@
 
 import type { RacquetEvent } from "@sb/engine";
 import { ulid } from "ulid";
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, type Ref } from "vue";
 
 const STORAGE_PREFIX = "sb:events:";
 
@@ -72,9 +72,29 @@ const getDeviceId = (): string => {
   return id;
 };
 
-export function useEvents(matchId: Ref<string>) {
+// Local-only fat-finger guard for point events. If the user has registered a
+// same-side `point` within the window, drop this tap as an accidental
+// double-press. Cross-device dedup is handled separately: the active-scorer
+// handoff (`useScorerActive`) ensures only one device writes at a time, and
+// realtime echoes are dropped by id in `upsertLocal`. So this window only
+// needs to cover physical double-taps on a touchscreen (~150–250 ms); anything
+// longer starts blocking legitimate fast scoring during quick rallies or
+// testing.
+const POINT_DEDUP_WINDOW_MS = 250;
+
+type UseEventsOptions = {
+  // When set, all writes are routed through the SECURITY DEFINER RPCs
+  // (`append_event_with_token`, `delete_events_with_token`) instead of the
+  // direct PostgREST endpoints. This is the co-scorer path — the writer
+  // doesn't own the match, but has a valid invite token. Owner / anon-match
+  // writers should leave this null so they use the normal RLS-gated path.
+  writeToken?: Ref<string | null>;
+};
+
+export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
   const supabase = useSupabaseClient();
   const supabaseUser = useSupabaseUser();
+  const writeToken = opts.writeToken;
 
   const events = ref<RacquetEvent[]>([]);
   const storageKey = computed(() => `${STORAGE_PREFIX}${matchId.value}`);
@@ -177,12 +197,54 @@ export function useEvents(matchId: Ref<string>) {
     const ev = JSON.parse(
       JSON.stringify({ id: ulid(), ts: Date.now(), ...partial }),
     ) as RacquetEvent;
+
+    // Cross-device + fat-finger dedup for point events. If the same side
+    // already scored within the window, treat this as a duplicate observation
+    // and drop it. The engine sees one point, the UI updates once, the
+    // network never carries the dupe.
+    if (ev.type === "point") {
+      const side = (ev as RacquetEvent & { side?: string }).side;
+      const recent = events.value.find((e) => {
+        if (e.type !== "point") return false;
+        if ((e as RacquetEvent & { side?: string }).side !== side) return false;
+        return ev.ts - (e.ts ?? 0) < POINT_DEDUP_WINDOW_MS;
+      });
+      if (recent) {
+        console.warn(
+          "[useEvents] dropping duplicate point within",
+          POINT_DEDUP_WINDOW_MS,
+          "ms",
+          { kept: recent.id, dropped: ev.id },
+        );
+        return recent;
+      }
+    }
+
     events.value = [...events.value, ev].sort(sortById);
     persist();
     channel?.postMessage({ type: "append", event: ev });
 
     // Fire-and-forget: ensure match exists, then insert the event.
     (async () => {
+      if (writeToken?.value) {
+        // Co-scorer path: the match row is guaranteed to exist (the owner
+        // already created it before minting a token), so skip ensureMatchRow
+        // and route through the RPC that validates the token server-side.
+        const { id, ts, type, ...rest } = ev as ParsedEvent &
+          Record<string, unknown>;
+        const { error } = await supabase.rpc("append_event_with_token", {
+          p_match_id: matchId.value,
+          p_token: writeToken.value,
+          p_event_id: id,
+          p_device_id: getDeviceId(),
+          p_ts: new Date(ts).toISOString(),
+          p_type: type,
+          p_payload: rest as Record<string, unknown>,
+        });
+        if (error) console.warn("[useEvents] rpc append failed", error);
+        return;
+      }
+
       await ensureMatchRow();
       const { error } = await supabase
         .from("events")
@@ -213,6 +275,15 @@ export function useEvents(matchId: Ref<string>) {
     // Propagate deletions to Supabase so cross-device viewers see the undo.
     if (removed.length) {
       (async () => {
+        if (writeToken?.value) {
+          const { error } = await supabase.rpc("delete_events_with_token", {
+            p_match_id: matchId.value,
+            p_token: writeToken.value,
+            p_event_ids: removed,
+          });
+          if (error) console.warn("[useEvents] rpc delete failed", error);
+          return;
+        }
         const { error } = await supabase
           .from("events")
           .delete()

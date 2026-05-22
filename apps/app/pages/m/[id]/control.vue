@@ -16,6 +16,7 @@ import {
   applyRacquetUndo,
   reduceRacquet,
 } from "@sb/engine";
+import { toast } from "vue-sonner";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import TeamRow from "~/components/control/TeamRow.vue";
 import MatchStateSheet from "~/components/control/MatchStateSheet.vue";
@@ -29,6 +30,37 @@ definePageMeta({ layout: false, colorMode: "light" });
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
 
+// Resolve who can score here: owner, anon-match-anyone, or token holder.
+// Token-only access routes writes through SECURITY DEFINER RPCs that
+// validate the token server-side; owners and anon-match writers use the
+// normal RLS-gated path (writeToken stays null for them).
+const {
+  loaded: accessLoaded,
+  canScore,
+  writeToken,
+  isOwner,
+  isAnonMatch,
+  matchDeleted,
+} = useWriteAccess(matchId);
+// `canEditMeta` gates UI that writes directly to the `matches` row (format
+// preset, gamesToWin, player swap in doubles). Co-scorer token writes are
+// routed through the SECURITY DEFINER RPCs; direct UPDATEs fail under RLS
+// for anyone who isn't the owner of an owned match, so we hide the chrome
+// to avoid showing "successful" local edits that never sync.
+const canEditMeta = computed(() => isOwner.value || isAnonMatch.value);
+watch([accessLoaded, canScore], ([l, ok]) => {
+  if (!l || ok) return;
+  // The match was deleted while we were here — the scoreboard view would be
+  // an empty shell, so send the user somewhere meaningful instead.
+  if (matchDeleted.value) {
+    toast.error("This match was deleted.");
+    navigateTo("/", { replace: true });
+    return;
+  }
+  toast.error("You don't have permission to score this match.");
+  navigateTo(`/m/${matchId.value}/scoreboard`, { replace: true });
+});
+
 const { meta: matchMeta } = useMatchMeta(matchId);
 const {
   preset,
@@ -38,7 +70,18 @@ const {
   presetLabel,
   seriesLabel,
 } = useFormat(matchId);
-const { events, append, replace } = useEvents(matchId);
+const { events, append, replace } = useEvents(matchId, { writeToken });
+
+// Soft handoff lock: at most one device is the "active scorer" at a time.
+// Other devices viewing /control land in read-only mode with a banner +
+// "Score from this device" reclaim button. Bootstrap: when no one has
+// claimed yet (first load on a fresh match), every device is active so the
+// first tap registers. The trigger flips the column on first event INSERT.
+const {
+  isActive,
+  activeDeviceId,
+  claim: claimScoring,
+} = useScorerActive(matchId, { writeToken });
 
 const teamMeta = computed(() => ({
   isDoubles: matchMeta.value.isDoubles ?? false,
@@ -50,8 +93,51 @@ const state = computed(() => reduceRacquet(events.value, config.value));
 const { cellsA, cellsB, cellIsServer, displayNameA, displayNameB } =
   useCourtCells(state, teamMeta);
 
-onMounted(() => {
-  if (events.value.length === 0) {
+// Sync matches.ended_at to the engine's view of "match is finished". Going
+// true → stamps the timestamp so the token RPCs auto-revoke co-scorer
+// writes; going false → clears it so a score.correct that un-finishes the
+// match re-opens token-path scoring. The watcher only fires on actual
+// transitions, so we don't burn updates on every event. Owner-or-anon-match
+// path (RLS gates this update); for token-only callers the write fails
+// silently — they shouldn't be the ones ending matches anyway.
+const supabaseClient = useSupabaseClient();
+watch(
+  () => state.value.matchOver,
+  async (isOver, wasOver) => {
+    if (isOver === wasOver) return;
+    const { error } = await supabaseClient
+      .from("matches")
+      .update({ ended_at: isOver ? new Date().toISOString() : null })
+      .eq("id", matchId.value);
+    if (error) console.warn("[control] sync ended_at failed", error);
+  },
+);
+
+// Seed the match.start event on first mount. Gated on canScore so a
+// viewer who's about to be bounced (no access) doesn't write a phantom
+// event into localStorage / try a forbidden insert before the redirect
+// fires. Wait for accessLoaded too — during the optimistic load window
+// canScore is also true but we shouldn't trust it.
+onMounted(async () => {
+  if (events.value.length !== 0) return;
+  // Wait one tick so useWriteAccess has at least kicked off its fetch.
+  await new Promise((r) => setTimeout(r, 0));
+  if (!accessLoaded.value) {
+    // Defer until the gate resolves.
+    const stop = watch(accessLoaded, (ok) => {
+      if (!ok) return;
+      stop();
+      if (canScore.value && events.value.length === 0) {
+        append({
+          type: "match.start",
+          serverSide: "A",
+          serverCourt: "right",
+        } as Omit<RacquetEvent, "id" | "ts">);
+      }
+    });
+    return;
+  }
+  if (canScore.value && events.value.length === 0) {
     append({
       type: "match.start",
       serverSide: "A",
@@ -67,6 +153,16 @@ const score = (side: SideId) => {
 
 const { vibrate } = useVibrate();
 
+// Gate every event-emitting handler on the handoff lock. The overlay
+// banner already disables pointer events on the score cells; this is a
+// defensive backstop for code paths that fire through other entry points
+// (more menu, undo button, modals).
+const guardActive = (): boolean => {
+  if (isActive.value) return true;
+  toast.info("Another device is scoring. Tap 'Score from this device' first.");
+  return false;
+};
+
 const onTap = (side: SideId) => {
   if (state.value.matchOver) return;
   // Active timeout or suspension pauses play — score taps no-op until the
@@ -75,6 +171,7 @@ const onTap = (side: SideId) => {
   // awards a point already, black ends the match.
   if (state.value.timeout || state.value.suspended) return;
   if (state.value.betweenGames) return;
+  if (!guardActive()) return;
   vibrate(10);
   append({ type: "point", side } as Omit<RacquetEvent, "id" | "ts">);
 };
@@ -97,11 +194,26 @@ watch(serveSignature, () => {
 });
 
 const onUndo = () => {
+  if (!guardActive()) return;
   vibrate(20);
   replace(applyRacquetUndo(events.value));
 };
 
-const onReset = () => replace([]);
+// Reset = restore a clean initial state. Wipes the event log AND clears the
+// per-device visual sides-swap so the operator isn't left looking at a
+// half-reset court (score 0–0 but ends still flipped from the previous run),
+// then re-seeds `match.start` so the engine has a serving side again — without
+// it the first post-reset tap appends a `point` with no preceding start event.
+const onReset = () => {
+  if (!guardActive()) return;
+  sidesSwapped.value = false;
+  replace([]);
+  append({
+    type: "match.start",
+    serverSide: "A",
+    serverCourt: "right",
+  } as Omit<RacquetEvent, "id" | "ts">);
+};
 
 // Reset just the current game's score (mistake recovery without losing
 // completed games). Uses the existing score.correct event so prior games
@@ -109,6 +221,7 @@ const onReset = () => replace([]);
 const onResetCurrentGame = () => {
   const games = state.value.games;
   if (games.length === 0) return;
+  if (!guardActive()) return;
   vibrate(20);
   append({
     type: "score.correct",
@@ -123,6 +236,7 @@ const onResetCurrentGame = () => {
 // betweenGames; the operator's next score tap then increments G(N+1)
 // directly without the auto-create path.
 const onStartNextGame = () => {
+  if (!guardActive()) return;
   vibrate(10);
   append({ type: "game.end" } as Omit<RacquetEvent, "id" | "ts">);
 };
@@ -151,12 +265,17 @@ const swapSidesVisualOnly = () => {
 
 const swapSides = () => {
   const isPreMatch = canSwapInitial.value;
+  // Visual-only flip is fine offline; the event rewrite below is the gated
+  // part. We allow the visual flip even when inactive so the read-only
+  // viewer can orient the court to their seat — only the match.start
+  // rewrite needs the guard.
   vibrate(10);
   sidesSwapped.value = !sidesSwapped.value;
   // Pre-match swap also mirrors who serves first (operator setup was
   // backwards). Mid-game ends-change swap is visual only — server identity
   // is derived from the event log and shouldn't be rewritten.
   if (isPreMatch) {
+    if (!guardActive()) return;
     const first = events.value[0];
     if (first && first.type === "match.start") {
       const opposite: SideId = first.serverSide === "A" ? "B" : "A";
@@ -233,8 +352,13 @@ const swapPlayers = (side: SideId) => {
   };
 };
 
+// Player swap writes to matches.players via useMatchMeta → only the owner
+// (or anyone on an anon match) can persist it; co-scorers' edits would
+// silently fail under RLS. Hide the arrow rather than letting them perform
+// a local-only swap that never syncs to the owner.
 const canSwapPlayersA = computed(
   () =>
+    canEditMeta.value &&
     (canSwapInitial.value || canSwapAtGameStart.value) &&
     (matchMeta.value.isDoubles ?? false),
 );
@@ -316,18 +440,22 @@ onLongPress(
 
 // Match-state actions
 const onWalkover = (winner: SideId) => {
+  if (!guardActive()) return;
   append({ type: "walkover", winner } as Omit<RacquetEvent, "id" | "ts">);
   closeSheet();
 };
 const onRetirement = (retiring: SideId) => {
+  if (!guardActive()) return;
   append({ type: "retirement", retiring } as Omit<RacquetEvent, "id" | "ts">);
   closeSheet();
 };
 const onPenalty = (side: SideId, card: "yellow" | "red" | "black") => {
+  if (!guardActive()) return;
   append({ type: "penalty", side, card } as Omit<RacquetEvent, "id" | "ts">);
   closeSheet();
 };
 const onTimeout = (side: SideId, kind: "standard" | "medical" | "injury") => {
+  if (!guardActive()) return;
   append({ type: "timeout.start", side, kind } as Omit<
     RacquetEvent,
     "id" | "ts"
@@ -337,6 +465,7 @@ const onTimeout = (side: SideId, kind: "standard" | "medical" | "injury") => {
 const onClearTimeout = () => {
   const t = state.value.timeout;
   if (!t) return;
+  if (!guardActive()) return;
   append({ type: "timeout.end", side: t.side } as Omit<
     RacquetEvent,
     "id" | "ts"
@@ -355,6 +484,7 @@ const onApplyScoreCorrect = (payload: {
   games: { a: number; b: number }[];
   gamesWon: { a: number; b: number };
 }) => {
+  if (!guardActive()) return;
   append({
     type: "score.correct",
     games: payload.games,
@@ -472,6 +602,7 @@ const orientationB = computed<Orientation>(() => {
             INTERVAL
           </span>
           <Button
+            v-if="canEditMeta"
             variant="link"
             size="sm"
             class="h-auto p-0 text-[11px] text-fg-muted hover:text-foreground"
@@ -479,6 +610,9 @@ const orientationB = computed<Orientation>(() => {
           >
             {{ presetLabel }} · {{ seriesLabel }}
           </Button>
+          <span v-else class="text-[11px] text-fg-muted">
+            {{ presetLabel }} · {{ seriesLabel }}
+          </span>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -533,6 +667,8 @@ const orientationB = computed<Orientation>(() => {
             :cell-is-server="(court) => cellIsServer('A', court)"
             :can-swap-players="canSwapPlayersA"
             :cards="state.cards.a"
+            :is-doubles="teamMeta.isDoubles"
+            :display-name="displayNameA"
             @tap="onTap('A')"
             @swap-players="swapPlayers('A')"
           />
@@ -553,6 +689,8 @@ const orientationB = computed<Orientation>(() => {
             :cell-is-server="(court) => cellIsServer('B', court)"
             :can-swap-players="canSwapPlayersB"
             :cards="state.cards.b"
+            :is-doubles="teamMeta.isDoubles"
+            :display-name="displayNameB"
             @tap="onTap('B')"
             @swap-players="swapPlayers('B')"
           />
@@ -576,6 +714,33 @@ const orientationB = computed<Orientation>(() => {
           />
           Swap sides
         </button>
+
+        <!-- Take-over overlay. Sits above the court, dims it slightly, and
+             intercepts taps with a "Score from this device" reclaim button.
+             Pointer-events on the cells underneath are blocked by this
+             layer; on-screen score stays visible so the read-only viewer
+             still tracks the match. -->
+        <div
+          v-if="!isActive"
+          class="absolute inset-0 z-30 flex items-center justify-center bg-background/55 backdrop-blur-[1px]"
+        >
+          <div
+            class="flex flex-col items-center gap-3 rounded-lg border border-border-strong bg-background/95 px-4 py-3 shadow-xl"
+          >
+            <span
+              class="text-[11px] font-bold uppercase tracking-wider text-fg-muted"
+            >
+              Another device is scoring
+            </span>
+            <Button type="button" size="sm" @click="claimScoring">
+              Score from this device
+            </Button>
+            <span class="max-w-[16rem] text-center text-[10px] text-fg-subtle">
+              Taking over disables scoring on the other device until they
+              reclaim it.
+            </span>
+          </div>
+        </div>
       </div>
 
       <!-- Bottom action bar. Single button — short tap undoes last point,
@@ -624,6 +789,7 @@ const orientationB = computed<Orientation>(() => {
       <MatchStateSheet
         v-if="openSheet === 'matchState'"
         :team-names="{ a: displayNameA, b: displayNameB }"
+        :games-to-win="config.gamesToWin"
         @timeout="onTimeout"
         @penalty="onPenalty"
         @walkover="onWalkover"

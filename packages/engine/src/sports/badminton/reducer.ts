@@ -169,10 +169,24 @@ function applyEvent(
       // Authoritative reset of scores. Recompute winner/over flags.
       const matchOver =
         ev.gamesWon.a >= cfg.gamesToWin || ev.gamesWon.b >= cfg.gamesToWin;
+      const nextGames = ev.games.length > 0 ? [...ev.games] : [{ a: 0, b: 0 }];
+      // Recompute serverCourt from BWF parity: server's own score even → right,
+      // odd → left. `applyPoint` keeps this in sync rally-by-rally; without
+      // mirroring it here, a mid-game "reset to 0–0" leaves the server stuck on
+      // the left court if the last rally happened to make their score odd.
+      // partnerOnRight resets to {1,1} when the current game is back to 0–0
+      // (start-of-game state) so doubles partner placement matches a fresh game.
+      const cur = nextGames[nextGames.length - 1] ?? { a: 0, b: 0 };
+      const serverScore = state.servingSide === "A" ? cur.a : cur.b;
+      const serverCourt: "right" | "left" =
+        serverScore % 2 === 0 ? "right" : "left";
+      const atGameStart = cur.a === 0 && cur.b === 0;
       return {
         ...state,
-        games: ev.games.length > 0 ? [...ev.games] : [{ a: 0, b: 0 }],
+        games: nextGames,
         gamesWon: { ...ev.gamesWon },
+        serverCourt,
+        partnerOnRight: atGameStart ? { a: 1, b: 1 } : state.partnerOnRight,
         matchOver,
         winner: matchOver ? (ev.gamesWon.a > ev.gamesWon.b ? "A" : "B") : null,
         endReason: matchOver ? "normal" : null,

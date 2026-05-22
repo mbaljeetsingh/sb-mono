@@ -25,6 +25,12 @@ create table public.matches (
     scoreboard_theme_id text not null default 'filmable',
     colors          jsonb not null default '{"a": "#dc2626", "b": "#2563eb"}'::jsonb,
     started_at      timestamptz,                            -- null until first point
+    -- Set when the engine reports match-over (won, walkover, retirement,
+    -- black card). Used by the token RPCs (E2.8) to auto-revoke co-scorer
+    -- access — once the match is over there's no legitimate reason a
+    -- token-holder should still be writing events. Owners can keep writing
+    -- (corrections / un-end via score.correct) regardless of this column.
+    ended_at        timestamptz,
     -- Display metadata mirrored from `sb:meta:{matchId}` localStorage so any
     -- device opening the overlay (OBS on a laptop, phone of a co-scorer) can
     -- render team / player / tournament info without sharing localStorage.
@@ -36,7 +42,23 @@ create table public.matches (
     court_label     text,
     round           text,
     category        text,
-    venue           text
+    venue           text,
+    -- Per-match write token (E2.8). NULL until the owner generates a
+    -- co-scorer invite link. Embedded in the URL as `?wt=…`; validated by
+    -- the `append_event_with_token` / `delete_events_with_token` RPCs so
+    -- holders can score without owning the match. Only owned matches use
+    -- this — anonymous matches stay open to anyone with the URL.
+    write_token     text,
+    -- Soft handoff lock (E2.8). The device_id that most recently appended
+    -- an event is the "active scorer"; other devices loading /control see
+    -- a read-only banner with a "Score from this device" reclaim button.
+    -- Updated automatically by the events_bump_active_scorer trigger when
+    -- a different device writes; the reclaim button calls claim_scoring
+    -- to flip it without waiting for the first event. NULL until first
+    -- event (or first explicit claim) — in that state every device is
+    -- enabled so the bootstrap tap can happen.
+    active_scorer_device_id text,
+    active_scorer_at        timestamptz
 );
 
 create index matches_owner_id_idx on public.matches (owner_id);
@@ -71,6 +93,32 @@ drop trigger if exists matches_bump_updated_at on public.matches;
 create trigger matches_bump_updated_at
     before update on public.matches
     for each row execute function public.matches_bump_updated_at();
+
+-- Stamp the "active scorer" device on the parent match whenever a new
+-- event is appended. The trigger is a no-op when the device hasn't
+-- changed, which keeps Realtime UPDATE noise off the matches row during
+-- a single scorer's normal play. When a *different* device writes (or
+-- the very first event of the match), the column flips and Realtime
+-- pushes the change to every viewer — that's how passive devices learn
+-- they need to disable their score buttons.
+create or replace function public.events_bump_active_scorer()
+returns trigger
+language plpgsql
+as $$
+begin
+    update public.matches
+        set active_scorer_device_id = NEW.device_id,
+            active_scorer_at        = NEW.ts
+        where id = NEW.match_id
+          and active_scorer_device_id is distinct from NEW.device_id;
+    return NEW;
+end;
+$$;
+
+drop trigger if exists events_bump_active_scorer on public.events;
+create trigger events_bump_active_scorer
+    after insert on public.events
+    for each row execute function public.events_bump_active_scorer();
 
 -- Realtime: enable for both tables so subscribers can watch events appended in real time.
 alter publication supabase_realtime add table public.matches;

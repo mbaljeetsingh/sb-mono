@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { Cell } from "@sb/layer-app-base/composables/useCourtCells";
 import PenaltyCards from "@sb/themes/penalty-cards";
 import { ArrowLeftRight } from "lucide-vue-next";
@@ -38,7 +39,18 @@ const props = defineProps<{
   cellIsServer: (court: "left" | "right") => boolean;
   canSwapPlayers?: boolean;
   cards?: { yellow: number; red: number; black: number };
+  // Singles: cells show the player name only on the active service court (it
+  // shifts as service moves), so the header carries the team identity. In
+  // doubles each cell labels its own player so the header falls back to
+  // "Team A" / "Team B" to avoid duplicating one player's name there.
+  isDoubles?: boolean;
+  displayName?: string;
 }>();
+
+const headerLabel = computed(() => {
+  if (!props.isDoubles && props.displayName) return props.displayName;
+  return `Team ${props.team}`;
+});
 
 defineEmits<{
   (e: "tap"): void;
@@ -88,10 +100,10 @@ const isSecondVisualCell = (idx: number) =>
       ]"
     >
       <span
-        class="text-[10px] font-bold uppercase tracking-[0.08em]"
+        class="max-w-[40%] truncate text-[10px] font-bold uppercase tracking-[0.08em]"
         :class="team === 'A' ? 'text-team-a' : 'text-team-b'"
       >
-        Team {{ team }}
+        {{ headerLabel }}
       </span>
       <!-- Persistent penalty cards. Same component as the broadcast themes
            so the visual language stays consistent across control + overlay

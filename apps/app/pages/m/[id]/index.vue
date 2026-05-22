@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useClipboard } from "@vueuse/core";
-import { Film, QrCode, Settings } from "lucide-vue-next";
+import { Film, QrCode, RefreshCw, Settings } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import { type ThemeSurface } from "@sb/themes";
 import type { MatchMeta } from "@sb/layer-app-base/composables/useMatchMeta";
@@ -11,6 +11,16 @@ import LookAndFeelCards from "~/components/match/LookAndFeelCards.vue";
 import SettingsSheet from "~/components/match/SettingsSheet.vue";
 import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
 import QrDialog from "~/components/match/QrDialog.vue";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@sb/layer-ui/components/ui/alert-dialog";
 import { useUserStore } from "~/stores/user";
 import { useRolePermissions } from "~/composables/useRolePermissions";
 
@@ -115,6 +125,95 @@ const onPickTheme = ({
   if (surface === "overlay") overlayTheme.value = id;
   if (surface === "scoreboard") scoreboardTheme.value = id;
 };
+
+// E2.8 — write token for delegated scoring. Anon matches stay open
+// (URL = access); owned matches need a token in the URL for anyone other
+// than the signed-in owner to score. We mint the token lazily the first
+// time the owner reveals the Control QR, then reuse it; "Regenerate" mints
+// a new one and revokes the old (any outstanding scanned links instantly
+// stop working). The token doesn't change unless the owner regenerates.
+const { isOwner, isAnonMatch } = useWriteAccess(matchId);
+const supabaseClient = useSupabaseClient();
+const writeToken = ref<string | null>(null);
+const fetchOwnerToken = async () => {
+  if (!isOwner.value) return;
+  const { data } = await supabaseClient
+    .from("matches")
+    .select("write_token")
+    .eq("id", matchId.value)
+    .maybeSingle();
+  writeToken.value = data?.write_token ?? null;
+};
+watch(isOwner, fetchOwnerToken, { immediate: true });
+
+// The Control URL to embed in the QR. Owners on an owned match get the
+// token baked in so scanning from any device — signed in or not — just
+// works. Anon matches don't use tokens; the URL itself is the secret.
+const controlShareUrl = computed(() => {
+  if (isAnonMatch.value) return urls.value.control;
+  if (isOwner.value && writeToken.value) {
+    return `${urls.value.control}?wt=${writeToken.value}`;
+  }
+  return urls.value.control;
+});
+
+const ensureToken = async (): Promise<string | null> => {
+  if (writeToken.value) return writeToken.value;
+  if (!isOwner.value) return null;
+  const { data, error } = await supabaseClient.rpc("regenerate_write_token", {
+    p_match_id: matchId.value,
+  });
+  if (error) {
+    toast.error("Couldn't create scoring link");
+    console.warn("[match] regenerate_write_token failed", error);
+    return null;
+  }
+  writeToken.value = data as string;
+  return writeToken.value;
+};
+
+const onShowControlQr = async () => {
+  // For owned matches, lazy-mint the token at QR-reveal time so the QR
+  // works for whoever scans it. For anon matches, just open the bare URL.
+  if (isOwner.value) {
+    const tok = await ensureToken();
+    if (!tok) return;
+  }
+  openQr({
+    url: controlShareUrl.value,
+    title: "Control",
+    description: isOwner.value
+      ? "Scan with the device you want to score on. Anyone who has this link can score — use the rotate icon on the row to revoke."
+      : "Scan with the device you want to score on.",
+    sensitive: true,
+  });
+};
+
+// Regenerate is destructive — it kicks any open co-scorer device the moment
+// the realtime UPDATE propagates. Gate behind an AlertDialog confirm so an
+// accidental tap on the rotate icon doesn't yank scoring out from under
+// someone in the middle of a rally.
+const regenConfirmOpen = ref(false);
+const regenBusy = ref(false);
+const openRegenConfirm = () => {
+  if (!isOwner.value) return;
+  regenConfirmOpen.value = true;
+};
+const onRegenerateToken = async () => {
+  if (!isOwner.value || regenBusy.value) return;
+  regenBusy.value = true;
+  const { data, error } = await supabaseClient.rpc("regenerate_write_token", {
+    p_match_id: matchId.value,
+  });
+  regenBusy.value = false;
+  if (error) {
+    toast.error("Couldn't regenerate scoring link");
+    return;
+  }
+  writeToken.value = data as string;
+  regenConfirmOpen.value = false;
+  toast.success("New scoring link generated — old links are revoked");
+};
 </script>
 
 <template>
@@ -184,19 +283,23 @@ const onPickTheme = ({
             </span>
           </span>
           <Button
+            v-if="isOwner && writeToken"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Regenerate scoring link (revokes the current one)"
+            title="Regenerate scoring link (revokes the current one)"
+            @click="openRegenConfirm"
+          >
+            <RefreshCw class="size-4" />
+          </Button>
+          <Button
             type="button"
             variant="ghost"
             size="icon-sm"
             aria-label="Show Control URL as QR code"
             title="Scan with another device to score there"
-            @click="
-              openQr({
-                url: urls.control,
-                title: 'Control',
-                description: 'Scan with the device you want to score on.',
-                sensitive: true,
-              })
-            "
+            @click="onShowControlQr"
           >
             <QrCode class="size-4" />
           </Button>
@@ -312,5 +415,24 @@ const onPickTheme = ({
       :description="qrDescription"
       :sensitive="qrSensitive"
     />
+
+    <AlertDialog v-model:open="regenConfirmOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Regenerate the scoring link?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Anyone currently using the old link will be kicked to the scoreboard
+            within a second. Share the new link with whoever should keep
+            scoring.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="regenBusy">Cancel</AlertDialogCancel>
+          <AlertDialogAction :disabled="regenBusy" @click="onRegenerateToken">
+            {{ regenBusy ? "Regenerating…" : "Regenerate" }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

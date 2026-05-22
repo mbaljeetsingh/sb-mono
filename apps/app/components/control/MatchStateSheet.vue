@@ -6,6 +6,11 @@ import { Button } from "@sb/layer-ui/components/ui/button";
 
 const props = defineProps<{
   teamNames: { a: string; b: string };
+  // gamesToWin == 1 means a single-game match — "reset current game" and
+  // "reset entire match" collapse to the same action, so we hide the per-game
+  // variant. For best-of-N (gamesToWin ≥ 2) both are meaningful: per-game keeps
+  // completed games + gamesWon intact, full-match wipes everything.
+  gamesToWin: number;
 }>();
 
 const emit = defineEmits<{
@@ -298,6 +303,7 @@ const onResetGameTap = () => {
           Danger
         </div>
         <Button
+          v-if="props.gamesToWin > 1"
           :variant="confirmResetGame ? 'destructive' : 'outline'"
           size="sm"
           class="w-full"

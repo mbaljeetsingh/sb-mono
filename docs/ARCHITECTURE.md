@@ -185,8 +185,18 @@ RLS supports both **anonymous** and **authenticated** scoring against the same D
 - Owner-only write under `{user_id}/...` (folder-name guard via `(storage.foldername(name))[1] = auth.uid()::text`).
 
 Risks intentionally accepted in v1:
-- Anonymous match URLs can be scored by anyone who has the URL. Mitigation: match URLs are ULID-secret (not enumerable); v2 adds per-match write tokens (E2.8) for delegated scoring.
+- Anonymous match URLs can be scored by anyone who has the URL. Mitigation: match URLs are ULID-secret (not enumerable). Owned matches gate scoring on auth — see E2.8 below for delegated co-scorer access.
 - Anonymous matches accumulate; a 30-day GC job (E1.x) cleans them up.
+
+**E2.8 — per-match write tokens (delegated scoring).** Owned matches default to owner-only writes. The owner can mint a short opaque token (`matches.write_token`, 144 bits, URL-safe), embed it as `?wt=<token>` in the control URL, and hand the link to a co-scorer (typically via QR). Two `SECURITY DEFINER` RPCs gate the token path:
+- `regenerate_write_token(p_match_id)` — owner-only; mints or rotates the token (rotation invalidates any outstanding co-scorer link instantly via realtime UPDATE on `matches`).
+- `append_event_with_token(...)` / `delete_events_with_token(...)` — anyone with a valid token can write/undo; the function validates `matches.write_token = caller token` before touching `events`, and additionally rejects when `matches.ended_at IS NOT NULL` so co-scorer access auto-revokes at match end. RLS for owned matches stays strict — direct writes are still owner-only.
+
+UI: one consolidated "Score from your phone" row on `/m/[id]` carries the QR. For owned matches the QR includes the token (lazy-minted on first reveal); for anon matches it's the bare URL. An adjacent rotate icon (owner-only, visible only when a token exists) opens an `AlertDialog` confirm — accepting calls `regenerate_write_token`, which rotates the column and the Postgres realtime UPDATE bounces any open co-scorer tab to `/scoreboard`.
+
+**Handoff lock (one active scorer at a time).** `matches.active_scorer_device_id` is the soft lock; an AFTER-INSERT trigger on `events` (`events_bump_active_scorer`) flips it to the writing device whenever it changes (no-op when the same device keeps scoring, so realtime stays quiet during normal play). On `/control` the `useScorerActive` composable subscribes to the column and gates every event-emitting handler via `guardActive()`; a non-active device sees a translucent overlay with a "Score from this device" button that calls the `claim_scoring(p_match_id, p_device_id, p_token)` RPC. `claim_scoring` enforces the same access policy as the event RPCs (owner, anon match, or valid token + not-ended), so a stale invite can't reclaim scoring. Result: simultaneous double-counts go from "best effort dedup" to architecturally impossible — only the active device can write events at any moment.
+
+`POINT_DEDUP_WINDOW_MS = 1200ms` in `useEvents.append` stays as a belt-and-braces local guard against fat-finger double-taps on the active device. It is **not** a cross-device dedup; the handoff lock is.
 
 Migrations (in chronological order):
 1. `20260504000000_initial_schema.sql` — matches + events tables, basic RLS.
@@ -197,6 +207,7 @@ Migrations (in chronological order):
 6. `20260505000004_avatars_storage.sql` — storage bucket + folder-RLS.
 7. `20260505000005_handle_new_user_oauth.sql` — pull display_name + avatar from OAuth metadata.
 8. `20260505000006_anonymous_matches.sql` — anon-OK insert/update for `owner_id IS NULL` matches + events.
+9. `20260522000000_write_tokens.sql` — E2.8 RPCs (`regenerate_write_token`, `append_event_with_token`, `delete_events_with_token`); `matches.write_token` and `matches.ended_at` columns added on `20260504000000`.
 
 ### 4.5 Sync flow *(refined 2026-05-05 — E1.11 done)*
 
@@ -332,7 +343,10 @@ Nothing in v1 needs to know about networks; the column is added in v3 with a def
 | Threat | v1 mitigation |
 |---|---|
 | Match URL leaked → unauthorized read | Not a threat; matches are public-by-URL by design |
-| Match URL leaked → unauthorized writes (trolling) | Acceptable in v1 (rare, fixable via score.correct, matches expire); v2 adds per-match write token |
+| Anon match URL leaked → unauthorized writes (trolling) | Accepted for anon matches (URL = access token by design); fixable via score.correct |
+| Owned match URL leaked → unauthorized writes | Owner-only writes via RLS; co-scorer access requires a separate `?wt=` token (E2.8) that the owner can rotate |
+| Co-scorer link leaked → unauthorized writes | Owner rotates the token via `regenerate_write_token`; old links instantly fail |
+| Concurrent scorers double-count a rally | Handoff lock — `matches.active_scorer_device_id` (kept current by trigger on events); only the active device can write events. Inactive devices see a "Score from this device" overlay. Local `POINT_DEDUP_WINDOW_MS` is a same-device fat-finger backstop. |
 | Malicious theme code (XSS) | Themes are HTML+CSS only; no `<script>` allowed; CSP forbids external resources; PR review before merge |
 | SQL injection | Not a threat; Supabase client uses parameterized queries; we don't write raw SQL |
 | Account takeover (v2+) | Supabase Auth handles password hashing, OAuth, MFA |
