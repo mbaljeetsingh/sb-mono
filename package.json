@@ -17,7 +17,6 @@
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
     "supabase:types": "supabase gen types typescript --local > packages/shared/src/types/supabase.ts",
-    "supabase:deploy": "./scripts/supabase-deploy.sh",
     "shadcn:update": "tsx ./scripts/shadcn/index.ts",
     "shadcn:patches-only": "tsx ./scripts/shadcn/index.ts --patches-only"
   },
