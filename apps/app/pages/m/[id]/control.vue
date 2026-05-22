@@ -19,6 +19,8 @@ import {
 } from "@sb/engine";
 import { toast } from "vue-sonner";
 import { Button } from "@sb/layer-ui/components/ui/button";
+import AppLogo from "~/components/common/AppLogo.vue";
+import ThemeToggle from "~/components/common/ThemeToggle.vue";
 import TeamRow from "~/components/control/TeamRow.vue";
 import MatchStateSheet from "~/components/control/MatchStateSheet.vue";
 import FormatSheet from "~/components/control/FormatSheet.vue";
@@ -27,7 +29,7 @@ import GameOverModal from "~/components/control/GameOverModal.vue";
 import MatchOverModal from "~/components/control/MatchOverModal.vue";
 import TossSheet from "~/components/control/TossSheet.vue";
 
-definePageMeta({ layout: false, colorMode: "light" });
+definePageMeta({ layout: false });
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
@@ -643,26 +645,43 @@ const orientationB = computed<Orientation>(() => {
     <div
       class="mx-auto flex h-full max-w-2xl flex-col bg-background text-foreground font-sans sm:border-x sm:border-border sm:shadow-2xl"
     >
-      <!-- Top chrome -->
+      <!-- Top chrome. Same h-14 / border-b / backdrop-blur styling as the
+           site-wide AppHeader so /control reads as part of the product.
+           AppLogo links home (same target as everywhere else); explicit
+           Back button next to it covers the "step back one" intent — having
+           the logo navigate to the match hub felt off vs. the rest of the
+           site. ThemeToggle joins the actions on the right for consistency
+           with AppHeader. -->
       <header
-        class="h-12 flex-shrink-0 px-3 flex items-center justify-between border-b border-border"
+        class="sticky top-0 z-30 h-14 flex-shrink-0 flex w-full items-center justify-between gap-2 border-b border-border bg-background/80 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/60"
       >
-        <Button variant="ghost" size="icon" aria-label="Back" @click="goHome">
-          <ArrowLeft class="size-4" />
-        </Button>
+        <div class="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Back to match"
+            @click="goHome"
+          >
+            <ArrowLeft class="size-4" />
+          </Button>
+          <AppLogo link-to="/" size="sm" />
+        </div>
         <span
-          class="text-[11px] font-semibold tracking-wider text-fg-muted uppercase"
+          class="hidden sm:block min-w-0 truncate text-[11px] font-semibold tracking-wider text-fg-muted uppercase"
         >
           {{ headerLabel }}
         </span>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="More"
-          @click="openSheet = 'matchState'"
-        >
-          <MoreHorizontal class="size-4" />
-        </Button>
+        <div class="flex items-center gap-1">
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="More"
+            @click="openSheet = 'matchState'"
+          >
+            <MoreHorizontal class="size-4" />
+          </Button>
+        </div>
       </header>
 
       <!-- Active timeout / suspension banners -->

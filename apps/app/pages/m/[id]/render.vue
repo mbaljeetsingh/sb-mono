@@ -7,18 +7,20 @@
 // is true.
 
 import { ref, computed, nextTick, watch } from "vue";
-import { Download, Film, Upload } from "lucide-vue-next";
+import { ArrowLeft, Download, Film, Upload } from "lucide-vue-next";
 import { domToCanvas } from "modern-screenshot";
 import { getTheme } from "@sb/themes";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import { Progress } from "@sb/layer-ui/components/ui/progress";
+import AppLogo from "~/components/common/AppLogo.vue";
+import ThemeToggle from "~/components/common/ThemeToggle.vue";
 import {
   useVideoRenderWebCodecs,
   type OverlaySnapshot,
 } from "~/composables/useVideoRenderWebCodecs";
 import { toast } from "vue-sonner";
 
-definePageMeta({ layout: false, colorMode: "light" });
+definePageMeta({ layout: false });
 useSeoMeta({ title: "Render · Scoreboard" });
 
 const route = useRoute();
@@ -268,11 +270,31 @@ const meta = computed(() => ({
 
 <template>
   <div class="min-h-screen bg-background text-foreground font-sans">
-    <header class="px-4 py-3 border-b flex items-center justify-between gap-3">
-      <h1 class="text-base font-semibold">Render · Beta</h1>
-      <Button variant="ghost" size="sm" @click="navigateTo(`/m/${matchId}`)">
-        ← Back to match
-      </Button>
+    <!-- Same h-14 / border-b / backdrop-blur styling as the site-wide
+         AppHeader so /render reads as part of the product. AppLogo links
+         home (consistent with the rest of the site); explicit Back button
+         on the left covers the "step back to match" intent. ThemeToggle
+         joins the right side for consistency with AppHeader. -->
+    <header
+      class="sticky top-0 z-30 flex h-14 w-full items-center justify-between gap-2 border-b border-border bg-background/80 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+    >
+      <div class="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Back to match"
+          @click="navigateTo(`/m/${matchId}`)"
+        >
+          <ArrowLeft class="size-4" />
+        </Button>
+        <AppLogo link-to="/" size="sm" />
+      </div>
+      <span
+        class="hidden sm:block text-[11px] font-semibold tracking-wider text-fg-muted uppercase"
+      >
+        Render · Beta
+      </span>
+      <ThemeToggle />
     </header>
 
     <main class="mx-auto max-w-5xl p-4 space-y-4">
