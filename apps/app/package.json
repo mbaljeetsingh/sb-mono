@@ -24,6 +24,7 @@
     "modern-screenshot": "^4.7.0",
     "mp4-muxer": "^5.2.2",
     "mp4box": "^2.3.0",
+    "posthog-js": "^1.375.0",
     "qrcode.vue": "^3.9.1",
     "vue-sonner": "^2.0.9"
   },

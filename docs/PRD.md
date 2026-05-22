@@ -515,7 +515,7 @@ The README ships with one-click deploy buttons:
 
 Plus `docs/SELF_HOSTING.md` covering:
 - Supabase project creation (managed or self-hosted)
-- Environment variables (`NUXT_PUBLIC_SUPABASE_URL`, `NUXT_PUBLIC_SUPABASE_ANON_KEY`)
+- Environment variables (`NUXT_PUBLIC_SUPABASE_URL`, `NUXT_PUBLIC_SUPABASE_KEY`)
 - Custom domain setup
 - Theme customization
 - Migration application

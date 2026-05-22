@@ -49,6 +49,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // initAuth is idempotent — first call runs synchronizeUserState, subsequent calls return early.
   await userStore.initAuth();
 
+  // Unmatched routes — let Nuxt render error.vue rather than redirecting to signin.
+  if (to.matched.length === 0) return;
+
   // Bounce signed-in users away from signin/signup/forgot.
   if (AUTH_PAGES.has(to.path) && userStore.isAuthenticated) {
     return navigateTo("/", { replace: true });

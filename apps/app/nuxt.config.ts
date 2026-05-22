@@ -112,5 +112,11 @@ export default defineNuxtConfig({
   //   },
   //   devOptions: { enabled: false },
   // },
+  runtimeConfig: {
+    public: {
+      environment: "development",
+      posthogKey: "",
+    },
+  },
   compatibilityDate: "2024-10-01",
 });
