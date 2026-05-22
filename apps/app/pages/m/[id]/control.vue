@@ -7,6 +7,7 @@ import {
   ArrowUpDown,
   Columns3,
   MoreHorizontal,
+  Repeat,
   Rows3,
   Undo2,
 } from "lucide-vue-next";
@@ -24,6 +25,7 @@ import FormatSheet from "~/components/control/FormatSheet.vue";
 import ScoreCorrectSheet from "~/components/control/ScoreCorrectSheet.vue";
 import GameOverModal from "~/components/control/GameOverModal.vue";
 import MatchOverModal from "~/components/control/MatchOverModal.vue";
+import TossSheet from "~/components/control/TossSheet.vue";
 
 definePageMeta({ layout: false, colorMode: "light" });
 
@@ -145,6 +147,102 @@ watch(
   { immediate: true },
 );
 
+// Pre-match toss flow. /new sets `sb:toss-pending:{matchId}` when the
+// operator left "Do toss" toggled on. We show the TossSheet once the match
+// is freshly seeded (only the auto-bootstrap match.start exists). On commit
+// we replace the seed event with one that carries the operator's chosen
+// serverSide, optionally swap doubles partners so the picked starter sits
+// in slot 1 (engine's `partnerOnRight` starts at {a:1, b:1}), then clear
+// the flag. Skip just clears the flag and leaves the auto-seed alone.
+const tossPending = ref(false);
+const refreshTossPending = () => {
+  if (typeof localStorage === "undefined") {
+    tossPending.value = false;
+    return;
+  }
+  tossPending.value =
+    localStorage.getItem(`sb:toss-pending:${matchId.value}`) === "1";
+};
+onMounted(refreshTossPending);
+watch(matchId, refreshTossPending);
+
+const clearTossPending = () => {
+  try {
+    localStorage.removeItem(`sb:toss-pending:${matchId.value}`);
+  } catch {
+    // ignore — flag is best-effort
+  }
+  tossPending.value = false;
+};
+
+// Show only when the match is genuinely fresh: exactly the auto-seeded
+// match.start and nothing else. Once any other event lands we never re-prompt.
+const showToss = computed(() => {
+  if (!tossPending.value) return false;
+  if (!canScore.value || !isActive.value) return false;
+  if (events.value.length !== 1) return false;
+  return events.value[0]?.type === "match.start";
+});
+
+const onTossCommit = (payload: {
+  tossWinner: SideId;
+  choice: "serve" | "receive";
+  serverSide: SideId;
+  startingServerSlot?: 1 | 2;
+  startingReceiverSlot?: 1 | 2;
+}) => {
+  if (matchMeta.value.isDoubles) {
+    const receivingSide: SideId = payload.serverSide === "A" ? "B" : "A";
+    const current = matchMeta.value.players ?? {
+      a1: "",
+      a2: "",
+      b1: "",
+      b2: "",
+    };
+    const next = { ...current };
+    // Engine's initial partnerOnRight = {a:1, b:1}; serverCourt starts "right",
+    // so slot 1 of the serving team is the first server, slot 1 of the
+    // receiving team is the first receiver. If the operator picked slot 2 for
+    // either role, swap that team's a1/a2 (or b1/b2) so slot 1 becomes the
+    // picked starter — no engine change required.
+    if (payload.startingServerSlot === 2) {
+      if (payload.serverSide === "A") {
+        next.a1 = current.a2;
+        next.a2 = current.a1;
+      } else {
+        next.b1 = current.b2;
+        next.b2 = current.b1;
+      }
+    }
+    if (payload.startingReceiverSlot === 2) {
+      if (receivingSide === "A") {
+        next.a1 = current.a2;
+        next.a2 = current.a1;
+      } else {
+        next.b1 = current.b2;
+        next.b2 = current.b1;
+      }
+    }
+    if (JSON.stringify(next) !== JSON.stringify(current)) {
+      matchMeta.value = { ...matchMeta.value, players: next };
+    }
+  }
+  replace([]);
+  append({
+    type: "match.start",
+    serverSide: payload.serverSide,
+    serverCourt: "right",
+  } as Omit<RacquetEvent, "id" | "ts">);
+  const serverName =
+    payload.serverSide === "A" ? displayNameA.value : displayNameB.value;
+  toast.success(`${serverName} serves first`, {
+    description: 'Wrong? Tap "Change server" above the court.',
+  });
+  clearTossPending();
+};
+
+const onTossSkip = () => clearTossPending();
+
 const score = (side: SideId) => {
   const last = state.value.games[state.value.games.length - 1];
   return last ? (side === "A" ? last.a : last.b) : 0;
@@ -260,6 +358,27 @@ const sidesSwapped = useStorage<boolean>(
 const swapSidesVisualOnly = () => {
   vibrate(10);
   sidesSwapped.value = !sidesSwapped.value;
+};
+
+// Decoupled "change first server" fix. Pre-match only. Flips `serverSide`
+// on match.start WITHOUT touching `sidesSwapped`, so the operator can fix
+// "I picked the wrong team during the toss" without also flipping the
+// visual layout (which is what "Swap sides" does — that one mirrors both).
+// In doubles, partner-within-team fixes still go through the per-cell
+// swap-arrow on TeamRow.
+const swapServerOnly = () => {
+  if (!canSwapInitial.value) return;
+  if (!guardActive()) return;
+  const first = events.value[0];
+  if (!first || first.type !== "match.start") return;
+  vibrate(10);
+  const opposite: SideId = first.serverSide === "A" ? "B" : "A";
+  replace([]);
+  append({
+    type: "match.start",
+    serverSide: opposite,
+    serverCourt: "right",
+  } as Omit<RacquetEvent, "id" | "ts">);
 };
 
 const swapSides = () => {
@@ -695,24 +814,42 @@ const orientationB = computed<Orientation>(() => {
           />
         </template>
 
-        <!-- Sides swap. Sits centered on the line between the two team rows;
-             icon orientation follows the outer layout. Visible:
-              • pre-match (operator fixing setup — also mirrors server),
-              • in the deciding game from 11 onward (BWF ends-change moment;
-                visual only, optional — club play often skips it). -->
-        <button
+        <!-- Pre-match setup pills. Centered between the two team rows.
+              • Swap sides — visible pre-match AND at deciding-game interval.
+                Pre-match: rewrites match.start (mirrors server) AND flips
+                visual ends. Mid-deciding: visual only (engine state
+                untouched). BWF Law 9.4.
+              • Change server — pre-match only. Decoupled fix: rewrites
+                match.start serverSide WITHOUT touching visual ends.
+                Single-tap correction for "I tapped the wrong team during
+                the toss" without forcing an ends flip too. -->
+        <div
           v-if="canSwapSidesVisible"
-          type="button"
-          aria-label="Swap sides (put the other team on the other court)"
-          class="absolute left-1/2 top-1/2 z-20 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-border-strong bg-background/95 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-foreground shadow-lg backdrop-blur-sm hover:bg-background"
-          @click="swapSides"
+          class="pointer-events-none absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5"
         >
-          <component
-            :is="layout === 'sideBySide' ? ArrowLeftRight : ArrowUpDown"
-            class="size-3"
-          />
-          Swap sides
-        </button>
+          <button
+            v-if="canSwapInitial"
+            type="button"
+            aria-label="Change which team serves first (does not flip visual ends)"
+            class="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-border-strong bg-background/95 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-foreground shadow-lg backdrop-blur-sm hover:bg-background"
+            @click="swapServerOnly"
+          >
+            <Repeat class="size-3" />
+            Change server
+          </button>
+          <button
+            type="button"
+            aria-label="Swap sides (put the other team on the other court)"
+            class="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-border-strong bg-background/95 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-foreground shadow-lg backdrop-blur-sm hover:bg-background"
+            @click="swapSides"
+          >
+            <component
+              :is="layout === 'sideBySide' ? ArrowLeftRight : ArrowUpDown"
+              class="size-3"
+            />
+            Swap sides
+          </button>
+        </div>
 
         <!-- Take-over overlay. Sits above the court, dims it slightly, and
              intercepts taps with a "Score from this device" reclaim button.
@@ -776,6 +913,15 @@ const orientationB = computed<Orientation>(() => {
         :sides-swapped="sidesSwapped"
         @start-next="onStartNextGame"
         @swap-sides="swapSidesVisualOnly"
+      />
+
+      <TossSheet
+        v-if="showToss"
+        :is-doubles="teamMeta.isDoubles"
+        :team-names="teamMeta.teamNames"
+        :players="teamMeta.players"
+        @commit="onTossCommit"
+        @skip="onTossSkip"
       />
 
       <!-- Sheet backdrop -->

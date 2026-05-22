@@ -15,6 +15,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@sb/layer-ui/components/ui/toggle-group";
+import { Switch } from "@sb/layer-ui/components/ui/switch";
 import SportPicker, { type SportId } from "~/components/match/SportPicker.vue";
 import LookAndFeelCards from "~/components/match/LookAndFeelCards.vue";
 import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
@@ -40,6 +41,15 @@ const teamB = ref({ p1: "", p2: "" });
 const eventName = ref("");
 const round = ref("");
 const courtLabel = ref("");
+
+// Toss flow opt-out. When ON (default), /control opens a toss sheet on first
+// mount and the operator picks who serves first there. When OFF, /control
+// goes straight to scoring with today's auto-bootstrap. Stored as a
+// localStorage flag rather than on the matches row — it's a one-shot UI
+// decision; once /control consumes it the flag is cleared. Co-scorers who
+// open the match on another device after creation won't be re-prompted
+// either way, which matches expectation.
+const doToss = ref(true);
 
 // TT doubles uses a 4-player rotation that the shared (BWF) reducer doesn't
 // implement. Force singles for TT until a TT-specific reducer ships.
@@ -208,6 +218,14 @@ const createMatch = async () => {
     { onConflict: "id" },
   );
   if (error) console.warn("[/new] match upsert failed", error);
+  if (doToss.value) {
+    try {
+      localStorage.setItem(`sb:toss-pending:${matchId.value}`, "1");
+    } catch {
+      // Storage disabled (private mode quota, etc.) — toss simply won't show;
+      // the operator can still set serve via the existing pre-match swap.
+    }
+  }
   navigateTo(`/m/${matchId.value}`);
 };
 </script>
@@ -409,6 +427,27 @@ const createMatch = async () => {
           placeholder='Court / table (e.g. "Court 1")'
           class="h-11 mt-2"
         />
+      </section>
+
+      <section>
+        <Label
+          for="do-toss"
+          class="flex cursor-pointer items-start justify-between gap-4"
+        >
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm font-medium text-foreground">
+              Pre-match toss
+            </span>
+            <span class="mt-0.5 block text-[11px] text-fg-subtle">
+              {{
+                doToss
+                  ? "Pick who serves first when you open the scoring screen."
+                  : "Team A starts serving — change anytime from the scoring screen."
+              }}
+            </span>
+          </span>
+          <Switch id="do-toss" v-model="doToss" class="mt-0.5 shrink-0" />
+        </Label>
       </section>
 
       <LookAndFeelCards

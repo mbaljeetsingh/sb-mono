@@ -354,3 +354,40 @@ CREATE POLICY "events_insert_anon_authed" ON public.events
               AND m.owner_id IS NULL
         )
     );
+
+-- DELETE policies mirror the INSERT ones. Without these the client-side
+-- replace() path (undo, reset, score correction) deletes events from local
+-- IDB but RLS silently blocks the Supabase DELETE — so on refresh useEvents
+-- re-fetches the still-present rows and the score reappears. Co-scorer
+-- token writes go through the dedicated SECURITY DEFINER RPC
+-- `delete_events_with_token` and don't need RLS coverage here.
+CREATE POLICY "events_delete_owner" ON public.events
+    FOR DELETE TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.matches m
+            WHERE m.id = events.match_id
+              AND m.owner_id = auth.uid()
+        )
+        AND (SELECT public.authorize('match.update.own'))
+    );
+
+CREATE POLICY "events_delete_anon" ON public.events
+    FOR DELETE TO anon
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.matches m
+            WHERE m.id = events.match_id
+              AND m.owner_id IS NULL
+        )
+    );
+
+CREATE POLICY "events_delete_anon_authed" ON public.events
+    FOR DELETE TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.matches m
+            WHERE m.id = events.match_id
+              AND m.owner_id IS NULL
+        )
+    );
