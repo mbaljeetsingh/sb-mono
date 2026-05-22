@@ -134,6 +134,17 @@ Tauri app for venue-WiFi-less environments. Lifetime theme packs included. For t
 - Self-hosting the open core
 - Anonymous, browser-stored result logging (free forever)
 
+### 7.8 Under consideration (not locked)
+
+Parking lot for revenue ideas worth revisiting at phase gates. None of these are decisions yet.
+
+- Raise Pro band to $8–12/mo (current $5 likely undersold for streamers already paying for OBS plugins / Restream).
+- Hosted SaaS upsell — "self-host free, or use scoreboard.app for $X/mo zero-setup." Slots between Pro and Academy. Plausible / Cal.com model.
+- GitHub Sponsors / Open Collective from v1 launch — small but free signal.
+- Overlay sponsor-rotation widget — tournament organizers pay a small fee to run a sponsor logo rotation on the overlay.
+- Productized academy onboarding ($200–500 one-time) at v3 — paid setup is more reliable than self-serve in target markets.
+- Live data API at v3+ — broadcasters / aggregators pay for a feed.
+
 ## 8. Why open source
 
 1. **Distribution:** OSS gets recommended on Reddit, GitHub, OBS forums. Closed indie tools don't.
