@@ -70,7 +70,12 @@ const {
   presetLabel,
   seriesLabel,
 } = useFormat(matchId);
-const { events, append, replace } = useEvents(matchId, { writeToken });
+const {
+  events,
+  append,
+  replace,
+  loaded: eventsLoaded,
+} = useEvents(matchId, { writeToken });
 
 // Soft handoff lock: at most one device is the "active scorer" at a time.
 // Other devices viewing /control land in read-only mode with a banner +
@@ -113,38 +118,32 @@ watch(
   },
 );
 
-// Seed the match.start event on first mount. Gated on canScore so a
-// viewer who's about to be bounced (no access) doesn't write a phantom
-// event into localStorage / try a forbidden insert before the redirect
-// fires. Wait for accessLoaded too — during the optimistic load window
-// canScore is also true but we shouldn't trust it.
-onMounted(async () => {
-  if (events.value.length !== 0) return;
-  // Wait one tick so useWriteAccess has at least kicked off its fetch.
-  await new Promise((r) => setTimeout(r, 0));
-  if (!accessLoaded.value) {
-    // Defer until the gate resolves.
-    const stop = watch(accessLoaded, (ok) => {
-      if (!ok) return;
-      stop();
-      if (canScore.value && events.value.length === 0) {
-        append({
-          type: "match.start",
-          serverSide: "A",
-          serverCourt: "right",
-        } as Omit<RacquetEvent, "id" | "ts">);
-      }
-    });
-    return;
-  }
-  if (canScore.value && events.value.length === 0) {
-    append({
-      type: "match.start",
-      serverSide: "A",
-      serverCourt: "right",
-    } as Omit<RacquetEvent, "id" | "ts">);
-  }
-});
+// Seed the match.start event only when this device is the *first* one to
+// touch the match. We have to wait for two things before we can safely
+// answer "is the match empty?":
+//   1. useWriteAccess has resolved (`accessLoaded`) — otherwise we might
+//      write a phantom event into IDB before being redirected away.
+//   2. useEvents has finished its first reconcile (`eventsLoaded`) —
+//      otherwise a co-scorer opening /control in a fresh browser races
+//      the async Supabase fetch, sees `events.value.length === 0` because
+//      the remote events haven't landed yet, and stamps a stray match.start
+//      that resets the score (the engine treats match.start as a reset).
+const maybeSeedMatchStart = () => {
+  if (!canScore.value || events.value.length !== 0) return;
+  append({
+    type: "match.start",
+    serverSide: "A",
+    serverCourt: "right",
+  } as Omit<RacquetEvent, "id" | "ts">);
+};
+
+watch(
+  [accessLoaded, eventsLoaded],
+  ([access, evs]) => {
+    if (access && evs) maybeSeedMatchStart();
+  },
+  { immediate: true },
+);
 
 const score = (side: SideId) => {
   const last = state.value.games[state.value.games.length - 1];

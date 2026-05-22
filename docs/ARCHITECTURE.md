@@ -33,7 +33,7 @@ If a proposed change violates one of these, it's wrong. Update the principles de
 │  │   control     │   │   overlay     │   │   scoreboard  │          │
 │  └──────┬────────┘   └──────┬────────┘   └──────┬────────┘          │
 │         │                   │                   │                   │
-│         │  Pinia ← engine ← Dexie (IndexedDB) ← BroadcastChannel    │
+│         │  Pinia ← engine ← IndexedDB (idb-keyval) ← BroadcastChannel │
 │         │                   │                   │                   │
 └─────────┼───────────────────┼───────────────────┼───────────────────┘
           │                   │                   │
@@ -47,7 +47,7 @@ If a proposed change violates one of these, it's wrong. Update the principles de
      └────────────────────────────────────────────────────────┘
 ```
 
-**Reading top-down:** user devices each render a different surface, share a Pinia store, share local Dexie storage on the same device, sync across same-device tabs via BroadcastChannel, sync across devices via Supabase Realtime.
+**Reading top-down:** user devices each render a different surface, share a Pinia store, share local IndexedDB storage (via `idb-keyval`) on the same device, sync across same-device tabs via BroadcastChannel, sync across devices via Supabase Realtime.
 
 **Local-first invariant:** every device's UI reads from its local store. Network is a sync layer, not the source of truth. A device with no internet still works.
 
@@ -103,13 +103,13 @@ This purity is what makes `?at=<ms>` work — passing a slice of events through 
 
 Three layers, in order of authority:
 
-1. **Pinia store** (in-memory, reactive UI state) — derived from the local event log
-2. **IndexedDB via Dexie** (local persistence) — append-only event log per match
-3. **Supabase Postgres** (remote sync target) — same shape, source of truth across devices
+1. **Pinia store / Vue refs** (in-memory, reactive UI state) — derived from the local event log
+2. **IndexedDB via `idb-keyval`** (local persistence) — append-only event log per match, one key per match (`sb:events:{matchId}`)
+3. **Supabase Postgres** (remote sync target) — canonical source of truth across devices
 
-Writes go local-first: Dexie → Pinia (synchronous), then a background sync job pushes to Supabase. Reads are local-first: Pinia is the UI's source.
+Writes go local-first: Vue ref → IndexedDB (async, non-blocking) → fire-and-forget Supabase upsert. Reads are local-first: the in-memory ref is the UI's source. Pending events (in IDB but not yet confirmed in Supabase) are retried on `online` events and every 10s.
 
-### 4.2 Schema (Postgres + matching Dexie schema)
+### 4.2 Schema (Postgres)
 
 ```sql
 -- matches: metadata + config + theme + branding
@@ -196,7 +196,7 @@ UI: one consolidated "Score from your phone" row on `/m/[id]` carries the QR. Fo
 
 **Handoff lock (one active scorer at a time).** `matches.active_scorer_device_id` is the soft lock; an AFTER-INSERT trigger on `events` (`events_bump_active_scorer`) flips it to the writing device whenever it changes (no-op when the same device keeps scoring, so realtime stays quiet during normal play). On `/control` the `useScorerActive` composable subscribes to the column and gates every event-emitting handler via `guardActive()`; a non-active device sees a translucent overlay with a "Score from this device" button that calls the `claim_scoring(p_match_id, p_device_id, p_token)` RPC. `claim_scoring` enforces the same access policy as the event RPCs (owner, anon match, or valid token + not-ended), so a stale invite can't reclaim scoring. Result: simultaneous double-counts go from "best effort dedup" to architecturally impossible — only the active device can write events at any moment.
 
-`POINT_DEDUP_WINDOW_MS = 1200ms` in `useEvents.append` stays as a belt-and-braces local guard against fat-finger double-taps on the active device. It is **not** a cross-device dedup; the handoff lock is.
+`POINT_DEDUP_WINDOW_MS = 250ms` in `useEvents.append` stays as a belt-and-braces local guard against fat-finger double-taps on the active device. It is **not** a cross-device dedup; the handoff lock is. Window is short by design — anything longer starts blocking legitimate fast scoring during quick rallies.
 
 Migrations (in chronological order):
 1. `20260504000000_initial_schema.sql` — matches + events tables, basic RLS.
@@ -209,41 +209,61 @@ Migrations (in chronological order):
 8. `20260505000006_anonymous_matches.sql` — anon-OK insert/update for `owner_id IS NULL` matches + events.
 9. `20260522000000_write_tokens.sql` — E2.8 RPCs (`regenerate_write_token`, `append_event_with_token`, `delete_events_with_token`); `matches.write_token` and `matches.ended_at` columns added on `20260504000000`.
 
-### 4.5 Sync flow *(refined 2026-05-05 — E1.11 done)*
+### 4.5 Sync flow *(refined 2026-05-22 — E1.11 done: IDB-backed offline-first)*
 
-`useEvents` (in `layers/app-base/composables/useEvents.ts`) is local-first + Supabase-synced:
+`useEvents` (in `layers/app-base/composables/useEvents.ts`) is IDB-first + Supabase-synced. Storage uses `idb-keyval` directly (one key per match: `sb:events:{matchId}`); enumeration and migration helpers live in `layers/app-base/lib/eventStore.ts`.
 
 ```
 Score tap (any device)
   └──► append() — push event into Vue ref (synchronous, UI repaints)
-      ├──► persist to localStorage (offline survival)
+      ├──► persist to IndexedDB via idb-keyval (async, non-blocking)
       ├──► postMessage to BroadcastChannel `sb-match-{id}` (same-device cross-tab)
-      └──► fire-and-forget INSERT into Supabase events
-              └──► ensureMatchRow() lazy-creates the match row if missing
-                   (owner_id = auth.uid() if signed in, null otherwise)
+      ├──► reportPending() — bump global useSyncStatus count
+      └──► fire-and-forget upsert into Supabase events
+              ├──► ensureMatchRow() lazy-creates the match row if missing
+              │    (owner_id = auth.uid() if signed in, null otherwise)
+              ├──► supabase.from('events').upsert(row, { onConflict: 'id',
+              │      ignoreDuplicates: true }) — idempotent, retry-safe
+              └──► on success: markRemote(id) → pending count decrements
 
 Realtime subscriber (every device that has the URL open)
   └──► supabase.channel(`match:{id}`)
-      ├──► on INSERT → upsertLocal(event) — dedupe by event.id
+      ├──► on INSERT → upsertLocal(event) + markRemote(id)
       └──► on DELETE → removeLocal(event.id) — handles cross-device undo
 
 replace() (used by undo)
   └──► trim local events
-      ├──► persist to localStorage
+      ├──► persist to IndexedDB
       ├──► broadcast on BroadcastChannel
+      ├──► unmarkRemote() the removed ids
       └──► DELETE the diff from Supabase (so OBS overlay on a separate laptop also rolls back)
 
 Initial mount
-  └──► loadLocal() — paint immediately from localStorage (fast, offline-safe)
-      └──► fetchRemote() — pull events from Supabase
-          └──► merge by id, persist, repaint
+  └──► readEvents(matchId) — load from IDB → paint
+      └──► subscribeBroadcast() + subscribeRealtime()
+          └──► reconcile():
+              ├──► fetchRemote() — pull events from Supabase
+              ├──► pull: merge any remote-only events into local
+              ├──► remoteIds = set from fetch; pending = local − remote
+              └──► push: upsert local-only events sequentially; stop on
+                   first failure (back off until next retry tick)
+          └──► startRetryLoop() — every 10s while pending, re-run reconcile()
+          └──► watch(online) — re-run reconcile() when the network returns
 ```
+
+**Why diff-based reconciliation (no per-event sync state).** The "pending queue" is computed: `localEvents − remoteIds`. We never persist a `synced` flag — IDB has the events, Supabase has the canonical set, the diff is the queue. Self-healing across reloads: a fresh mount fetches Supabase, recomputes the diff, pushes whatever is missing. Survives tab crashes, race conditions, and partial writes without invariant bookkeeping.
+
+**Idempotent inserts.** Both write paths are safe to retry on the same event id:
+- Direct path: `.upsert(row, { onConflict: 'id', ignoreDuplicates: true })`.
+- RPC path (`append_event_with_token`): server-side `on conflict (id) do nothing`.
 
 **Same-device cross-tab sync** still uses BroadcastChannel — faster than going through Supabase Realtime when both tabs are on the same machine. Lifted from OpenScoreboard's `getBroadcastChannelName.ts` pattern.
 
-**Stable per-browser device id** (`localStorage:sb:device-id`) is included on every event row (`device_id` column) for provenance + debugging.
+**Stable per-browser device id** (`localStorage:sb:device-id`) is included on every event row (`device_id` column) for provenance + debugging. Kept in localStorage (not IDB) because it must be readable synchronously at module init.
 
-**Dexie-backed offline retry queue** is *not yet implemented* — current behavior on network failure is "log a warning, localStorage retains the event so the UI keeps working, but the row never reaches Supabase." Production-quality offline tolerance is a follow-up (E1.x).
+**Global pending pill.** `useSyncStatus` is a module-scoped reactive store fed by `useEvents.reportPending()`. `AppHeader` renders a `SyncStatusPill` showing "Syncing N…" (online with pending) or "Offline — N queued" (offline with pending). The pill hides when `total === 0`.
+
+**Capacitor / SQLite (deferred — E2.9).** When mobile native ships, swap the storage layer to `@capacitor-community/sqlite` behind a thin `Storage` interface. The diff-based reconciliation logic stays unchanged.
 
 ## 5. The three rendering surfaces
 

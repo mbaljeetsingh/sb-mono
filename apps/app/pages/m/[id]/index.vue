@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { useClipboard } from "@vueuse/core";
 import { Film, QrCode, RefreshCw, Settings } from "lucide-vue-next";
 import { toast } from "vue-sonner";
@@ -22,7 +22,6 @@ import {
   AlertDialogTitle,
 } from "@sb/layer-ui/components/ui/alert-dialog";
 import { useUserStore } from "~/stores/user";
-import { useRolePermissions } from "~/composables/useRolePermissions";
 
 useSeoMeta({ title: "Match" });
 
@@ -53,8 +52,16 @@ const onSettingsClose = async () => {
   }
 };
 
+// useMatchMeta debounces writes by 500ms. If the user edits names in the
+// settings sheet and navigates away (or closes the tab) before the timer
+// fires, the upsert is silently dropped because watchDebounced is torn down
+// with the component. Closing the sheet already calls flushMeta(); this
+// covers the nav-away-without-closing case.
+onBeforeUnmount(() => {
+  void flushMeta();
+});
+
 const userStore = useUserStore();
-const { isAdmin } = useRolePermissions();
 const onMatchDeleted = () => {
   settingsOpen.value = false;
   navigateTo(userStore.isAuthenticated ? "/matches" : "/");
@@ -224,11 +231,11 @@ const onRegenerateToken = async () => {
       </span>
       <div class="flex items-center gap-1">
         <Button
-          v-if="isAdmin"
+          v-if="state.matchOver"
           variant="ghost"
           size="icon"
           aria-label="Render video"
-          title="Post-game render (beta · admin only)"
+          title="Post-game render (beta)"
           @click="navigateTo(`/m/${matchId}/render`)"
         >
           <Film class="size-4" />

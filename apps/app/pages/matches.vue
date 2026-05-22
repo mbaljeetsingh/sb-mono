@@ -55,12 +55,12 @@ const loadRemote = async () => {
 };
 
 // Signed-out: same Supabase query as signed-in, but filtered to the match
-// IDs this device scored (collected from sb:events:* / sb:meta:* keys).
-// Supabase is the single source of display data; localStorage just tells us
-// which rows to fetch. No pagination — local lists are tiny and finite.
+// IDs this device scored (collected from sb:events:* IDB entries). Supabase
+// is the single source of display data; IDB just tells us which rows to
+// fetch. No pagination — local lists are tiny and finite.
 const loadLocalScoped = async () => {
   loading.value = true;
-  const ids = collectLocalMatchIds();
+  const ids = await collectLocalMatchIds();
   if (ids.length === 0) {
     matches.value = [];
     done.value = true;

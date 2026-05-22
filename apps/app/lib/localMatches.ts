@@ -1,22 +1,12 @@
 // Local-match utilities. The matches list reads display data from Supabase
-// in both auth states — localStorage is used only to know which match IDs
-// were scored on THIS device (signed-out filter) and to drive claim-on-login.
+// in both auth states — IDB is used only to know which match IDs were scored
+// on THIS device (signed-out filter) and to drive claim-on-login.
 
+import { listLocalMatchIds } from "@sb/layer-app-base/lib/eventStore";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const META_PREFIX = "sb:meta:";
-const EVENTS_PREFIX = "sb:events:";
-
-export const collectLocalMatchIds = (): string[] => {
-  if (typeof localStorage === "undefined") return [];
-  const ids = new Set<string>();
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k) continue;
-    if (k.startsWith(EVENTS_PREFIX)) ids.add(k.slice(EVENTS_PREFIX.length));
-    else if (k.startsWith(META_PREFIX)) ids.add(k.slice(META_PREFIX.length));
-  }
-  return [...ids];
+export const collectLocalMatchIds = async (): Promise<string[]> => {
+  return await listLocalMatchIds();
 };
 
 // Claim local anonymous matches for the just-signed-in user. Updates only
@@ -26,7 +16,7 @@ export const claimAnonymousMatches = async (
   supabase: SupabaseClient,
   uid: string,
 ): Promise<number> => {
-  const ids = collectLocalMatchIds();
+  const ids = await collectLocalMatchIds();
   if (ids.length === 0) return 0;
   const { data, error } = await supabase
     .from("matches")

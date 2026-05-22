@@ -1,11 +1,10 @@
 <script setup lang="ts">
-// Post-game render — admin-only for now. Upload a recorded gameplay video,
-// align it against the match's event log via "Mark match start here", then
-// the broadcast overlay tracks the video's playback time. v1 stops at the
-// alignment surface — operator does OS-level screen recording to capture
-// the composited output. In-browser canvas+MediaRecorder render comes
-// later (current themes are DOM, not canvas, so in-browser compositing
-// needs html2canvas-class machinery or a theme-renderer port).
+// Post-game render. Upload a recorded gameplay video, align it against the
+// match's event log via "Mark match start here", then the broadcast overlay
+// tracks the video's playback time. Compositing is fully client-side
+// (WebCodecs) — no server cost — so it's open to anyone whose match has
+// finished. The /m/[id] hub only surfaces the entry point once state.matchOver
+// is true.
 
 import { ref, computed, nextTick, watch } from "vue";
 import { Download, Film, Upload } from "lucide-vue-next";
@@ -13,25 +12,14 @@ import { domToCanvas } from "modern-screenshot";
 import { getTheme } from "@sb/themes";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import { Progress } from "@sb/layer-ui/components/ui/progress";
-import { useRolePermissions } from "~/composables/useRolePermissions";
 import {
   useVideoRenderWebCodecs,
   type OverlaySnapshot,
 } from "~/composables/useVideoRenderWebCodecs";
-import { createError } from "#app";
 import { toast } from "vue-sonner";
 
-definePageMeta({ layout: false, requiresAuth: true, colorMode: "light" });
+definePageMeta({ layout: false, colorMode: "light" });
 useSeoMeta({ title: "Render · Scoreboard" });
-
-const { isAdmin } = useRolePermissions();
-if (!isAdmin.value) {
-  throw createError({
-    statusCode: 403,
-    statusMessage: "Render is admin-only while in beta",
-    fatal: true,
-  });
-}
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));

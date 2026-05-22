@@ -74,11 +74,14 @@ export type Database = {
       }
       matches: {
         Row: {
+          active_scorer_at: string | null
+          active_scorer_device_id: string | null
           category: string | null
           colors: Json
           config: Json
           court_label: string | null
           created_at: string
+          ended_at: string | null
           event_name: string | null
           id: string
           is_doubles: boolean
@@ -94,13 +97,17 @@ export type Database = {
           team_name_b: string | null
           updated_at: string
           venue: string | null
+          write_token: string | null
         }
         Insert: {
+          active_scorer_at?: string | null
+          active_scorer_device_id?: string | null
           category?: string | null
           colors?: Json
           config?: Json
           court_label?: string | null
           created_at?: string
+          ended_at?: string | null
           event_name?: string | null
           id: string
           is_doubles?: boolean
@@ -116,13 +123,17 @@ export type Database = {
           team_name_b?: string | null
           updated_at?: string
           venue?: string | null
+          write_token?: string | null
         }
         Update: {
+          active_scorer_at?: string | null
+          active_scorer_device_id?: string | null
           category?: string | null
           colors?: Json
           config?: Json
           court_label?: string | null
           created_at?: string
+          ended_at?: string | null
           event_name?: string | null
           id?: string
           is_doubles?: boolean
@@ -138,6 +149,7 @@ export type Database = {
           team_name_b?: string | null
           updated_at?: string
           venue?: string | null
+          write_token?: string | null
         }
         Relationships: []
       }
@@ -209,15 +221,36 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      append_event_with_token: {
+        Args: {
+          p_device_id: string
+          p_event_id: string
+          p_match_id: string
+          p_payload: Json
+          p_token: string
+          p_ts: string
+          p_type: string
+        }
+        Returns: undefined
+      }
       authorize: {
         Args: {
           requested_permission: Database["public"]["Enums"]["app_permission"]
         }
         Returns: boolean
       }
+      claim_scoring: {
+        Args: { p_device_id: string; p_match_id: string; p_token?: string }
+        Returns: undefined
+      }
       cleanup_anonymous_matches: { Args: never; Returns: undefined }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
+      delete_events_with_token: {
+        Args: { p_event_ids: string[]; p_match_id: string; p_token: string }
+        Returns: undefined
+      }
       get_my_permissions: { Args: never; Returns: string[] }
+      regenerate_write_token: { Args: { p_match_id: string }; Returns: string }
     }
     Enums: {
       app_permission:

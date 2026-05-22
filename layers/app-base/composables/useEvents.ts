@@ -1,22 +1,30 @@
-// useEvents — local-first + Supabase event store for a single match.
+// useEvents — IDB-first + Supabase event store for a single match.
 //
-// Strategy:
-//  1. localStorage is the immediate read source (fast UI, survives offline / cold start).
-//  2. On mount, fetch existing events from Supabase and merge with localStorage (dedupe by id).
-//  3. Subscribe to Supabase Realtime INSERT + DELETE for cross-device sync.
-//  4. BroadcastChannel handles same-device cross-tab sync (faster than going via Supabase).
-//  5. append() writes locally + inserts to Supabase. replace() truncates locally + deletes
-//     the diff from Supabase so undo on phone propagates to the OBS overlay on a laptop.
+// Strategy (E1.11 — offline-first):
+//  1. IndexedDB (via idb-keyval) holds the event log. Durable through tab
+//     crashes, larger quota than localStorage, async writes that don't block
+//     the UI. Read once on mount.
+//  2. Supabase `events` table is the canonical source of truth across devices.
+//  3. On mount: read IDB → subscribe Realtime + BroadcastChannel → fetch
+//     remote → reconcile by diffing IDs (push local-not-in-remote, merge
+//     remote-not-in-local). Same reconciliation runs on `online` events and
+//     every 10s while events are pending.
+//  4. BroadcastChannel handles same-device cross-tab sync (faster than going
+//     via Supabase).
+//  5. append() writes to IDB + tries Supabase upsert (idempotent retry-safe);
+//     replace() truncates IDB + deletes the diff from Supabase.
+//  6. Pending count (`localIds - remoteIds`) is reported to the global
+//     `useSyncStatus` store so AppHeader can render the offline pill.
 //
-// Match row creation is lazy — the first append() call that finds no match row creates one
-// (owner_id = auth.uid() if signed in, null otherwise). This way the URL works whether the
-// user came from /new or pasted a shared URL.
+// Match row creation is lazy — the first append() that finds no match row
+// creates one (owner_id = auth.uid() if signed in, null otherwise).
 
 import type { RacquetEvent } from "@sb/engine";
+import { useOnline } from "@vueuse/core";
 import { ulid } from "ulid";
-import { ref, computed, onMounted, onUnmounted, watch, type Ref } from "vue";
-
-const STORAGE_PREFIX = "sb:events:";
+import { onMounted, onUnmounted, ref, watch, type Ref } from "vue";
+import { readEvents, writeEvents } from "../lib/eventStore";
+import { setPending } from "./useSyncStatus";
 
 type ParsedEvent = RacquetEvent;
 
@@ -72,15 +80,16 @@ const getDeviceId = (): string => {
   return id;
 };
 
-// Local-only fat-finger guard for point events. If the user has registered a
-// same-side `point` within the window, drop this tap as an accidental
-// double-press. Cross-device dedup is handled separately: the active-scorer
-// handoff (`useScorerActive`) ensures only one device writes at a time, and
-// realtime echoes are dropped by id in `upsertLocal`. So this window only
-// needs to cover physical double-taps on a touchscreen (~150–250 ms); anything
-// longer starts blocking legitimate fast scoring during quick rallies or
-// testing.
+// Local-only fat-finger guard for point events. Drops same-side `point` taps
+// within the window as accidental double-presses. Cross-device dedup is
+// separate: active-scorer handoff ensures one writer at a time, and realtime
+// echoes are de-duped by id in `upsertLocal`. Only physical double-taps
+// (~150–250 ms) need to be caught here.
 const POINT_DEDUP_WINDOW_MS = 250;
+
+// Retry cadence for pushing local-only events when Supabase is offline /
+// failing. Cheap on a healthy connection (single SELECT + nothing to push).
+const SYNC_RETRY_INTERVAL_MS = 10_000;
 
 type UseEventsOptions = {
   // When set, all writes are routed through the SECURITY DEFINER RPCs
@@ -95,35 +104,54 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
   const supabase = useSupabaseClient();
   const supabaseUser = useSupabaseUser();
   const writeToken = opts.writeToken;
+  const online = useOnline();
 
   const events = ref<RacquetEvent[]>([]);
-  const storageKey = computed(() => `${STORAGE_PREFIX}${matchId.value}`);
+  // Flips true after init() has finished its first reconcile() — i.e. IDB +
+  // Supabase have both contributed everything they know. Consumers that need
+  // to make an "is this match fresh?" decision (control.vue auto-emitting a
+  // match.start) must wait on this; otherwise a co-scorer opening /control
+  // in a fresh browser races the async reconcile and stamps a phantom
+  // match.start that resets the score before the real events arrive.
+  const loaded = ref(false);
+  // Set of event IDs we know are in Supabase. Anything in `events` not in
+  // here is part of the pending queue.
+  const remoteIds = ref<Set<string>>(new Set());
 
   let channel: BroadcastChannel | null = null;
   let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
-  // Per-instance unique channel-name suffix. Without this, when the user
-  // navigates between two pages that both call this composable with the
-  // same matchId (e.g., /control → /m/[id]), the source page hasn't
-  // unmounted yet, supabase.channel(sameName) returns the existing
-  // already-subscribed instance, and `.on()` errors.
+  let retryTimer: ReturnType<typeof setInterval> | null = null;
+  // Per-instance unique channel-name suffix — see explanation below in
+  // subscribeRealtime().
   const channelSuffix = Math.random().toString(36).slice(2, 10);
 
   const sortById = (a: RacquetEvent, b: RacquetEvent) =>
     a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 
-  const persist = () => {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(storageKey.value, JSON.stringify(events.value));
+  const persist = async () => {
+    await writeEvents(matchId.value, events.value);
   };
 
-  const loadLocal = (): RacquetEvent[] => {
-    if (typeof localStorage === "undefined") return [];
-    try {
-      const raw = localStorage.getItem(storageKey.value);
-      return raw ? (JSON.parse(raw) as RacquetEvent[]) : [];
-    } catch {
-      return [];
-    }
+  const reportPending = () => {
+    let n = 0;
+    for (const e of events.value) if (!remoteIds.value.has(e.id)) n++;
+    setPending(matchId.value, n);
+  };
+
+  const markRemote = (id: string) => {
+    if (remoteIds.value.has(id)) return;
+    const next = new Set(remoteIds.value);
+    next.add(id);
+    remoteIds.value = next;
+    reportPending();
+  };
+
+  const unmarkRemote = (id: string) => {
+    if (!remoteIds.value.has(id)) return;
+    const next = new Set(remoteIds.value);
+    next.delete(id);
+    remoteIds.value = next;
+    reportPending();
   };
 
   const fetchRemote = async (): Promise<RacquetEvent[]> => {
@@ -139,8 +167,8 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
     return (data ?? []).map(fromRow);
   };
 
-  // Idempotent. Inserts the match row if it doesn't exist. owner_id reflects the
-  // current auth state at the moment the row is created — anonymous → null.
+  // Idempotent. Inserts the match row if it doesn't exist. owner_id reflects
+  // the current auth state at row-create time — anonymous → null.
   const ensureMatchRow = async (): Promise<void> => {
     const id = matchId.value;
     if (!id) return;
@@ -175,33 +203,98 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
     }
   };
 
+  // Push one event to Supabase. Idempotent: uses upsert with `ignoreDuplicates`
+  // (direct path) or the RPC which already does `on conflict (id) do nothing`.
+  // Returns true on success, false on network/server failure.
+  const pushEvent = async (ev: RacquetEvent): Promise<boolean> => {
+    if (writeToken?.value) {
+      const { id, ts, type, ...rest } = ev as ParsedEvent &
+        Record<string, unknown>;
+      const { error } = await supabase.rpc("append_event_with_token", {
+        p_match_id: matchId.value,
+        p_token: writeToken.value,
+        p_event_id: id,
+        p_device_id: getDeviceId(),
+        p_ts: new Date(ts).toISOString(),
+        p_type: type,
+        p_payload: rest as Record<string, unknown>,
+      });
+      if (error) {
+        console.warn("[useEvents] rpc append failed", error);
+        return false;
+      }
+      return true;
+    }
+
+    await ensureMatchRow();
+    const { error } = await supabase
+      .from("events")
+      .upsert(toRow(ev, matchId.value, getDeviceId()), {
+        onConflict: "id",
+        ignoreDuplicates: true,
+      });
+    if (error) {
+      console.warn("[useEvents] event upsert failed", error);
+      return false;
+    }
+    return true;
+  };
+
+  // Reconcile local IDB state with Supabase. Pushes local-only events, merges
+  // remote-only events, rebuilds remoteIds. Safe to call repeatedly.
+  const reconcile = async () => {
+    const remote = await fetchRemote();
+    const remoteIdSet = new Set(remote.map((e) => e.id));
+    const localIdSet = new Set(events.value.map((e) => e.id));
+
+    // Pull: merge any remote-only events into local.
+    const remoteOnly = remote.filter((e) => !localIdSet.has(e.id));
+    if (remoteOnly.length) {
+      events.value = [...events.value, ...remoteOnly].sort(sortById);
+      await persist();
+    }
+
+    // Update confirmed-remote set from this fetch before pushing, so the
+    // pending count is accurate as pushes complete.
+    remoteIds.value = remoteIdSet;
+    reportPending();
+
+    // Push: send local-only events to Supabase. Done sequentially so a
+    // failure early in the queue doesn't fan out a hundred requests.
+    const localOnly = events.value.filter((e) => !remoteIdSet.has(e.id));
+    for (const ev of localOnly) {
+      const ok = await pushEvent(ev);
+      if (ok) markRemote(ev.id);
+      else break; // network's down; back off until next retry tick.
+    }
+  };
+
   // Local-only mutation helpers (used by realtime + broadcast handlers).
   const upsertLocal = (incoming: RacquetEvent) => {
     if (events.value.some((e) => e.id === incoming.id)) return;
     events.value = [...events.value, incoming].sort(sortById);
-    persist();
+    void persist();
   };
 
   const removeLocal = (id: string) => {
     if (!events.value.some((e) => e.id === id)) return;
     events.value = events.value.filter((e) => e.id !== id);
-    persist();
+    unmarkRemote(id);
+    void persist();
   };
 
   // ─── Public API ───────────────────────────────────────────────────────────
 
   const append = (partial: Omit<RacquetEvent, "id" | "ts">): RacquetEvent => {
     // JSON round-trip strips Vue reactive proxies (which `structuredClone`
-    // can't clone) — callers can pass reactive state directly without
-    // hitting `DataCloneError` on the BroadcastChannel hop below.
+    // can't clone) — callers can pass reactive state directly without hitting
+    // `DataCloneError` on the BroadcastChannel hop below.
     const ev = JSON.parse(
       JSON.stringify({ id: ulid(), ts: Date.now(), ...partial }),
     ) as RacquetEvent;
 
     // Cross-device + fat-finger dedup for point events. If the same side
-    // already scored within the window, treat this as a duplicate observation
-    // and drop it. The engine sees one point, the UI updates once, the
-    // network never carries the dupe.
+    // already scored within the window, treat as duplicate observation.
     if (ev.type === "point") {
       const side = (ev as RacquetEvent & { side?: string }).side;
       const recent = events.value.find((e) => {
@@ -221,39 +314,15 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
     }
 
     events.value = [...events.value, ev].sort(sortById);
-    persist();
+    void persist();
+    reportPending();
     channel?.postMessage({ type: "append", event: ev });
 
-    // Fire-and-forget: ensure match exists, then insert the event.
+    // Fire-and-forget push. On failure the event stays in the pending queue
+    // and the retry tick will catch it.
     (async () => {
-      if (writeToken?.value) {
-        // Co-scorer path: the match row is guaranteed to exist (the owner
-        // already created it before minting a token), so skip ensureMatchRow
-        // and route through the RPC that validates the token server-side.
-        const { id, ts, type, ...rest } = ev as ParsedEvent &
-          Record<string, unknown>;
-        const { error } = await supabase.rpc("append_event_with_token", {
-          p_match_id: matchId.value,
-          p_token: writeToken.value,
-          p_event_id: id,
-          p_device_id: getDeviceId(),
-          p_ts: new Date(ts).toISOString(),
-          p_type: type,
-          p_payload: rest as Record<string, unknown>,
-        });
-        if (error) console.warn("[useEvents] rpc append failed", error);
-        return;
-      }
-
-      await ensureMatchRow();
-      const { error } = await supabase
-        .from("events")
-        .insert(toRow(ev, matchId.value, getDeviceId()));
-      if (error) {
-        console.warn("[useEvents] event insert failed", error);
-        // localStorage retains the event so the UI still works offline; future
-        // E1.x adds a Dexie-backed retry queue for true offline tolerance.
-      }
+      const ok = await pushEvent(ev);
+      if (ok) markRemote(ev.id);
     })();
 
     return ev;
@@ -264,13 +333,16 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
     const after = new Set(next.map((e) => e.id));
     const removed = [...before].filter((id) => !after.has(id));
 
-    // JSON round-trip strips Vue reactive proxies — same defense as
-    // `append()`. Callers can pass the existing reactive `events.value`
-    // (or a slice of it) without `BroadcastChannel.postMessage` failing.
+    // JSON round-trip strips Vue reactive proxies — same defense as append().
     const plain = JSON.parse(JSON.stringify(next)) as RacquetEvent[];
     events.value = [...plain].sort(sortById);
-    persist();
+    void persist();
     channel?.postMessage({ type: "replace", events: plain });
+
+    // Drop removed events from the confirmed-remote set so pending stays
+    // accurate even if the Supabase delete races.
+    for (const id of removed) unmarkRemote(id);
+    reportPending();
 
     // Propagate deletions to Supabase so cross-device viewers see the undo.
     if (removed.length) {
@@ -299,8 +371,8 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
 
   const subscribeRealtime = () => {
     // Fully remove the prior channel — `unsubscribe()` alone leaves the named
-    // channel registered, so `supabase.channel(name)` returns the same already-
-    // subscribed instance and `.on()` then errors with "cannot add
+    // channel registered, so `supabase.channel(name)` returns the same
+    // already-subscribed instance and `.on()` then errors with "cannot add
     // postgres_changes callbacks after subscribe()".
     if (realtimeChannel) {
       supabase.removeChannel(realtimeChannel);
@@ -318,7 +390,9 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
         },
         (payload) => {
           const row = payload.new as Parameters<typeof fromRow>[0];
-          upsertLocal(fromRow(row));
+          const ev = fromRow(row);
+          upsertLocal(ev);
+          markRemote(ev.id);
         },
       )
       .on(
@@ -346,37 +420,56 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
         upsertLocal(msg.data.event);
       } else if (msg.data?.type === "replace") {
         events.value = [...(msg.data.events as RacquetEvent[])].sort(sortById);
-        persist();
+        void persist();
       }
     };
   };
 
+  const startRetryLoop = () => {
+    if (retryTimer) return;
+    retryTimer = setInterval(() => {
+      // Only reconcile when there's something to push. Saves a SELECT every
+      // 10s while the user is just spectating.
+      const hasPending =
+        events.value.some((e) => !remoteIds.value.has(e.id)) ||
+        !remoteIds.value.size;
+      if (hasPending) void reconcile();
+    }, SYNC_RETRY_INTERVAL_MS);
+  };
+
+  const stopRetryLoop = () => {
+    if (retryTimer) {
+      clearInterval(retryTimer);
+      retryTimer = null;
+    }
+  };
+
   const init = async () => {
     if (typeof window === "undefined") return;
-    // 1. Hydrate from localStorage immediately for fast paint.
-    events.value = loadLocal().sort(sortById);
+    // 1. Hydrate from IDB immediately (await — but cheap, single key read).
+    events.value = (await readEvents(matchId.value)).sort(sortById);
+    // Don't reportPending here — remoteIds is empty so the count would be
+    // misleadingly high until reconcile confirms what's actually in Supabase.
     // 2. Wire same-device cross-tab sync.
     subscribeBroadcast();
     // 3. Subscribe to remote changes.
     subscribeRealtime();
-    // 4. Pull any remote events we don't have yet.
-    const remote = await fetchRemote();
-    const seen = new Set(events.value.map((e) => e.id));
-    const merged = [
-      ...events.value,
-      ...remote.filter((e) => !seen.has(e.id)),
-    ].sort(sortById);
-    events.value = merged;
-    persist();
+    // 4. Reconcile with Supabase (pull + push).
+    await reconcile();
+    // Mark loaded *after* reconcile so consumers gating on "is the match
+    // actually fresh?" only run their logic once we've heard from Supabase.
+    loaded.value = true;
+    // 5. Start periodic retry while pending.
+    startRetryLoop();
   };
 
   onMounted(() => {
-    init();
-    window.addEventListener("storage", (e) => {
-      if (e.key === storageKey.value) {
-        events.value = loadLocal().sort(sortById);
-      }
-    });
+    void init();
+  });
+
+  // Trigger a reconcile when the network returns.
+  watch(online, (isOnline) => {
+    if (isOnline) void reconcile();
   });
 
   onUnmounted(() => {
@@ -386,12 +479,21 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
       supabase.removeChannel(realtimeChannel);
       realtimeChannel = null;
     }
+    stopRetryLoop();
+    // Don't clear the pending count on unmount — the events are still in IDB
+    // and another mount (different page, same match) will recompute it. But
+    // clear *this* match's contribution so a stale count doesn't linger if the
+    // user navigates away from a match with no pending writes.
+    setPending(matchId.value, 0);
   });
 
   // Re-init on matchId change.
-  watch(matchId, () => {
-    init();
+  watch(matchId, (next, prev) => {
+    if (prev) setPending(prev, 0);
+    remoteIds.value = new Set();
+    loaded.value = false;
+    void init();
   });
 
-  return { events, append, replace, clear };
+  return { events, append, replace, clear, loaded };
 }

@@ -50,7 +50,7 @@ const refreshRecent = async () => {
   if (userStore.isAuthenticated && userStore.currentUser?.id) {
     query = query.eq("owner_id", userStore.currentUser.id);
   } else {
-    const ids = collectLocalMatchIds();
+    const ids = await collectLocalMatchIds();
     if (ids.length === 0) {
       recent.value = [];
       return;

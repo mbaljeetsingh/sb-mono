@@ -1,19 +1,21 @@
 // useDeleteMatch — single source of truth for tearing down a match.
 //
 // Deletes the matches row in Supabase (events cascade via FK ON DELETE CASCADE)
-// and wipes the per-match localStorage keys that we actually write. Meta /
-// format / theme / result are Supabase-backed and have no local cache; only
-// the event log (offline-first by design) and the per-device control-layout
-// preference live in localStorage.
+// and wipes the per-device local state we actually write: the IDB event log
+// and the localStorage control-layout preference. Meta / format / theme /
+// result are Supabase-backed and have no local cache.
 
-const PER_MATCH_KEYS = ["sb:events:", "sb:control-layout:"];
+import { deleteEvents } from "../lib/eventStore";
+
+const LOCALSTORAGE_PREFIXES = ["sb:control-layout:"];
 
 export function useDeleteMatch() {
   const supabase = useSupabaseClient();
 
-  const clearLocal = (matchId: string) => {
+  const clearLocal = async (matchId: string) => {
     if (typeof window === "undefined") return;
-    for (const prefix of PER_MATCH_KEYS) {
+    await deleteEvents(matchId);
+    for (const prefix of LOCALSTORAGE_PREFIXES) {
       try {
         window.localStorage.removeItem(`${prefix}${matchId}`);
       } catch {
@@ -26,7 +28,7 @@ export function useDeleteMatch() {
     if (!matchId) throw new Error("matchId required");
     const { error } = await supabase.from("matches").delete().eq("id", matchId);
     if (error) throw error;
-    clearLocal(matchId);
+    await clearLocal(matchId);
   };
 
   return { deleteMatch };

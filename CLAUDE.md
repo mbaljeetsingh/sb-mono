@@ -77,14 +77,15 @@ When you do update, do it in the same commit as the code, and keep the entry con
 ### Engine & sync
 - **Engine config** is in `packages/engine/src/registry.ts` — every shipped preset (badminton-21, badminton-15, tennis-basic, pickleball-classic, pickleball-rally, table-tennis) maps to `{ config, reducer, sport, displayName }`. Adding a sport in the racquet family = one entry. New family = sibling reducer + entries.
 - **Source of truth = the `matches` row in Supabase.** Meta (team names, players, tournament fields), format (sport_preset + config.gamesToWin), and theme choice (overlay_theme_id + scoreboard_theme_id) all live in the row and sync cross-device via Realtime UPDATE. `useMatchMeta`, `useFormat`, and `useThemeChoice` are the consumer composables — none of them write to localStorage.
+- **IndexedDB (via `idb-keyval`) is used for:**
+  - `sb:events:{matchId}` — the event log (offline-first per E1.11 — durable through tab crashes, no quota anxiety, async transactions). `useEvents` reads/writes through `layers/app-base/lib/eventStore.ts` and mirrors to Supabase + BroadcastChannel for cross-tab. **Do not** swap this for `useStorage` / localStorage — venue WiFi flakes and points must not be lost.
 - **localStorage is used only for:**
-  - `sb:events:{matchId}` — the event log (local-first by design — fast paint, offline tolerance). `useEvents` mirrors to Supabase + BroadcastChannel for cross-tab.
   - `sb:control-layout:{matchId}` — per-device operator UI preference (`'stacked' | 'sideBySide'`). Not synced; each device picks its own.
   - `sb:dynamic:{dynamicId}` — v1 binding for `/d/{id}` dynamic URLs. ARCHITECTURE.md §6 moves this to a `dynamic_urls` table in v1.x.
-  - `sb:device-id` — stable per-browser ULID used for event provenance.
+  - `sb:device-id` — stable per-browser ULID used for event provenance. Lives in localStorage (not IDB) because it must be read synchronously at module init.
   - `sb:theme` — color-mode user preference (light/dark/system), set by `@nuxtjs/color-mode`.
 - **Theme resolution order** in overlay/scoreboard surfaces: `?theme=` query param → `useThemeChoice` (Supabase) → hardcoded baseline (`broadcast-classic` / `filmable`).
-- **Event sync.** `useEvents` writes locally first (localStorage + BroadcastChannel for same-device cross-tab) then to Supabase, and subscribes to Realtime INSERT + DELETE for cross-device sync. Match rows are created lazily on first event with `owner_id` from current auth state.
+- **Event sync.** `useEvents` writes to IDB first → BroadcastChannel (same-device cross-tab) → fire-and-forget Supabase upsert (idempotent: `onConflict: 'id', ignoreDuplicates: true`). Subscribes to Realtime INSERT + DELETE for cross-device sync. Pending count (`localIds − remoteIds`) is reported to the global `useSyncStatus` store, surfaced as a pill in `AppHeader`. Reconciliation runs on mount, on `online` event, and every 10s while pending. Match rows are created lazily on first event with `owner_id` from current auth state.
 
 ### Pre-merge validation
 - **Always run `pnpm --filter @sb/engine test`** after engine or registry changes — 29 tests cover the BWF rule set + match-state events.
