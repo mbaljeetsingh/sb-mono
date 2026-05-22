@@ -22,8 +22,15 @@ import {
   AlertDialogTitle,
 } from "@sb/layer-ui/components/ui/alert-dialog";
 import { useUserStore } from "~/stores/user";
+import { useRolePermissions } from "~/composables/useRolePermissions";
 
 useSeoMeta({ title: "Match" });
+
+// /render is admin-only for now — it's BETA (WebCodecs, compute-heavy,
+// browser-dependent) and lines up with E2.10 (post-production burn-in) in
+// the roadmap. Hide both the entry icon here and gate the page itself in
+// render.vue. Flip to broader access (free / pro) once it's hardened.
+const { isAdmin } = useRolePermissions();
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
@@ -231,7 +238,7 @@ const onRegenerateToken = async () => {
       </span>
       <div class="flex items-center gap-1">
         <Button
-          v-if="state.matchOver"
+          v-if="state.matchOver && isAdmin"
           variant="ghost"
           size="icon"
           aria-label="Render video"

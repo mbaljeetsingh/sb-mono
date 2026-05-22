@@ -6,7 +6,7 @@
 // finished. The /m/[id] hub only surfaces the entry point once state.matchOver
 // is true.
 
-import { ref, computed, nextTick, watch } from "vue";
+import { ref, computed, nextTick, onMounted, watch } from "vue";
 import { ArrowLeft, Download, Film, Upload } from "lucide-vue-next";
 import { domToCanvas } from "modern-screenshot";
 import { getTheme } from "@sb/themes";
@@ -14,6 +14,7 @@ import { Button } from "@sb/layer-ui/components/ui/button";
 import { Progress } from "@sb/layer-ui/components/ui/progress";
 import AppLogo from "~/components/common/AppLogo.vue";
 import ThemeToggle from "~/components/common/ThemeToggle.vue";
+import { useRolePermissions } from "~/composables/useRolePermissions";
 import {
   useVideoRenderWebCodecs,
   type OverlaySnapshot,
@@ -25,6 +26,17 @@ useSeoMeta({ title: "Render · Scoreboard" });
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ""));
+
+// Admin-only for now — BETA, browser-dependent, compute-heavy. Future broader
+// access lines up with E2.10 (post-production burn-in) in the roadmap.
+// Non-admins get bounced to the match hub on mount. Auth.global middleware
+// already redirects unauthenticated visitors to /auth/signin.
+const { isAdmin } = useRolePermissions();
+onMounted(() => {
+  if (!isAdmin.value) {
+    navigateTo(`/m/${matchId.value}`, { replace: true });
+  }
+});
 
 const videoFile = ref<File | null>(null);
 const videoUrl = ref<string | null>(null);
