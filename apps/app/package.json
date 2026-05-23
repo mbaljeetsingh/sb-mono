@@ -33,10 +33,14 @@
     "@nuxtjs/supabase": "^2.0.4",
     "@tailwindcss/vite": "^4.2.1",
     "@vite-pwa/nuxt": "^1.1.1",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue-email/components": "^0.0.21",
+    "@vue-email/render": "^0.0.9",
     "nuxt": "~4.3.1",
     "shadcn-nuxt": "^2.4.3",
     "tailwindcss": "^4.2.1",
     "typescript": "~5.9.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "vue": "^3.5.27"
   }
 }

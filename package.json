@@ -18,7 +18,8 @@
     "supabase:reset": "supabase db reset",
     "supabase:types": "supabase gen types typescript --local > packages/shared/src/types/supabase.ts",
     "shadcn:update": "tsx ./scripts/shadcn/index.ts",
-    "shadcn:patches-only": "tsx ./scripts/shadcn/index.ts --patches-only"
+    "shadcn:patches-only": "tsx ./scripts/shadcn/index.ts --patches-only",
+    "render-emails": "pnpm --filter @sb/app exec vitest run emails/generate.test.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
