@@ -4,9 +4,19 @@
 [build.environment]
   NODE_VERSION = "22"
 
-# SPA fallback is auto-handled by Nuxt's generated 200.html — no redirect needed.
+# SPA fallback. `nuxt build` produces a Nitro server bundle (not a static
+# 200.html), so deep links like /m/[id]/control return 404 from the static
+# host before the SPA shell has a chance to render. An explicit catch-all
+# rewrite to /index.html with status 200 makes Netlify serve the shell for
+# every unknown path, and the Vue Router then resolves the route client-side.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
 
 [[headers]]
   for = "/*"
   [headers.values]
-    Permissions-Policy = "wake-lock=*, fullscreen=*"
+    # `screen-wake-lock` is the spec name; `wake-lock` is rejected by Chrome
+    # as an unrecognized feature and the header becomes a no-op for it.
+    Permissions-Policy = "screen-wake-lock=*, fullscreen=*"
