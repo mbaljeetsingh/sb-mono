@@ -3,7 +3,7 @@
 
 export const emailBrand = {
   name: "Scoreboard",
-  footer: "Open-source by Underlings. All rights reserved.",
+  footer: "A Beejaysoft project. All rights reserved.",
   colors: {
     background: "#000000",
     surface: "#242424",
