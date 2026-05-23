@@ -11,7 +11,7 @@ const userStore = useUserStore();
 
 <template>
   <header
-    class="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] w-full items-center justify-between border-b bg-background/80 pt-[env(safe-area-inset-top)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] backdrop-blur supports-[backdrop-filter]:bg-background/60"
+    class="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] w-full items-center justify-between border-b bg-background/80 pt-[env(safe-area-inset-top)] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] sm:pl-[max(1rem,env(safe-area-inset-left))] sm:pr-[max(1rem,env(safe-area-inset-right))] backdrop-blur supports-[backdrop-filter]:bg-background/60"
   >
     <AppLogo link-to="/" size="md" />
 
@@ -19,18 +19,18 @@ const userStore = useUserStore();
       <SyncStatusPill />
       <NuxtLink
         to="/matches"
-        class="text-sm font-medium text-fg-muted underline-offset-4 hover:text-foreground hover:underline"
+        class="hidden text-sm font-medium text-fg-muted underline-offset-4 hover:text-foreground hover:underline md:inline"
       >
         Matches
       </NuxtLink>
-      <Separator orientation="vertical" class="h-5" />
+      <Separator orientation="vertical" class="hidden h-5 md:block" />
       <template v-if="userStore.isAuthenticated">
         <NavUser />
       </template>
       <template v-else>
         <NuxtLink
           to="/auth/signin"
-          class="text-sm font-medium underline-offset-4 hover:underline"
+          class="hidden text-sm font-medium underline-offset-4 hover:underline md:inline"
         >
           Sign in
         </NuxtLink>

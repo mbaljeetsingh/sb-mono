@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import { Minus, Play, Plus } from "lucide-vue-next";
+import { Loader2, Minus, Play, Plus } from "lucide-vue-next";
 import { ulid } from "ulid";
 import {
   type SportPresetId,
@@ -191,8 +191,10 @@ const canCreate = computed(() => {
   return true;
 });
 
+const isCreating = ref(false);
 const createMatch = async () => {
-  if (!canCreate.value) return;
+  if (!canCreate.value || isCreating.value) return;
+  isCreating.value = true;
   const { error } = await supabase.from("matches").upsert(
     {
       id: matchId.value,
@@ -476,16 +478,19 @@ const createMatch = async () => {
         type="button"
         size="lg"
         class="w-full h-12 text-base font-semibold"
-        :disabled="!canCreate"
+        :disabled="!canCreate || isCreating"
         @click="createMatch"
       >
-        <Play class="size-4" />
+        <Loader2 v-if="isCreating" class="size-4 animate-spin" />
+        <Play v-else class="size-4" />
         {{
-          canCreate
-            ? "Create match"
-            : isDoubles
-              ? "Enter team names to continue"
-              : "Enter player names to continue"
+          isCreating
+            ? "Creating…"
+            : canCreate
+              ? "Create match"
+              : isDoubles
+                ? "Enter team names to continue"
+                : "Enter player names to continue"
         }}
       </Button>
     </footer>

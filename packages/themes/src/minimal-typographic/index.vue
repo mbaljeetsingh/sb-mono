@@ -5,6 +5,9 @@
 //
 // Calm by design: no LIVE pulse, no animations. Status (GAME WON / WINNER)
 // lives as a small caption under the score; SERVE shows as a subtle dot.
+//
+// Sizing is fluid (clamp + vmin/vh/vw) and the layout reflows to stacked rows
+// in portrait so the same theme reads well on phone, tablet, TV, and stream.
 
 import { computed, toRef } from "vue";
 import type { ThemeProps } from "../index";
@@ -49,29 +52,35 @@ const sideLabel = (side: "a" | "b") => {
 
 <template>
   <div class="absolute inset-0 bg-stone-50 text-neutral-950 overflow-hidden">
-    <div class="absolute inset-0 px-15 py-10 flex flex-col">
+    <div
+      class="absolute inset-0 flex flex-col px-[clamp(16px,4vw,60px)] py-[clamp(12px,3vh,40px)]"
+    >
       <!-- Top label -->
       <div
-        class="flex items-start justify-between text-[11px] font-bold tracking-[0.16em] text-neutral-600 uppercase mb-auto"
+        class="flex items-start justify-between gap-3 text-[clamp(9px,1.2vmin,11px)] font-bold tracking-[0.16em] text-neutral-600 uppercase shrink-0"
       >
-        <span class="inline-flex items-center gap-3">
+        <span class="inline-flex items-center gap-2 min-w-0">
           <SportIcon
             :sport="config.sport"
-            class="text-[18px] text-neutral-700"
+            class="text-[clamp(14px,2vmin,18px)] text-neutral-700 shrink-0"
           />
-          {{ meta }}
+          <span class="truncate">{{ meta }}</span>
         </span>
         <span
           v-if="state.matchOver"
-          class="inline-flex items-center gap-2 text-neutral-900"
+          class="inline-flex items-center gap-2 text-neutral-900 shrink-0"
         >
           FINAL
-          <span v-if="endReason" class="text-[10px] text-neutral-500">
+          <span
+            v-if="endReason"
+            class="text-[clamp(8px,1vmin,10px)] text-neutral-500"
+          >
             · {{ endReason }}
           </span>
         </span>
         <span
           v-else-if="status"
+          class="shrink-0"
           :class="
             status.tone === 'warn'
               ? 'text-amber-700'
@@ -85,18 +94,23 @@ const sideLabel = (side: "a" | "b") => {
             · TEAM {{ status.side }}
           </span>
         </span>
-        <span v-else>GAME {{ state.games.length }}</span>
+        <span v-else class="shrink-0">GAME {{ state.games.length }}</span>
       </div>
 
-      <!-- Center grid -->
-      <div class="grid grid-cols-[1fr_auto_1fr] gap-15 items-center">
+      <!-- Center grid: side-by-side in landscape, stacked in portrait. -->
+      <div
+        class="flex-1 min-h-0 grid items-center gap-[clamp(8px,3vmin,60px)] landscape:grid-cols-[1fr_auto_1fr] portrait:grid-rows-[1fr_auto_1fr] portrait:justify-items-center"
+      >
         <div
           v-for="side in ['a', 'b'] as const"
           :key="side"
-          :class="[side === 'b' ? 'text-right order-3' : '']"
+          :class="[
+            'min-w-0 min-h-0 portrait:text-center',
+            side === 'a' ? 'order-1' : 'landscape:text-right order-3',
+          ]"
         >
           <div
-            class="text-sm font-semibold text-neutral-600 tracking-wide mb-1 uppercase"
+            class="text-[clamp(11px,1.6vmin,14px)] font-semibold text-neutral-600 tracking-wide mb-1 uppercase truncate"
           >
             <template v-for="(p, idx) in playersOf(side)" :key="idx">
               <span v-if="idx > 0" class="mx-1.5 text-neutral-400 font-normal"
@@ -114,7 +128,9 @@ const sideLabel = (side: "a" | "b") => {
               >
             </template>
           </div>
-          <div class="score text-[220px] leading-[0.85]">
+          <div
+            class="score leading-[0.85] text-[clamp(96px,min(34vh,40vw),260px)] portrait:text-[clamp(120px,min(34vh,52vw),320px)]"
+          >
             {{ currentGame[side] }}
           </div>
           <!-- Side-status caption (SERVING / GAME WON / WINNER) + cards -->
@@ -126,8 +142,8 @@ const sideLabel = (side: "a" | "b") => {
               cards(side).black
             "
             :class="[
-              'inline-flex items-center gap-2 mt-3 text-[11px] font-bold tracking-[0.18em] uppercase',
-              side === 'b' ? 'flex-row-reverse' : '',
+              'inline-flex items-center gap-2 mt-2 text-[clamp(9px,1.2vmin,11px)] font-bold tracking-[0.18em] uppercase',
+              side === 'b' ? 'landscape:flex-row-reverse' : '',
             ]"
             :style="{ color: teamColor(side) }"
           >
@@ -141,15 +157,25 @@ const sideLabel = (side: "a" | "b") => {
           </div>
         </div>
 
-        <div class="text-3xl text-neutral-400 font-normal order-2">—</div>
+        <!-- Divider: em-dash between halves in landscape; a thin rule between
+             stacked blocks in portrait. -->
+        <div
+          class="order-2 text-[clamp(16px,3vmin,32px)] text-neutral-400 font-normal text-center portrait:flex portrait:items-center portrait:justify-center portrait:w-full"
+        >
+          <span class="portrait:hidden">—</span>
+          <span
+            class="hidden portrait:block h-px w-1/3 bg-neutral-300"
+            aria-hidden="true"
+          ></span>
+        </div>
       </div>
 
       <!-- Bottom row -->
       <div
-        class="mt-auto flex justify-between items-end text-xs text-neutral-500 tracking-[0.1em] font-semibold uppercase"
+        class="flex justify-between items-end gap-3 text-[clamp(9px,1.2vmin,12px)] text-neutral-500 tracking-[0.1em] font-semibold uppercase shrink-0"
       >
-        <span>{{ allGamesLine || "—" }}</span>
-        <span>SCOREBOARD.APP</span>
+        <span class="truncate">{{ allGamesLine || "—" }}</span>
+        <span class="shrink-0">SCOREBOARD.APP</span>
       </div>
     </div>
   </div>

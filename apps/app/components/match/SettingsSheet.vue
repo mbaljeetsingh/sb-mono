@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // Match settings sheet — edits team names + tournament meta after match
-// creation. Bound live to `useMatchMeta.meta`, which propagates changes via
-// the Supabase Realtime UPDATE channel on the matches row. A typo fix here
-// on the phone re-renders in OBS overlay on a laptop within ~500ms (one
-// debounce window).
+// creation. Edits are staged in a local `draft` ref and only committed on
+// Save; this avoids fighting mobile IME composition (Android Gboard would
+// occasionally drop characters when the input re-rendered mid-typing from
+// the Supabase Realtime echo).
 //
 // Out of scope: changing isDoubles or sport preset post-creation. Doubles
 // vs singles is a structural choice (engine treats partnerOnRight only in
@@ -17,41 +17,43 @@ import { Label } from "@sb/layer-ui/components/ui/label";
 import DeleteMatchDialog from "~/components/match/DeleteMatchDialog.vue";
 import type { MatchMeta } from "@sb/layer-app-base/composables/useMatchMeta";
 
-const props = defineProps<{ matchId: string }>();
-
-const meta = defineModel<MatchMeta>("meta", { required: true });
+const props = defineProps<{ matchId: string; meta: MatchMeta }>();
 
 const emit = defineEmits<{
+  (e: "update:meta", value: MatchMeta): void;
   (e: "close"): void;
   (e: "deleted"): void;
 }>();
 
+const draft = ref<MatchMeta>({
+  ...props.meta,
+  teamNames: { ...(props.meta.teamNames ?? { a: "", b: "" }) },
+  players: { ...(props.meta.players ?? { a1: "", a2: "", b1: "", b2: "" }) },
+});
+
 const matchLabel = computed(() => {
-  const a = meta.value.teamNames?.a?.trim();
-  const b = meta.value.teamNames?.b?.trim();
+  const a = draft.value.teamNames?.a?.trim();
+  const b = draft.value.teamNames?.b?.trim();
   if (a && b) return `${a} vs ${b}`;
   return "";
 });
 
 const onDeleted = () => emit("deleted");
 
-const updateString = (path: keyof MatchMeta, value: string) => {
-  meta.value = { ...meta.value, [path]: value };
-};
-
 // In doubles, the player fields are the source of truth, but everything
 // downstream that reads `teamNames` (hero card, themes) needs the joined
 // "Alice / Bob" string kept in sync. Rewrite both on every player edit.
+const join = (p1: string, p2: string) =>
+  [p1, p2]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(" / ");
+
 const updatePlayer = (slot: "a1" | "a2" | "b1" | "b2", value: string) => {
-  const current = meta.value.players ?? { a1: "", a2: "", b1: "", b2: "" };
+  const current = draft.value.players ?? { a1: "", a2: "", b1: "", b2: "" };
   const players = { ...current, [slot]: value };
-  const join = (p1: string, p2: string) =>
-    [p1, p2]
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .join(" / ");
-  meta.value = {
-    ...meta.value,
+  draft.value = {
+    ...draft.value,
     players,
     teamNames: {
       a: join(players.a1, players.a2),
@@ -61,8 +63,20 @@ const updatePlayer = (slot: "a1" | "a2" | "b1" | "b2", value: string) => {
 };
 
 const updateTeamName = (side: "a" | "b", value: string) => {
-  const current = meta.value.teamNames ?? { a: "", b: "" };
-  meta.value = { ...meta.value, teamNames: { ...current, [side]: value } };
+  const current = draft.value.teamNames ?? { a: "", b: "" };
+  draft.value = {
+    ...draft.value,
+    teamNames: { ...current, [side]: value },
+  };
+};
+
+const updateString = (path: keyof MatchMeta, value: string) => {
+  draft.value = { ...draft.value, [path]: value };
+};
+
+const onSave = () => {
+  emit("update:meta", draft.value);
+  emit("close");
 };
 </script>
 
@@ -87,7 +101,7 @@ const updateTeamName = (side: "a" | "b", value: string) => {
         </Button>
       </div>
       <p class="text-[11px] text-fg-subtle mb-5">
-        Changes save automatically as you type · synced live to every device.
+        Changes apply when you tap Save · synced live to every device.
       </p>
 
       <!-- Names -->
@@ -98,7 +112,7 @@ const updateTeamName = (side: "a" | "b", value: string) => {
           Names
         </div>
 
-        <template v-if="!meta.isDoubles">
+        <template v-if="!draft.isDoubles">
           <Label
             for="settings-team-a"
             class="text-[11px] font-semibold text-fg-subtle mb-1 block"
@@ -107,7 +121,7 @@ const updateTeamName = (side: "a" | "b", value: string) => {
           </Label>
           <Input
             id="settings-team-a"
-            :model-value="meta.teamNames?.a ?? ''"
+            :model-value="draft.teamNames?.a ?? ''"
             type="text"
             placeholder="Player 1"
             class="h-11 mb-3"
@@ -121,7 +135,7 @@ const updateTeamName = (side: "a" | "b", value: string) => {
           </Label>
           <Input
             id="settings-team-b"
-            :model-value="meta.teamNames?.b ?? ''"
+            :model-value="draft.teamNames?.b ?? ''"
             type="text"
             placeholder="Player 2"
             class="h-11"
@@ -135,14 +149,14 @@ const updateTeamName = (side: "a" | "b", value: string) => {
           </Label>
           <div class="grid grid-cols-2 gap-2 mb-3">
             <Input
-              :model-value="meta.players?.a1 ?? ''"
+              :model-value="draft.players?.a1 ?? ''"
               type="text"
               placeholder="Player 1"
               class="h-11"
               @update:model-value="(v) => updatePlayer('a1', String(v))"
             />
             <Input
-              :model-value="meta.players?.a2 ?? ''"
+              :model-value="draft.players?.a2 ?? ''"
               type="text"
               placeholder="Player 2"
               class="h-11"
@@ -155,14 +169,14 @@ const updateTeamName = (side: "a" | "b", value: string) => {
           </Label>
           <div class="grid grid-cols-2 gap-2">
             <Input
-              :model-value="meta.players?.b1 ?? ''"
+              :model-value="draft.players?.b1 ?? ''"
               type="text"
               placeholder="Player 3"
               class="h-11"
               @update:model-value="(v) => updatePlayer('b1', String(v))"
             />
             <Input
-              :model-value="meta.players?.b2 ?? ''"
+              :model-value="draft.players?.b2 ?? ''"
               type="text"
               placeholder="Player 4"
               class="h-11"
@@ -187,7 +201,7 @@ const updateTeamName = (side: "a" | "b", value: string) => {
         </Label>
         <Input
           id="settings-event"
-          :model-value="meta.eventName ?? ''"
+          :model-value="draft.eventName ?? ''"
           type="text"
           placeholder="e.g. Club Championship"
           class="h-11 mb-3"
@@ -203,7 +217,7 @@ const updateTeamName = (side: "a" | "b", value: string) => {
             </Label>
             <Input
               id="settings-round"
-              :model-value="meta.round ?? ''"
+              :model-value="draft.round ?? ''"
               type="text"
               placeholder="Quarterfinal"
               class="h-11"
@@ -219,7 +233,7 @@ const updateTeamName = (side: "a" | "b", value: string) => {
             </Label>
             <Input
               id="settings-category"
-              :model-value="meta.category ?? ''"
+              :model-value="draft.category ?? ''"
               type="text"
               placeholder="Mixed Doubles"
               class="h-11"
@@ -235,7 +249,7 @@ const updateTeamName = (side: "a" | "b", value: string) => {
         </Label>
         <Input
           id="settings-court"
-          :model-value="meta.courtLabel ?? ''"
+          :model-value="draft.courtLabel ?? ''"
           type="text"
           placeholder="Court 1"
           class="h-11"
@@ -243,9 +257,10 @@ const updateTeamName = (side: "a" | "b", value: string) => {
         />
       </section>
 
-      <Button variant="ghost" class="w-full" @click="$emit('close')">
-        Done
-      </Button>
+      <div class="grid grid-cols-2 gap-2">
+        <Button variant="ghost" @click="$emit('close')"> Cancel </Button>
+        <Button @click="onSave"> Save </Button>
+      </div>
 
       <!-- Danger zone -->
       <section class="mt-6 border-t pt-4">

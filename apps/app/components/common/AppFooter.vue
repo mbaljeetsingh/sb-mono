@@ -6,7 +6,7 @@ const year = new Date().getFullYear();
 
 <template>
   <footer
-    class="mt-12 border-t bg-background/60 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-sm text-fg-muted"
+    class="mt-12 border-t bg-background/60 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-sm text-fg-muted sm:pl-[max(1rem,env(safe-area-inset-left))] sm:pr-[max(1rem,env(safe-area-inset-right))]"
   >
     <div
       class="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 sm:flex-row"
