@@ -129,6 +129,16 @@ const copy = async (text: string, label = "URL") => {
   toast.success(`${label} copied`);
 };
 
+// Open the scoreboard URL programmatically rather than via `<a target="_blank">`.
+// In PWA standalone mode, anchor target="_blank" often opens inside the same
+// standalone window, leaving the user stranded on the chrome-less scoreboard
+// with no back button. `window.open(url, "_blank")` pops out to the OS browser
+// (or at least a fresh popup) on every platform we care about.
+const openScoreboard = () => {
+  if (typeof window === "undefined") return;
+  window.open(urls.value.scoreboard, "_blank", "noopener");
+};
+
 const onPickTheme = ({
   surface,
   id,
@@ -384,13 +394,10 @@ const onRegenerateToken = async () => {
             <QrCode class="size-4" />
           </Button>
           <Button
-            as="a"
             type="button"
             variant="secondary"
             size="sm"
-            :href="urls.scoreboard"
-            target="_blank"
-            rel="noopener"
+            @click="openScoreboard"
           >
             Open
           </Button>
