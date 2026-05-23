@@ -9,8 +9,7 @@ export default defineNuxtConfig({
   modules: [
     "@nuxtjs/supabase",
     "shadcn-nuxt",
-    // "@vite-pwa/nuxt", // Disabled for now — install-prompt UX and final
-    // icon set will be revisited closer to launch. See pwa config below.
+    "@vite-pwa/nuxt",
     "@nuxtjs/color-mode",
   ],
   // Dark-mode handling. Broadcast surfaces (scoreboard / overlay / control)
@@ -90,28 +89,59 @@ export default defineNuxtConfig({
     // supabase calls fall back to `Database = unknown`, which is fine for v1.
     types: false,
   },
-  // PWA disabled for now — re-enable once the install-prompt UX + final
-  // icon set (favicon + maskable 192/512 from logo.png) are ready.
-  // pwa: {
-  //   registerType: "autoUpdate",
-  //   manifest: {
-  //     name: "Scoreboard",
-  //     short_name: "Scoreboard",
-  //     description: "Live scorecards for racquet sports.",
-  //     theme_color: "#0d1b4a",
-  //     background_color: "#ffffff",
-  //     display: "standalone",
-  //     orientation: "any",
-  //     icons: [
-  //       { src: "/logo.png", sizes: "any", type: "image/png" },
-  //     ],
-  //   },
-  //   workbox: {
-  //     navigateFallback: "/",
-  //     globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-  //   },
-  //   devOptions: { enabled: false },
-  // },
+  pwa: {
+    registerType: "autoUpdate",
+    includeAssets: ["favicon.png", "apple-touch-icon.png", "icon.svg"],
+    manifest: {
+      name: "Scoreboard",
+      short_name: "Scoreboard",
+      description: "Live scorecards for racquet sports.",
+      theme_color: "#0d1b4a",
+      background_color: "#ffffff",
+      display: "standalone",
+      orientation: "any",
+      id: "/",
+      start_url: "/",
+      categories: ["sports", "productivity"],
+      icons: [
+        {
+          src: "/pwa-64x64.png",
+          sizes: "64x64",
+          type: "image/png",
+          purpose: "any",
+        },
+        {
+          src: "/pwa-192x192.png",
+          sizes: "192x192",
+          type: "image/png",
+          purpose: "any",
+        },
+        {
+          src: "/pwa-512x512.png",
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "any",
+        },
+        {
+          src: "/maskable-icon-512x512.png",
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "maskable",
+        },
+        {
+          src: "/apple-touch-icon.png",
+          sizes: "180x180",
+          type: "image/png",
+          purpose: "any",
+        },
+      ],
+    },
+    workbox: {
+      navigateFallback: "/",
+      globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+    },
+    devOptions: { enabled: false },
+  },
   runtimeConfig: {
     public: {
       environment: "development",
