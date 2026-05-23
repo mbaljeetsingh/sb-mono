@@ -100,8 +100,12 @@ const copy = async (text: string, label = "URL") => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-foreground font-sans">
-    <header class="px-4 pt-16 pb-2 flex items-center justify-between">
+  <div
+    class="min-h-screen bg-background text-foreground font-sans pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]"
+  >
+    <header
+      class="px-4 pt-[calc(env(safe-area-inset-top)+4rem)] pb-2 flex items-center justify-between"
+    >
       <Button
         variant="ghost"
         size="icon"

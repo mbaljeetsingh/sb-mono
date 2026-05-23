@@ -2,7 +2,7 @@
 useSeoMeta({
   title: "Terms of Service · Scoreboard",
   description:
-    "The terms that govern your use of Scoreboard at scoreboard.baljeetsingh.in.",
+    "The terms that govern your use of Scoreboard at scoreboard.beejaysoft.com.",
 });
 
 const lastUpdated = "2026-05-22";
@@ -24,7 +24,7 @@ const contact = "scoreboard@beejaysoft.com";
       <h2>1. Acceptance of terms</h2>
       <p>
         By accessing or using Scoreboard at
-        <code>scoreboard.baljeetsingh.in</code> (“the Service”) you agree to be
+        <code>scoreboard.beejaysoft.com</code> (“the Service”) you agree to be
         bound by these Terms of Service. If you do not agree, do not use the
         Service.
       </p>
@@ -109,7 +109,7 @@ const contact = "scoreboard@beejaysoft.com";
         <a href="https://github.com/mbaljeetsingh/sb-mono" target="_blank"
           >github.com/mbaljeetsingh/sb-mono</a
         >. You are free to self-host the software. These Terms apply only to the
-        hosted instance at <code>scoreboard.baljeetsingh.in</code>; self-hosted
+        hosted instance at <code>scoreboard.beejaysoft.com</code>; self-hosted
         deployments are governed solely by the MIT License.
       </p>
 

@@ -27,6 +27,7 @@
     "mp4box": "^2.3.0",
     "posthog-js": "^1.375.0",
     "qrcode.vue": "^3.9.1",
+    "tailwindcss-safe-area": "^1.3.0",
     "vue-sonner": "^2.0.9"
   },
   "devDependencies": {

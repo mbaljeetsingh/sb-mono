@@ -6,7 +6,9 @@ import AppHeader from "~/components/common/AppHeader.vue";
 <template>
   <div class="flex min-h-screen flex-col bg-background text-foreground">
     <AppHeader />
-    <main class="mx-auto w-full max-w-6xl flex-1 px-4 sm:px-6 lg:px-8">
+    <main
+      class="mx-auto w-full max-w-6xl flex-1 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))] lg:pl-[max(2rem,env(safe-area-inset-left))] lg:pr-[max(2rem,env(safe-area-inset-right))]"
+    >
       <slot />
     </main>
     <AppFooter />

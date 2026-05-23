@@ -26,8 +26,8 @@ const contact = "scoreboard@beejaysoft.com";
         Scoreboard (“the Service”) is a free, open-source live-scoring tool for
         racquet sports. This Privacy Policy explains what data we collect when
         you use Scoreboard at
-        <code>scoreboard.baljeetsingh.in</code>, why we collect it, and how it
-        is handled.
+        <code>scoreboard.beejaysoft.com</code>, why we collect it, and how it is
+        handled.
       </p>
       <p>
         Scoreboard is operated by BeeJaySoft, based in India. The source code is

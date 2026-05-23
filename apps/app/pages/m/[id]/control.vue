@@ -641,7 +641,9 @@ const orientationB = computed<Orientation>(() => {
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-muted/40 sm:bg-muted">
+  <div
+    class="fixed inset-0 bg-muted/40 sm:bg-muted pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
+  >
     <div
       class="mx-auto flex h-full max-w-2xl flex-col bg-background text-foreground font-sans sm:border-x sm:border-border sm:shadow-2xl"
     >

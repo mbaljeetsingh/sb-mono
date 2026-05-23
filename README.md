@@ -2,7 +2,7 @@
 
 Open-source live scorecards for badminton, tennis, pickleball, table tennis, and any racquet sport. Score from your phone courtside, show the overlay in OBS, Streamlabs, Streamyard, or fullscreen on a TV.
 
-> **Status:** v1 in active development. Hosted at [scoreboard.baljeetsingh.in](https://scoreboard.baljeetsingh.in). See [docs/PRD.md](docs/PRD.md) and [docs/ROADMAP.md](docs/ROADMAP.md) for the plan.
+> **Status:** v1 in active development. Hosted at [scoreboard.beejaysoft.com](https://scoreboard.beejaysoft.com). See [docs/PRD.md](docs/PRD.md) and [docs/ROADMAP.md](docs/ROADMAP.md) for the plan.
 
 ## Design principles
 
@@ -103,6 +103,6 @@ A full setup guide with screenshots is on the roadmap (E1.37).
 
 **Code:** MIT — see [LICENSE](./LICENSE). Fork it, self-host it, build on it.
 
-**Brand assets:** The "Scoreboard" name, the Scoreboard logo, and the visual identity of the hosted product at scoreboard.baljeetsingh.in are **not** covered by the MIT license. They are © BeeJaySoft, all rights reserved. If you self-host or fork, please use your own name and logo to avoid confusion.
+**Brand assets:** The "Scoreboard" name, the Scoreboard logo, and the visual identity of the hosted product at scoreboard.beejaysoft.com are **not** covered by the MIT license. They are © BeeJaySoft, all rights reserved. If you self-host or fork, please use your own name and logo to avoid confusion.
 
 **Premium theme packs** (when they ship) are sold as content, not source. The code that loads them is MIT; the theme files themselves are commercial assets.

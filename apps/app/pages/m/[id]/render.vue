@@ -281,14 +281,16 @@ const meta = computed(() => ({
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-foreground font-sans">
+  <div
+    class="min-h-screen bg-background text-foreground font-sans pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]"
+  >
     <!-- Same h-14 / border-b / backdrop-blur styling as the site-wide
          AppHeader so /render reads as part of the product. AppLogo links
          home (consistent with the rest of the site); explicit Back button
          on the left covers the "step back to match" intent. ThemeToggle
          joins the right side for consistency with AppHeader. -->
     <header
-      class="sticky top-0 z-30 flex h-14 w-full items-center justify-between gap-2 border-b border-border bg-background/80 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+      class="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] w-full items-center justify-between gap-2 border-b border-border bg-background/80 pt-[env(safe-area-inset-top)] px-3 backdrop-blur supports-[backdrop-filter]:bg-background/60"
     >
       <div class="flex items-center gap-1">
         <Button

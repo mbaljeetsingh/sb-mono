@@ -44,7 +44,9 @@ useHead({
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-transparent overflow-hidden font-sans">
+  <div
+    class="fixed inset-0 bg-transparent overflow-hidden font-sans pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
+  >
     <component
       :is="themeEntry.component"
       v-if="boundMatchId"
