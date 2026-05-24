@@ -180,9 +180,5 @@ const savePassword = async () => {
         </Button>
       </form>
     </section>
-
-    <p class="text-center text-xs text-muted-foreground">
-      Account deletion (DPDP/GDPR) lands later — see ROADMAP E1.14.
-    </p>
   </div>
 </template>
