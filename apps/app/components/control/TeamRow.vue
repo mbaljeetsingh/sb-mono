@@ -19,9 +19,11 @@ import { ArrowLeftRight } from "lucide-vue-next";
 //               flex-row, so the right service court reads as screen-right
 //               (mirroring the top team).
 //  - "left"   — landscape layout, this team at screen-left. Header on top,
-//               cells stack flex-col-reverse.
+//               cells stack flex-col so the right service court reads as
+//               screen-bottom (top-down view rotated CCW).
 //  - "right"  — landscape layout, this team at screen-right. Header on top,
-//               cells stack flex-col.
+//               cells stack flex-col-reverse so the right service court
+//               reads as screen-top (mirror of the left team across the net).
 
 const props = defineProps<{
   team: "A" | "B";
@@ -60,11 +62,11 @@ defineEmits<{
 const isStacked = (o: typeof props.orientation) =>
   o === "top" || o === "bottom";
 
-// Centerline border sits on the visually-SECOND cell. Top/left orientations
+// Centerline border sits on the visually-SECOND cell. Top/right orientations
 // use a reversed flow (right court rendered first), so the second visual
-// cell is array index 0; bottom/right use natural flow, so index 1.
+// cell is array index 0; bottom/left use natural flow, so index 1.
 const isSecondVisualCell = (idx: number) =>
-  props.orientation === "top" || props.orientation === "left"
+  props.orientation === "top" || props.orientation === "right"
     ? idx === 0
     : idx > 0;
 </script>
@@ -151,8 +153,8 @@ const isSecondVisualCell = (idx: number) =>
           : orientation === 'bottom'
             ? 'flex-row'
             : orientation === 'left'
-              ? 'flex-col-reverse'
-              : 'flex-col',
+              ? 'flex-col'
+              : 'flex-col-reverse',
       ]"
     >
       <button
