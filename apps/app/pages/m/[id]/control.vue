@@ -851,7 +851,12 @@ const orientationB = computed<Orientation>(() => {
                 the toss" without forcing an ends flip too. -->
         <div
           v-if="canSwapSidesVisible"
-          class="pointer-events-none absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5"
+          class="pointer-events-none absolute left-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5"
+          :class="
+            layout === 'sideBySide'
+              ? 'top-[calc(0.625rem+clamp(16px,3vh,26px))]'
+              : 'top-1/2'
+          "
         >
           <ControlPill
             aria-label="Swap sides (put the other team on the other court)"
