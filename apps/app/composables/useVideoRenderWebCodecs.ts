@@ -102,6 +102,14 @@ const extractCodecDescription = (trak: any): Uint8Array | null => {
   return new Uint8Array(ds.buffer, 8);
 };
 
+const pickAvcCodec = (width: number, height: number): string => {
+  const px = width * height;
+  if (px <= 1280 * 720) return "avc1.42E01F";
+  if (px <= 1920 * 1088) return "avc1.4D4028";
+  if (px <= 2560 * 1440) return "avc1.4D4032";
+  return "avc1.640033";
+};
+
 const codecToMuxerKind = (
   codec: string,
 ): "avc" | "hevc" | "vp9" | "av1" | null => {
@@ -330,8 +338,13 @@ export function useVideoRenderWebCodecs() {
     // Check codec support before configuring so we fail with a clear message
     // instead of silently producing zero chunks (which then crashes
     // mp4-muxer.finalize on a null decoderConfig).
+    //
+    // Codec string must declare an AVC level that covers the source
+    // resolution — L3.1 caps at 720p, L4.0 at 1080p, L5.0 at 1440p, L5.1 at
+    // 4K. Picking too low a level makes Chrome 148+ reject the config (older
+    // Chrome silently downshifted to a slow software path).
     const encoderConfig: VideoEncoderConfig = {
-      codec: "avc1.42E01F", // H.264 Baseline @ Level 3.1 — broadest compat.
+      codec: pickAvcCodec(demux.width, demux.height),
       width: demux.width,
       height: demux.height,
       bitrate,

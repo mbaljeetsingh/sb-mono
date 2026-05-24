@@ -493,8 +493,8 @@ const meta = computed(() => ({
           />
 
           <p class="text-[11px] text-fg-subtle">
-            Beta · ffmpeg.wasm runs in your browser. Long matches take real time
-            to encode; watch progress above.
+            Beta · encoded in your browser via WebCodecs. Long matches take real
+            time to encode; watch progress above.
           </p>
         </div>
       </section>
