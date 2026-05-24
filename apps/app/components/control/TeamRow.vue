@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import type { Cell } from "@sb/layer-app-base/composables/useCourtCells";
 import PenaltyCards from "@sb/themes/penalty-cards";
-import { ArrowLeftRight } from "lucide-vue-next";
+import { ArrowLeftRight, Repeat } from "lucide-vue-next";
 
 // One team's half of the court — header strip (label + score + pips +
 // MATCH/GAME PT) and two service-court cells. Used twice in control.vue
@@ -40,6 +40,8 @@ const props = defineProps<{
   lastWinner: boolean;
   cellIsServer: (court: "left" | "right") => boolean;
   canSwapPlayers?: boolean;
+  canChangeServer?: boolean;
+  serverCourt?: "left" | "right";
   cards?: { yellow: number; red: number; black: number };
   // Singles: cells show the player name only on the active service court (it
   // shifts as service moves), so the header carries the team identity. In
@@ -57,6 +59,7 @@ const headerLabel = computed(() => {
 defineEmits<{
   (e: "tap"): void;
   (e: "swap-players"): void;
+  (e: "change-server"): void;
 }>();
 
 const isStacked = (o: typeof props.orientation) =>
@@ -157,76 +160,92 @@ const isSecondVisualCell = (idx: number) =>
               : 'flex-col-reverse',
       ]"
     >
-      <button
+      <div
         v-for="(cell, idx) in cells"
         :key="cell.key"
-        type="button"
-        :disabled="matchOver"
-        :aria-label="`Tap to score for ${cell.label || `team ${team}`}`"
-        class="relative flex flex-1 flex-col items-center justify-center gap-2 px-4 py-4 transition-[background-color] duration-150 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-65"
-        :class="[
-          isSecondVisualCell(idx)
-            ? isStacked(orientation)
-              ? team === 'A'
-                ? 'border-l border-team-a/20'
-                : 'border-l border-team-b/20'
-              : team === 'A'
-                ? 'border-t border-team-a/20'
-                : 'border-t border-team-b/20'
-            : '',
-        ]"
-        @click="$emit('tap')"
+        class="relative flex flex-1"
       >
-        <span
-          v-if="cell.label"
-          class="max-w-full truncate text-[15px] font-semibold leading-tight text-foreground"
+        <button
+          type="button"
+          :disabled="matchOver"
+          :aria-label="`Tap to score for ${cell.label || `team ${team}`}`"
+          class="flex size-full flex-col items-center justify-center gap-2 px-4 py-4 transition-[background-color] duration-150 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-65"
+          :class="[
+            isSecondVisualCell(idx)
+              ? isStacked(orientation)
+                ? team === 'A'
+                  ? 'border-l border-team-a/20'
+                  : 'border-l border-team-b/20'
+                : team === 'A'
+                  ? 'border-t border-team-a/20'
+                  : 'border-t border-team-b/20'
+              : '',
+          ]"
+          @click="$emit('tap')"
         >
-          {{ cell.label }}
-        </span>
-        <!-- Service-over cue: when the pill moves between cells (partner
-             swap on serve) or jumps teams (receiver won the rally), a fade
-             + slight slide draws the operator's eye. Without this the pill
-             teleports and is easy to miss in fast rallies. -->
-        <Transition
-          enter-active-class="transition duration-200 ease-out"
-          enter-from-class="opacity-0 scale-90"
-          enter-to-class="opacity-100 scale-100"
-          leave-active-class="transition duration-150 ease-in"
-          leave-from-class="opacity-100"
-          leave-to-class="opacity-0"
-        >
-          <div
-            v-if="cellIsServer(cell.court)"
-            class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-            :class="
-              team === 'A'
-                ? 'bg-team-a text-team-a-foreground'
-                : 'bg-team-b text-team-b-foreground'
-            "
+          <span
+            v-if="cell.label"
+            class="max-w-full truncate text-[15px] font-semibold leading-tight text-foreground"
           >
-            <span class="size-[5px] rounded-full bg-white animate-pulse-soft" />
-            Serves
-          </div>
-        </Transition>
-      </button>
+            {{ cell.label }}
+          </span>
+          <!-- Service-over cue: when the pill moves between cells (partner
+               swap on serve) or jumps teams (receiver won the rally), a fade
+               + slight slide draws the operator's eye. Without this the pill
+               teleports and is easy to miss in fast rallies. -->
+          <Transition
+            enter-active-class="transition duration-200 ease-out"
+            enter-from-class="opacity-0 scale-90"
+            enter-to-class="opacity-100 scale-100"
+            leave-active-class="transition duration-150 ease-in"
+            leave-from-class="opacity-100"
+            leave-to-class="opacity-0"
+          >
+            <div
+              v-if="cellIsServer(cell.court)"
+              class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+              :class="
+                team === 'A'
+                  ? 'bg-team-a text-team-a-foreground'
+                  : 'bg-team-b text-team-b-foreground'
+              "
+            >
+              <span
+                class="size-[5px] rounded-full bg-white animate-pulse-soft"
+              />
+              Serves
+            </div>
+          </Transition>
+        </button>
+
+        <!-- Pre-match only, non-serving team, diagonal cell: tap to put the
+             serve on this player instead. Diagonal of the current server is
+             the only legal receiver in BWF, so this is the only cell on the
+             non-serving team that could become the server. -->
+        <ControlPill
+          v-if="canChangeServer && cell.court === serverCourt"
+          aria-label="Make this player serve first"
+          class="absolute left-1/2 top-[62%] z-10 -translate-x-1/2"
+          @click.stop="$emit('change-server')"
+        >
+          <Repeat />
+          Serve first
+        </ControlPill>
+      </div>
 
       <!-- Doubles-only: swap of which partner starts on the right (server)
            court. Sits on the centerline between the two cells. Distinct
            icon (Users) so it's visually disambiguated from the sides-swap
            button on the row centerline. -->
-      <button
+      <ControlPill
         v-if="canSwapPlayers"
-        type="button"
         aria-label="Swap players on this side"
-        class="absolute left-1/2 top-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-border-strong bg-background/95 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-foreground shadow-md backdrop-blur-sm hover:bg-background"
+        class="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
         @click.stop="$emit('swap-players')"
       >
-        <ArrowLeftRight
-          class="size-3"
-          :class="isStacked(orientation) ? '' : 'rotate-90'"
-        />
-        Swap players
-      </button>
+        <ArrowLeftRight :class="isStacked(orientation) ? '' : 'rotate-90'" />
+        Swap
+      </ControlPill>
     </div>
   </div>
 </template>

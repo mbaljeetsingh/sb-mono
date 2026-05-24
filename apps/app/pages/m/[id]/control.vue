@@ -7,7 +7,6 @@ import {
   ArrowUpDown,
   Columns3,
   MoreHorizontal,
-  Repeat,
   Rows3,
   Undo2,
 } from "lucide-vue-next";
@@ -805,11 +804,14 @@ const orientationB = computed<Orientation>(() => {
             :last-winner="lastPointWinner === 'A'"
             :cell-is-server="(court) => cellIsServer('A', court)"
             :can-swap-players="canSwapPlayersA"
+            :can-change-server="canSwapInitial && state.servingSide !== 'A'"
+            :server-court="state.serverCourt"
             :cards="state.cards.a"
             :is-doubles="teamMeta.isDoubles"
             :display-name="displayNameA"
             @tap="onTap('A')"
             @swap-players="swapPlayers('A')"
+            @change-server="swapServerOnly"
           />
           <TeamRow
             v-else
@@ -827,11 +829,14 @@ const orientationB = computed<Orientation>(() => {
             :last-winner="lastPointWinner === 'B'"
             :cell-is-server="(court) => cellIsServer('B', court)"
             :can-swap-players="canSwapPlayersB"
+            :can-change-server="canSwapInitial && state.servingSide !== 'B'"
+            :server-court="state.serverCourt"
             :cards="state.cards.b"
             :is-doubles="teamMeta.isDoubles"
             :display-name="displayNameB"
             @tap="onTap('B')"
             @swap-players="swapPlayers('B')"
+            @change-server="swapServerOnly"
           />
         </template>
 
@@ -848,28 +853,16 @@ const orientationB = computed<Orientation>(() => {
           v-if="canSwapSidesVisible"
           class="pointer-events-none absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5"
         >
-          <button
-            v-if="canSwapInitial"
-            type="button"
-            aria-label="Change which team serves first (does not flip visual ends)"
-            class="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-border-strong bg-background/95 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-foreground shadow-lg backdrop-blur-sm hover:bg-background"
-            @click="swapServerOnly"
-          >
-            <Repeat class="size-3" />
-            Change server
-          </button>
-          <button
-            type="button"
+          <ControlPill
             aria-label="Swap sides (put the other team on the other court)"
-            class="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-border-strong bg-background/95 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-foreground shadow-lg backdrop-blur-sm hover:bg-background"
+            class="pointer-events-auto"
             @click="swapSides"
           >
             <component
               :is="layout === 'sideBySide' ? ArrowLeftRight : ArrowUpDown"
-              class="size-3"
             />
-            Swap sides
-          </button>
+            Sides
+          </ControlPill>
         </div>
 
         <!-- Take-over overlay. Sits above the court, dims it slightly, and
