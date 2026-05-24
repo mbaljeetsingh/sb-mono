@@ -27,6 +27,7 @@ const {
   isMatchWinner,
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
 const meta = useMetaLine(toRef(props, "meta"));
+const isLive = computed(() => props.meta?.isLive !== false);
 const status = useStatusPill(toRef(props, "state"));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
 
@@ -150,7 +151,7 @@ const playersOf = (side: "a" | "b") =>
       {{ status.label }}
     </span>
     <span
-      v-else
+      v-else-if="isLive"
       class="inline-flex items-center gap-1.5 text-neutral-400 shrink-0 ml-3"
     >
       <span class="size-1.5 rounded-full bg-white animate-pulse-soft" />

@@ -29,6 +29,10 @@ export type ThemeProps = {
     category?: string | null;
     venue?: string | null;
     sponsorName?: string | null;
+    // Suppress the LIVE pill. Used by the post-game render page where the
+    // overlay is being burned into recorded video — "LIVE" would be a lie.
+    // Defaults to live (undefined / true).
+    isLive?: boolean;
   };
 };
 

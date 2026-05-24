@@ -32,6 +32,7 @@ const {
   isMatchWinner,
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
 const meta = useMetaLine(toRef(props, "meta"));
+const isLive = computed(() => props.meta?.isLive !== false);
 const status = useStatusPill(toRef(props, "state"));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
 
@@ -94,7 +95,7 @@ const gridTemplate = computed(
         <span v-else-if="status" class="text-neutral-900 shrink-0">{{
           status.label
         }}</span>
-        <span v-else class="shrink-0"
+        <span v-else-if="isLive" class="shrink-0"
           >GAME {{ state.games.length }} · LIVE</span
         >
       </div>

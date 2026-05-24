@@ -86,7 +86,7 @@ const previousGames = computed(() => {
         </span>
       </span>
       <span
-        v-else
+        v-else-if="meta?.isLive !== false"
         class="inline-flex items-center gap-2 text-[clamp(10px,1.4vmin,13px)] font-bold tracking-[0.16em] text-neutral-200 shrink-0"
       >
         <span class="size-2 rounded-full bg-white animate-pulse-soft" />

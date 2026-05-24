@@ -277,6 +277,9 @@ const meta = computed(() => ({
   category: matchMeta.value.category?.trim() || null,
   venue: null as string | null,
   sponsorName: null as string | null,
+  // Post-game render: events are reconstructed against recorded footage, so
+  // the LIVE pill would be a lie. Themes hide it when isLive === false.
+  isLive: false,
 }));
 </script>
 
