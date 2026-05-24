@@ -10,9 +10,6 @@ import {
   LogOut,
   LogIn,
   UserPlus,
-  Sun,
-  Moon,
-  Laptop,
   Shield,
   FileText,
   Github,
@@ -27,14 +24,10 @@ import {
 import { Separator } from "@sb/layer-ui/components/ui/separator";
 import { useUserStore } from "~/stores/user";
 import { useAuth } from "~/composables/useAuth";
-import { useThemeStore } from "~/stores/theme";
 
 const route = useRoute();
 const userStore = useUserStore();
 const { signOut } = useAuth();
-const themeStore = useThemeStore();
-const { THEME_OPTIONS, setTheme } = themeStore;
-const currentTheme = computed(() => themeStore.theme);
 
 const showMore = ref(false);
 
@@ -125,55 +118,6 @@ const handleSignOut = async () => {
       </SheetHeader>
 
       <div class="px-2 pb-safe">
-        <div
-          class="px-2 pb-2 text-xs font-medium uppercase text-muted-foreground"
-        >
-          Theme
-        </div>
-        <div class="grid grid-cols-3 gap-2 px-2 pb-2">
-          <button
-            type="button"
-            class="flex flex-col items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs transition-colors hover:bg-accent"
-            :class="
-              currentTheme === THEME_OPTIONS.LIGHT
-                ? 'border-foreground/40 bg-accent'
-                : ''
-            "
-            @click="setTheme(THEME_OPTIONS.LIGHT)"
-          >
-            <Sun class="h-4 w-4" />
-            Light
-          </button>
-          <button
-            type="button"
-            class="flex flex-col items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs transition-colors hover:bg-accent"
-            :class="
-              currentTheme === THEME_OPTIONS.DARK
-                ? 'border-foreground/40 bg-accent'
-                : ''
-            "
-            @click="setTheme(THEME_OPTIONS.DARK)"
-          >
-            <Moon class="h-4 w-4" />
-            Dark
-          </button>
-          <button
-            type="button"
-            class="flex flex-col items-center justify-center gap-1 rounded-lg border border-border py-2 text-xs transition-colors hover:bg-accent"
-            :class="
-              currentTheme === THEME_OPTIONS.SYSTEM
-                ? 'border-foreground/40 bg-accent'
-                : ''
-            "
-            @click="setTheme(THEME_OPTIONS.SYSTEM)"
-          >
-            <Laptop class="h-4 w-4" />
-            System
-          </button>
-        </div>
-
-        <Separator class="my-2" />
-
         <NuxtLink
           to="/privacy"
           class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
