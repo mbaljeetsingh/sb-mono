@@ -1,5 +1,8 @@
 <script setup lang="ts">
-defineProps<{
+import { computed } from "vue";
+import type { GameScore } from "@sb/engine";
+
+const props = defineProps<{
   matchOver: boolean;
   displayName: string;
   statusLabel: string;
@@ -9,7 +12,35 @@ defineProps<{
   scoreB: number;
   gamesWonA: number;
   gamesWonB: number;
+  games: GameScore[];
+  gamesToWin: number;
 }>();
+
+const isSingleGame = computed(() => props.gamesToWin <= 1);
+
+// BO1: when the match is over, "games won" is 0/1 which conveys nothing —
+// the meaningful number is the final game's point score (e.g. 21–15).
+const headlineA = computed(() => {
+  if (props.matchOver && isSingleGame.value) {
+    return props.games[0]?.a ?? props.scoreA;
+  }
+  return props.matchOver ? props.gamesWonA : props.scoreA;
+});
+const headlineB = computed(() => {
+  if (props.matchOver && isSingleGame.value) {
+    return props.games[0]?.b ?? props.scoreB;
+  }
+  return props.matchOver ? props.gamesWonB : props.scoreB;
+});
+
+// For BO-n, show the per-game point breakdown beneath the headline so prior
+// games are visible too. Live: only completed games (the in-progress one is
+// already the headline live score). Final: all games are complete.
+const completedGames = computed<GameScore[]>(() => {
+  if (isSingleGame.value) return [];
+  if (props.matchOver) return props.games;
+  return props.games.slice(0, -1);
+});
 </script>
 
 <template>
@@ -51,9 +82,9 @@ defineProps<{
           {{ teamNames.a }}
         </div>
         <div class="score text-[40px]">
-          {{ matchOver ? gamesWonA : scoreA }}
+          {{ headlineA }}
         </div>
-        <div class="flex gap-1 mt-1">
+        <div v-if="!isSingleGame" class="flex gap-1 mt-1">
           <span
             v-for="i in totalSlots"
             :key="`a-${i}`"
@@ -76,9 +107,9 @@ defineProps<{
           {{ teamNames.b }}
         </div>
         <div class="score text-[40px]">
-          {{ matchOver ? gamesWonB : scoreB }}
+          {{ headlineB }}
         </div>
-        <div class="flex gap-1 mt-1 justify-end">
+        <div v-if="!isSingleGame" class="flex gap-1 mt-1 justify-end">
           <span
             v-for="i in totalSlots"
             :key="`b-${i}`"
@@ -92,6 +123,24 @@ defineProps<{
           />
         </div>
       </div>
+    </div>
+    <div
+      v-if="completedGames.length > 0"
+      class="mt-3 flex flex-wrap gap-1.5 text-[11px] font-medium tabular-nums"
+      :class="matchOver ? 'text-neutral-400' : 'text-fg-muted'"
+    >
+      <span
+        v-for="(g, i) in completedGames"
+        :key="`g-${i}`"
+        class="px-1.5 py-0.5 rounded border"
+        :class="
+          matchOver
+            ? 'border-neutral-800 bg-neutral-900'
+            : 'border-border bg-surface-2'
+        "
+      >
+        G{{ i + 1 }} {{ g.a }}–{{ g.b }}
+      </span>
     </div>
   </div>
 </template>

@@ -472,7 +472,7 @@ const createMatch = async () => {
     />
 
     <footer
-      class="fixed bottom-0 inset-x-0 px-4 py-4 pb-8 bg-background border-t border-border"
+      class="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] px-4 py-4 bg-background border-t border-border md:bottom-0 md:pb-[max(1rem,env(safe-area-inset-bottom))]"
     >
       <Button
         type="button"
