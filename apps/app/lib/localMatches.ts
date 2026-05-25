@@ -1,12 +1,16 @@
 // Local-match utilities. The matches list reads display data from Supabase
 // in both auth states — IDB is used only to know which match IDs were scored
 // on THIS device (signed-out filter) and to drive claim-on-login.
+//
+// "Scored" means this device authored at least one event (via append) — set
+// in useEvents. Passive viewers (venue TV, scoreboard, overlay) populate the
+// raw event log but never set this flag, so they don't leak into /matches.
 
-import { listLocalMatchIds } from "@sb/layer-app-base/lib/eventStore";
+import { listScoredMatchIds } from "@sb/layer-app-base/lib/eventStore";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const collectLocalMatchIds = async (): Promise<string[]> => {
-  return await listLocalMatchIds();
+  return await listScoredMatchIds();
 };
 
 // Claim local anonymous matches for the just-signed-in user. Updates only

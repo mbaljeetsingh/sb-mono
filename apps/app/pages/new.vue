@@ -20,6 +20,7 @@ import SportPicker, { type SportId } from "~/components/match/SportPicker.vue";
 import LookAndFeelCards from "~/components/match/LookAndFeelCards.vue";
 import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
 import { useUserStore } from "~/stores/user";
+import { toast } from "vue-sonner";
 
 useSeoMeta({ title: "New match" });
 
@@ -175,9 +176,9 @@ const formatNames = (t: { p1: string; p2: string }) =>
 // owner_id=null even when the user is signed in.
 const userStore = useUserStore();
 
-// Persist meta + format + create the matches row, then navigate. This is
-// the only writer to the `matches` row at match creation — useEvents
-// .ensureMatchRow will short-circuit when it finds the row already exists.
+// Persist meta + format + create the matches row, then navigate. This is the
+// only writer to the `matches` row — no lazy-create path elsewhere. If this
+// upsert fails, no scoring surface should be able to backfill the row.
 // useMatchMeta / useFormat on /m/[id] hydrate from this row across every
 // device that opens the URL (OBS overlay on a laptop, co-scorer's phone).
 // Names required to create. Singles: 1 name per team. Doubles: 2 per team
@@ -219,7 +220,16 @@ const createMatch = async () => {
     },
     { onConflict: "id" },
   );
-  if (error) console.warn("[/new] match upsert failed", error);
+  if (error) {
+    console.warn("[/new] match upsert failed", error);
+    // /new is the only writer of `matches` rows, so a failure here would
+    // leave the user on a control page that can't sync any scoring (no
+    // matching row in Supabase, no lazy-create fallback). Bail out and let
+    // them retry instead of silently landing in a half-broken state.
+    isCreating.value = false;
+    toast.error("Couldn't create match. Check your connection and try again.");
+    return;
+  }
   if (doToss.value) {
     try {
       localStorage.setItem(`sb:toss-pending:${matchId.value}`, "1");

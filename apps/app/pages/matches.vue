@@ -54,10 +54,11 @@ const loadRemote = async () => {
   if (rows.length < PAGE_SIZE) done.value = true;
 };
 
-// Signed-out: same Supabase query as signed-in, but filtered to the match
-// IDs this device scored (collected from sb:events:* IDB entries). Supabase
-// is the single source of display data; IDB just tells us which rows to
-// fetch. No pagination — local lists are tiny and finite.
+// Signed-out: filter to match IDs this device scored AND that are still
+// anon-owned. The owner_id IS NULL guard keeps wt co-scorers (who scored a
+// match they don't own) and anyone who only viewed the match out of the
+// list — only your own anon matches show up here. No pagination — local
+// lists are tiny and finite.
 const loadLocalScoped = async () => {
   loading.value = true;
   const ids = await collectLocalMatchIds();
@@ -73,6 +74,7 @@ const loadLocalScoped = async () => {
       "id, sport_preset, config, team_name_a, team_name_b, event_name, court_label, updated_at",
     )
     .in("id", ids)
+    .is("owner_id", null)
     .order("updated_at", { ascending: false });
   loading.value = false;
   if (err) {

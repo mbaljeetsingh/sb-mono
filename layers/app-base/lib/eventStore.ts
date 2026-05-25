@@ -9,8 +9,16 @@ import type { RacquetEvent } from "@sb/engine";
 import { del, entries, get, keys, set } from "idb-keyval";
 
 const PREFIX = "sb:events:";
+// Distinct from sb:events:* — set only when THIS device authored at least one
+// event for the match (via `useEvents.append`). Read-only / passive surfaces
+// (venue TV, scoreboard, overlay) still populate sb:events via realtime, but
+// never set this flag. The /matches list and claim-on-login both read this
+// scoped view, so viewing-only devices don't pollute their match list.
+const SCORED_PREFIX = "sb:scored:";
 
 export const eventKey = (matchId: string): string => `${PREFIX}${matchId}`;
+export const scoredKey = (matchId: string): string =>
+  `${SCORED_PREFIX}${matchId}`;
 
 export const readEvents = async (matchId: string): Promise<RacquetEvent[]> => {
   return (await get<RacquetEvent[]>(eventKey(matchId))) ?? [];
@@ -27,16 +35,37 @@ export const writeEvents = async (
 
 export const deleteEvents = async (matchId: string): Promise<void> => {
   await del(eventKey(matchId));
+  await del(scoredKey(matchId));
 };
 
-// Enumerate match IDs that have an event store on this device. Used by the
-// anonymous-matches list and the claim-on-login flow.
+// Mark this match as scored on this device. Called from `useEvents.append`
+// (the user-tap path) only; realtime / broadcast handlers don't call it.
+export const markScored = async (matchId: string): Promise<void> => {
+  await set(scoredKey(matchId), Date.now());
+};
+
+// Enumerate match IDs that have an event store on this device — includes
+// matches received via realtime / broadcast only. Kept for debug + migration.
 export const listLocalMatchIds = async (): Promise<string[]> => {
   const ks = await keys();
   const ids: string[] = [];
   for (const k of ks) {
     if (typeof k === "string" && k.startsWith(PREFIX)) {
       ids.push(k.slice(PREFIX.length));
+    }
+  }
+  return ids;
+};
+
+// Enumerate match IDs THIS device actually scored at least once. The right
+// source for the anon /matches list and the claim-on-login flow — viewers
+// (venue TV, scoreboard, overlay) don't appear here.
+export const listScoredMatchIds = async (): Promise<string[]> => {
+  const ks = await keys();
+  const ids: string[] = [];
+  for (const k of ks) {
+    if (typeof k === "string" && k.startsWith(SCORED_PREFIX)) {
+      ids.push(k.slice(SCORED_PREFIX.length));
     }
   }
   return ids;

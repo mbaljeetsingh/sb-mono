@@ -16,14 +16,15 @@
 //  6. Pending count (`localIds - remoteIds`) is reported to the global
 //     `useSyncStatus` store so AppHeader can render the offline pill.
 //
-// Match row creation is lazy — the first append() that finds no match row
-// creates one (owner_id = auth.uid() if signed in, null otherwise).
+// Match row creation lives in /new only. If the matches row is missing,
+// event pushes fail with an FK violation rather than backfilling a stub —
+// keeps the row's ownership intact for legitimate creators.
 
 import type { RacquetEvent } from "@sb/engine";
 import { useOnline } from "@vueuse/core";
 import { ulid } from "ulid";
 import { onMounted, onUnmounted, ref, watch, type Ref } from "vue";
-import { readEvents, writeEvents } from "../lib/eventStore";
+import { markScored, readEvents, writeEvents } from "../lib/eventStore";
 import { setPending } from "./useSyncStatus";
 
 type ParsedEvent = RacquetEvent;
@@ -102,7 +103,6 @@ type UseEventsOptions = {
 
 export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
   const supabase = useSupabaseClient();
-  const supabaseUser = useSupabaseUser();
   const writeToken = opts.writeToken;
   const online = useOnline();
 
@@ -167,42 +167,6 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
     return (data ?? []).map(fromRow);
   };
 
-  // Idempotent. Inserts the match row if it doesn't exist. owner_id reflects
-  // the current auth state at row-create time — anonymous → null.
-  const ensureMatchRow = async (): Promise<void> => {
-    const id = matchId.value;
-    if (!id) return;
-    const { data: existing, error: lookupError } = await supabase
-      .from("matches")
-      .select("id")
-      .eq("id", id)
-      .maybeSingle();
-    if (lookupError) {
-      console.warn("[useEvents] match lookup failed", lookupError);
-      return;
-    }
-    if (existing) return;
-
-    // Read from getSession() rather than the reactive `useSupabaseUser()` —
-    // on first paint the ref can still be null even when the cookie session
-    // is valid, which would orphan the row with owner_id=null.
-    const { data: sessionData } = await supabase.auth.getSession();
-    const ownerId =
-      sessionData.session?.user?.id ?? supabaseUser.value?.id ?? null;
-    const { error: insertError } = await supabase.from("matches").insert({
-      id,
-      owner_id: ownerId,
-      sport_family: "racquet",
-      sport_preset: "badminton-21",
-    });
-    if (insertError) {
-      // Conflict (someone else inserted it first) is fine.
-      if (insertError.code !== "23505") {
-        console.warn("[useEvents] match insert failed", insertError);
-      }
-    }
-  };
-
   // Push one event to Supabase. Idempotent: uses upsert with `ignoreDuplicates`
   // (direct path) or the RPC which already does `on conflict (id) do nothing`.
   // Returns true on success, false on network/server failure.
@@ -226,7 +190,6 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
       return true;
     }
 
-    await ensureMatchRow();
     const { error } = await supabase
       .from("events")
       .upsert(toRow(ev, matchId.value, getDeviceId()), {
@@ -315,6 +278,10 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
 
     events.value = [...events.value, ev].sort(sortById);
     void persist();
+    // Flag this match as scored on this device — drives the /matches list
+    // and claim-on-login. Realtime / broadcast handlers do NOT call this,
+    // so passive viewers (venue TV, scoreboard, overlay) stay out of the list.
+    void markScored(matchId.value);
     reportPending();
     channel?.postMessage({ type: "append", event: ev });
 

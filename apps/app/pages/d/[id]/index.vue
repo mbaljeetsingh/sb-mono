@@ -55,7 +55,9 @@ const refreshRecent = async () => {
       recent.value = [];
       return;
     }
-    query = query.in("id", ids);
+    // Anon recents: only show matches this device scored that are still
+    // anon-owned. Excludes wt co-scorer sessions and view-only surfaces.
+    query = query.in("id", ids).is("owner_id", null);
   }
 
   const { data, error } = await query;

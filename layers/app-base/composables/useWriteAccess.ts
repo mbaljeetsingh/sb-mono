@@ -97,9 +97,10 @@ export function useWriteAccess(matchId: Ref<string>) {
       loaded.value = true;
       return;
     }
-    // No row yet (lazy-create path) — treat as anonymous-open until the row
-    // appears. useEvents.ensureMatchRow() will populate owner_id on first
-    // event, and the realtime subscription below will refresh us.
+    // No row yet — `/new` is the only writer of matches rows, so this means
+    // the row either hasn't propagated yet or the URL points to a match that
+    // was never created. Treat as anonymous-open while waiting; the realtime
+    // INSERT below will refresh us if the row appears.
     const row = rowRes.data as {
       owner_id?: string | null;
       write_token?: string | null;
@@ -114,9 +115,9 @@ export function useWriteAccess(matchId: Ref<string>) {
   onMounted(fetchRow);
   watch(matchId, fetchRow);
 
-  // Watch for owner_id / write_token changes (e.g. an authed user opens a
-  // freshly-anon match and ensureMatchRow stamps owner_id, or the owner
-  // regenerates the token while we're holding an old one).
+  // Watch for owner_id / write_token changes (e.g. the owner regenerates the
+  // token while we're holding an old one, or claim-on-login flips owner_id
+  // from null to a uid on an anon match).
   let channel: ReturnType<typeof supabase.channel> | null = null;
   const subscribe = () => {
     if (channel) {

@@ -34,15 +34,7 @@ const themeEntry = computed(() => getTheme(themeId.value, "scoreboard"));
 
 <template>
   <div
-    class="fixed inset-0 bg-black overflow-hidden font-sans"
-    :style="{
-      paddingTop: 'max(env(safe-area-inset-top), 8px)',
-      paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
-      paddingLeft:
-        'max(env(safe-area-inset-left), env(safe-area-inset-right), 8px)',
-      paddingRight:
-        'max(env(safe-area-inset-left), env(safe-area-inset-right), 8px)',
-    }"
+    class="fixed inset-0 bg-black overflow-hidden font-sans pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
   >
     <component
       :is="themeEntry.component"
