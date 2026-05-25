@@ -38,6 +38,7 @@ const tennisBasic: RacquetConfig = {
   cap: null,
   gamesToWin: 2,
   intervalAt: null,
+  serveRule: "rally-winner",
 };
 
 const pickleballClassic: RacquetConfig = {
@@ -48,6 +49,7 @@ const pickleballClassic: RacquetConfig = {
   cap: null,
   gamesToWin: 2,
   intervalAt: null,
+  serveRule: "rally-winner",
 };
 
 const pickleballRally: RacquetConfig = {
@@ -58,6 +60,7 @@ const pickleballRally: RacquetConfig = {
   cap: null,
   gamesToWin: 1,
   intervalAt: null,
+  serveRule: "rally-winner",
 };
 
 const tableTennis: RacquetConfig = {
@@ -68,6 +71,9 @@ const tableTennis: RacquetConfig = {
   cap: null,
   gamesToWin: 3,
   intervalAt: null,
+  // ITTF: serve alternates every 2 points, every 1 from 10–10. Initial server
+  // also alternates between games.
+  serveRule: "alternate-every-2",
 };
 
 export type RacquetPresetEntry = {

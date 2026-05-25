@@ -61,6 +61,9 @@ export type RacquetState = BaseState & {
   games: GameScore[];
   gamesWon: { a: number; b: number };
   servingSide: SideId;
+  /** Initial server of the match (set on match.start). Used by alternate-every-2
+   * serve rules to derive each game's starting server. */
+  matchInitialServer: SideId;
   serverCourt: "right" | "left";
   betweenGames: boolean;
   winner: SideId | null;
@@ -116,12 +119,21 @@ export type RacquetConfig = {
   gamesToWin: number;
   /** First score at which a BWF-style interval is flagged. null = no interval. */
   intervalAt: number | null;
+  /**
+   * How serve passes:
+   * - 'rally-winner': winner of the rally serves next (badminton, pickleball, tennis).
+   * - 'alternate-every-2': serve alternates every 2 combined points within a game,
+   *   then every 1 point once both sides reach `pointsPerGame - 1` (deuce).
+   *   Initial server also alternates between games. (ITTF table tennis.)
+   */
+  serveRule: "rally-winner" | "alternate-every-2";
 };
 
 export const initialRacquetState = (): RacquetState => ({
   games: [{ a: 0, b: 0 }],
   gamesWon: { a: 0, b: 0 },
   servingSide: "A",
+  matchInitialServer: "A",
   serverCourt: "right",
   betweenGames: false,
   matchOver: false,
@@ -155,6 +167,39 @@ export const isGameWon = (
   if (a >= need && a - b >= margin) return "A";
   if (b >= need && b - a >= margin) return "B";
   return null;
+};
+
+/**
+ * Compute the server for the next rally under the 'alternate-every-2' rule
+ * (ITTF table tennis), given the current game's score AFTER the just-played point.
+ *
+ * Algorithm:
+ * - The initial server of this game is `matchInitialServer` XOR (gameIndex % 2).
+ * - If combined score < (pointsPerGame - 1) * 2 (i.e. not at deuce), the server
+ *   alternates every 2 combined points: 0–0 and 0–1 → initial server, 1–1 and
+ *   2–1 → other side, 1–3 and 2–3 → initial server, etc.
+ * - From deuce onward, the server alternates every single point.
+ */
+export const computeAlternatingServer = (
+  game: GameScore,
+  gameIndex: number,
+  matchInitialServer: SideId,
+  cfg: RacquetConfig,
+): SideId => {
+  const gameInitial: SideId =
+    gameIndex % 2 === 0
+      ? matchInitialServer
+      : matchInitialServer === "A"
+        ? "B"
+        : "A";
+  const other: SideId = gameInitial === "A" ? "B" : "A";
+  const combined = game.a + game.b;
+  const deuceCombined = (cfg.pointsPerGame - 1) * 2;
+  if (combined >= deuceCombined) {
+    return combined % 2 === 0 ? gameInitial : other;
+  }
+  const pairIdx = Math.floor(combined / 2);
+  return pairIdx % 2 === 0 ? gameInitial : other;
 };
 
 /** Returns true if the given side scoring one more point would win the current game. */

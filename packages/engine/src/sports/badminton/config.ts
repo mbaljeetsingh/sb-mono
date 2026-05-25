@@ -12,6 +12,7 @@ export const badminton21: RacquetConfig = {
   cap: 30,
   gamesToWin: 2,
   intervalAt: 11,
+  serveRule: "rally-winner",
 };
 
 export const badminton15: RacquetConfig = {
@@ -22,4 +23,5 @@ export const badminton15: RacquetConfig = {
   cap: 21,
   gamesToWin: 2,
   intervalAt: 8,
+  serveRule: "rally-winner",
 };

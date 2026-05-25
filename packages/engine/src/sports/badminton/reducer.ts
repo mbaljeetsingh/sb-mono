@@ -16,6 +16,7 @@ import type {
   SideId,
 } from "../racquet-shared";
 import {
+  computeAlternatingServer,
   initialRacquetState,
   isGameWon,
   trimLastPointOrGameEnd,
@@ -46,6 +47,7 @@ function applyEvent(
       return {
         ...initialRacquetState(),
         servingSide: ev.serverSide,
+        matchInitialServer: ev.serverSide,
         serverCourt: ev.serverCourt,
         names: state.names,
         // Both teams' slot-1 starts in their right service court (BWF default).
@@ -177,7 +179,20 @@ function applyEvent(
       // partnerOnRight resets to {1,1} when the current game is back to 0–0
       // (start-of-game state) so doubles partner placement matches a fresh game.
       const cur = nextGames[nextGames.length - 1] ?? { a: 0, b: 0 };
-      const serverScore = state.servingSide === "A" ? cur.a : cur.b;
+      // For alternate-every-2 rules, the server is fully determined by the
+      // score + per-game initial server, so a score correction must also
+      // recompute it. For rally-winner rules, the operator's last known server
+      // is the best we can do.
+      const servingSide: SideId =
+        cfg.serveRule === "alternate-every-2"
+          ? computeAlternatingServer(
+              cur,
+              nextGames.length - 1,
+              state.matchInitialServer,
+              cfg,
+            )
+          : state.servingSide;
+      const serverScore = servingSide === "A" ? cur.a : cur.b;
       const serverCourt: "right" | "left" =
         serverScore % 2 === 0 ? "right" : "left";
       const atGameStart = cur.a === 0 && cur.b === 0;
@@ -185,6 +200,7 @@ function applyEvent(
         ...state,
         games: nextGames,
         gamesWon: { ...ev.gamesWon },
+        servingSide,
         serverCourt,
         partnerOnRight: atGameStart ? { a: 1, b: 1 } : state.partnerOnRight,
         matchOver,
@@ -227,9 +243,14 @@ function applyPoint(
   const newGames = [...working.games.slice(0, gameIdx), next];
   const winner = isGameWon(next, cfg);
 
-  // Server = whoever won the rally. Court = right if server's own score is even.
-  const servingSide: SideId = side;
-  const serverScore = side === "A" ? next.a : next.b;
+  // Server depends on the configured rule. 'rally-winner' (badminton, pickleball,
+  // tennis): the side that just scored serves next. 'alternate-every-2' (TT):
+  // computed from combined score and the per-game initial server.
+  const servingSide: SideId =
+    cfg.serveRule === "alternate-every-2"
+      ? computeAlternatingServer(next, gameIdx, working.matchInitialServer, cfg)
+      : side;
+  const serverScore = servingSide === "A" ? next.a : next.b;
   const serverCourt: "right" | "left" =
     serverScore % 2 === 0 ? "right" : "left";
 
@@ -260,11 +281,23 @@ function applyPoint(
     };
     const matchOver =
       gamesWon.a >= cfg.gamesToWin || gamesWon.b >= cfg.gamesToWin;
+    // For 'alternate-every-2' and a non-final game, surface the next game's
+    // initial server immediately so the between-games display is correct.
+    const nextGameIdx = newGames.length; // the upcoming, not-yet-created game
+    const servingSideAfterGame: SideId =
+      cfg.serveRule === "alternate-every-2" && !matchOver
+        ? computeAlternatingServer(
+            { a: 0, b: 0 },
+            nextGameIdx,
+            working.matchInitialServer,
+            cfg,
+          )
+        : servingSide;
     return {
       ...working,
       games: newGames,
       gamesWon,
-      servingSide,
+      servingSide: servingSideAfterGame,
       serverCourt,
       // BWF: each new game starts with both teams' slot-1 in the right court.
       // (Match-over keeps last positions for the audience-facing surfaces.)
