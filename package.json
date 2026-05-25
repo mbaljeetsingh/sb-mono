@@ -19,10 +19,14 @@
     "supabase:types": "supabase gen types typescript --local > packages/shared/src/types/supabase.ts",
     "shadcn:update": "tsx ./scripts/shadcn/index.ts",
     "shadcn:patches-only": "tsx ./scripts/shadcn/index.ts --patches-only",
-    "render-emails": "pnpm --filter @sb/app exec vitest run emails/generate.test.ts"
+    "render-emails": "pnpm --filter @sb/app exec vitest run emails/generate.test.ts",
+    "release": "commit-and-tag-version --skip.commit --skip.changelog --skip.tag --release-as patch --packageFiles apps/app/package.json --bumpFiles apps/app/package.json",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "commit-and-tag-version": "^12.6.1",
+    "husky": "^9.1.7",
     "supabase": "^2.101.0",
     "tsx": "^4.19.2",
     "turbo": "^2.9.5",

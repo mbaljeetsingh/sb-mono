@@ -2,7 +2,10 @@
 // Extends shared layers: app-base (theme, composables, stores) + ui (shadcn-vue primitives).
 
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import tailwindcss from "@tailwindcss/vite";
+
+const appPkg = createRequire(import.meta.url)("./package.json");
 
 export default defineNuxtConfig({
   extends: ["../../layers/app-base", "../../layers/ui"],
@@ -35,6 +38,9 @@ export default defineNuxtConfig({
   css: ["@sb/layer-ui/assets/index.css"],
   vite: {
     plugins: [tailwindcss()],
+    define: {
+      __APP_VERSION__: JSON.stringify(appPkg.version),
+    },
   },
   // shadcn-vue: no prefix, no auto-import. Components are imported explicitly:
   //   import { Button } from "@sb/layer-ui/components/ui/button"

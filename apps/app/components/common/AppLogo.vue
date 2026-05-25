@@ -13,6 +13,8 @@ const props = withDefaults(
   { linkTo: "/", size: "md", emphasized: false },
 );
 
+const appVersion = __APP_VERSION__;
+
 const sizeClasses = computed(() => {
   const sizes = {
     sm: { gap: "gap-2", img: "h-6", text: "text-sm" },
@@ -46,8 +48,16 @@ const sizeClasses = computed(() => {
       class="w-auto rounded-lg"
       :class="sizeClasses.img"
     />
-    <span :class="[sizeClasses.text, emphasized ? 'font-bold' : 'font-medium']">
-      Scoreboard
-    </span>
+    <div class="relative">
+      <p :class="[sizeClasses.text, emphasized ? 'font-bold' : 'font-medium']">
+        Scoreboard
+      </p>
+      <span
+        class="absolute -bottom-1.5 right-0 whitespace-nowrap leading-none text-fg-muted"
+        style="font-size: 9px"
+      >
+        v{{ appVersion }}
+      </span>
+    </div>
   </NuxtLink>
 </template>

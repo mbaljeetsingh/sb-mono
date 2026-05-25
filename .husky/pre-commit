@@ -1,0 +1,9 @@
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+export PATH="$PATH:$HOME/.local/share/pnpm:$HOME/.npm-global/bin:/usr/local/bin:$HOME/Library/pnpm"
+
+# Bump patch version when apps/app has staged changes
+if git diff --cached --name-only | grep -q "^apps/app/"; then
+  pnpm run release
+  git add apps/app/package.json
+fi
