@@ -34,7 +34,7 @@ const themeEntry = computed(() => getTheme(themeId.value, "scoreboard"));
 
 <template>
   <div
-    class="fixed inset-0 bg-black overflow-hidden font-sans pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
+    class="fixed inset-0 bg-black overflow-hidden font-sans pt-[max(env(safe-area-inset-top),8px)] pb-[max(env(safe-area-inset-bottom),8px)] pl-[max(env(safe-area-inset-left),env(safe-area-inset-right),8px)] pr-[max(env(safe-area-inset-left),env(safe-area-inset-right),8px)]"
   >
     <component
       :is="themeEntry.component"

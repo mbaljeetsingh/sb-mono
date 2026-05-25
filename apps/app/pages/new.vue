@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import { Loader2, Minus, Play, Plus } from "lucide-vue-next";
+import { ChevronDown, Loader2, Minus, Play, Plus } from "lucide-vue-next";
 import { ulid } from "ulid";
 import {
   type SportPresetId,
@@ -15,7 +15,6 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@sb/layer-ui/components/ui/toggle-group";
-import { Switch } from "@sb/layer-ui/components/ui/switch";
 import SportPicker, { type SportId } from "~/components/match/SportPicker.vue";
 import LookAndFeelCards from "~/components/match/LookAndFeelCards.vue";
 import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
@@ -42,15 +41,10 @@ const teamB = ref({ p1: "", p2: "" });
 const eventName = ref("");
 const round = ref("");
 const courtLabel = ref("");
-
-// Toss flow opt-out. When ON (default), /control opens a toss sheet on first
-// mount and the operator picks who serves first there. When OFF, /control
-// goes straight to scoring with today's auto-bootstrap. Stored as a
-// localStorage flag rather than on the matches row — it's a one-shot UI
-// decision; once /control consumes it the flag is cleared. Co-scorers who
-// open the match on another device after creation won't be re-prompted
-// either way, which matches expectation.
-const doToss = ref(true);
+// Tournament details are aspirational for most casual users — hide them
+// behind a disclosure so the form leads with the essentials. Auto-open if
+// a rematch prefill brought any of the three fields back populated.
+const showTournamentDetails = ref(false);
 
 // TT doubles uses a 4-player rotation that the shared (BWF) reducer doesn't
 // implement. Force singles for TT until a TT-specific reducer ships.
@@ -166,6 +160,9 @@ onMounted(async () => {
   eventName.value = data.event_name ?? "";
   round.value = data.round ?? "";
   courtLabel.value = data.court_label ?? "";
+  if (eventName.value || round.value || courtLabel.value) {
+    showTournamentDetails.value = true;
+  }
 });
 
 const formatNames = (t: { p1: string; p2: string }) =>
@@ -229,14 +226,6 @@ const createMatch = async () => {
     isCreating.value = false;
     toast.error("Couldn't create match. Check your connection and try again.");
     return;
-  }
-  if (doToss.value) {
-    try {
-      localStorage.setItem(`sb:toss-pending:${matchId.value}`, "1");
-    } catch {
-      // Storage disabled (private mode quota, etc.) — toss simply won't show;
-      // the operator can still set serve via the existing pre-match swap.
-    }
   }
   navigateTo(`/m/${matchId.value}`);
 };
@@ -416,50 +405,39 @@ const createMatch = async () => {
       </section>
 
       <section>
-        <Label
-          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
+        <button
+          type="button"
+          class="flex w-full items-center justify-between rounded-md py-1 text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle hover:text-foreground"
+          :aria-expanded="showTournamentDetails"
+          aria-controls="tournament-details"
+          @click="showTournamentDetails = !showTournamentDetails"
         >
-          Tournament details (optional)
-        </Label>
-        <Input
-          v-model="eventName"
-          type="text"
-          placeholder='Event (e.g. "Spring Open")'
-          class="h-11"
-        />
-        <Input
-          v-model="round"
-          type="text"
-          placeholder='Round (e.g. "Quarterfinal")'
-          class="h-11 mt-2"
-        />
-        <Input
-          v-model="courtLabel"
-          type="text"
-          placeholder='Court / table (e.g. "Court 1")'
-          class="h-11 mt-2"
-        />
-      </section>
-
-      <section>
-        <Label
-          for="do-toss"
-          class="flex cursor-pointer items-start justify-between gap-4"
-        >
-          <span class="min-w-0 flex-1">
-            <span class="block text-sm font-medium text-foreground">
-              Pre-match toss
-            </span>
-            <span class="mt-0.5 block text-[11px] text-fg-subtle">
-              {{
-                doToss
-                  ? "Pick who serves first when you open the scoring screen."
-                  : "Team A starts serving — change anytime from the scoring screen."
-              }}
-            </span>
-          </span>
-          <Switch id="do-toss" v-model="doToss" class="mt-0.5 shrink-0" />
-        </Label>
+          <span>Tournament details (optional)</span>
+          <ChevronDown
+            class="size-4 transition-transform"
+            :class="showTournamentDetails ? 'rotate-180' : ''"
+          />
+        </button>
+        <div v-if="showTournamentDetails" id="tournament-details" class="mt-2">
+          <Input
+            v-model="eventName"
+            type="text"
+            placeholder='Event (e.g. "Spring Open")'
+            class="h-11"
+          />
+          <Input
+            v-model="round"
+            type="text"
+            placeholder='Round (e.g. "Quarterfinal")'
+            class="h-11 mt-2"
+          />
+          <Input
+            v-model="courtLabel"
+            type="text"
+            placeholder='Court / table (e.g. "Court 1")'
+            class="h-11 mt-2"
+          />
+        </div>
       </section>
 
       <LookAndFeelCards

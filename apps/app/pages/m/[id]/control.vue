@@ -148,38 +148,38 @@ watch(
   { immediate: true },
 );
 
-// Pre-match toss flow. /new sets `sb:toss-pending:{matchId}` when the
-// operator left "Do toss" toggled on. We show the TossSheet once the match
-// is freshly seeded (only the auto-bootstrap match.start exists). On commit
-// we replace the seed event with one that carries the operator's chosen
-// serverSide, optionally swap doubles partners so the picked starter sits
-// in slot 1 (engine's `partnerOnRight` starts at {a:1, b:1}), then clear
-// the flag. Skip just clears the flag and leaves the auto-seed alone.
-const tossPending = ref(false);
-const refreshTossPending = () => {
+// Pre-match toss flow. Toss is a match-level prompt, but the "has this
+// operator already decided?" state lives per-device in localStorage so a
+// co-scorer who scans the QR before any points have been scored still gets
+// the prompt. We show the TossSheet whenever this device hasn't yet seen
+// it for this match AND the log is still just the auto-bootstrap match.start.
+// Both commit and skip set the seen flag, so an undo back to 0-0 on the
+// same device won't re-prompt.
+const tossSeen = ref(false);
+const refreshTossSeen = () => {
   if (typeof localStorage === "undefined") {
-    tossPending.value = false;
+    tossSeen.value = true;
     return;
   }
-  tossPending.value =
-    localStorage.getItem(`sb:toss-pending:${matchId.value}`) === "1";
+  tossSeen.value =
+    localStorage.getItem(`sb:toss-seen:${matchId.value}`) === "1";
 };
-onMounted(refreshTossPending);
-watch(matchId, refreshTossPending);
+onMounted(refreshTossSeen);
+watch(matchId, refreshTossSeen);
 
-const clearTossPending = () => {
+const markTossSeen = () => {
   try {
-    localStorage.removeItem(`sb:toss-pending:${matchId.value}`);
+    localStorage.setItem(`sb:toss-seen:${matchId.value}`, "1");
   } catch {
     // ignore — flag is best-effort
   }
-  tossPending.value = false;
+  tossSeen.value = true;
 };
 
 // Show only when the match is genuinely fresh: exactly the auto-seeded
 // match.start and nothing else. Once any other event lands we never re-prompt.
 const showToss = computed(() => {
-  if (!tossPending.value) return false;
+  if (tossSeen.value) return false;
   if (!canScore.value || !isActive.value) return false;
   if (events.value.length !== 1) return false;
   return events.value[0]?.type === "match.start";
@@ -239,10 +239,10 @@ const onTossCommit = (payload: {
   toast.success(`${serverName} serves first`, {
     description: 'Wrong? Tap "Change server" above the court.',
   });
-  clearTossPending();
+  markTossSeen();
 };
 
-const onTossSkip = () => clearTossPending();
+const onTossSkip = () => markTossSeen();
 
 const score = (side: SideId) => {
   const last = state.value.games[state.value.games.length - 1];

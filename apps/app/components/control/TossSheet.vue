@@ -14,7 +14,7 @@
 // form. Reduced-motion users get the transition collapsed to a plain swap.
 
 import { computed, ref } from "vue";
-import { ArrowRight, Coins, X } from "lucide-vue-next";
+import { ArrowRight, Coins, Send, Shield } from "lucide-vue-next";
 import { Button } from "@sb/layer-ui/components/ui/button";
 import type { SideId } from "@sb/engine";
 
@@ -173,23 +173,13 @@ const currentStepIndex = computed(() => {
       class="relative w-[min(94%,440px)] overflow-hidden rounded-2xl bg-surface text-foreground shadow-2xl"
     >
       <!-- Header -->
-      <div class="flex items-center justify-between px-5 pt-5 pb-3">
-        <div class="flex items-center gap-2">
-          <Coins class="size-4 text-fg-muted" />
-          <span
-            class="text-[11px] font-bold tracking-[0.08em] uppercase text-fg-muted"
-          >
-            Pre-match toss
-          </span>
-        </div>
-        <button
-          type="button"
-          aria-label="Skip toss"
-          class="rounded-md p-1 text-fg-subtle hover:bg-muted hover:text-foreground"
-          @click="onSkip"
+      <div class="flex items-center gap-2 px-5 pt-5 pb-3">
+        <Coins class="size-4 text-fg-muted" />
+        <span
+          class="text-[11px] font-bold tracking-[0.08em] uppercase text-fg-muted"
         >
-          <X class="size-4" />
-        </button>
+          Pre-match toss
+        </span>
       </div>
 
       <!-- Progress dots -->
@@ -299,7 +289,7 @@ const currentStepIndex = computed(() => {
               class="flex h-28 flex-col items-center justify-center gap-1 rounded-xl border-2 border-border-strong bg-background transition-all active:scale-[0.97] hover:border-foreground/40"
               @click="pickChoice('serve')"
             >
-              <span class="text-2xl">🏸</span>
+              <Send class="size-6 text-fg-muted" />
               <span class="text-base font-semibold">Serve</span>
               <span class="text-[11px] text-fg-subtle">Serves first</span>
             </button>
@@ -308,7 +298,7 @@ const currentStepIndex = computed(() => {
               class="flex h-28 flex-col items-center justify-center gap-1 rounded-xl border-2 border-border-strong bg-background transition-all active:scale-[0.97] hover:border-foreground/40"
               @click="pickChoice('receive')"
             >
-              <span class="text-2xl">🛡</span>
+              <Shield class="size-6 text-fg-muted" />
               <span class="text-base font-semibold">Receive</span>
               <span class="text-[11px] text-fg-subtle">Receives first</span>
             </button>
