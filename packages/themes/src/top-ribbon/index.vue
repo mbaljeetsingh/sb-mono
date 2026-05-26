@@ -26,7 +26,7 @@ const {
   isLastGameWinner,
   isMatchWinner,
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
-const meta = useMetaLine(toRef(props, "meta"));
+const meta = useMetaLine(toRef(props, "meta"), toRef(props, "config"));
 const isLive = computed(() => props.meta?.isLive !== false);
 const status = useStatusPill(toRef(props, "state"));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
@@ -46,7 +46,7 @@ const playersOf = (side: "a" | "b") =>
       :key="side"
       :class="[
         'flex items-center gap-3 min-w-0',
-        side === 'b' ? 'justify-end flex-row-reverse order-3' : '',
+        side === 'b' ? 'justify-start flex-row-reverse order-3' : '',
       ]"
     >
       <span class="w-1 h-9 shrink-0" :style="{ background: teamColor(side) }" />

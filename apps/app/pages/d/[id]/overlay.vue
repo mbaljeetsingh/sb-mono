@@ -53,7 +53,7 @@ useHead({
       :state="state"
       :config="config"
       :team-names="teamNames"
-      :meta="{ sportLabel: (config.sport ?? 'badminton').toUpperCase() }"
+      :meta="{}"
     />
     <div
       v-else

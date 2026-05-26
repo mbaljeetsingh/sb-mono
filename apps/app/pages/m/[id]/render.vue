@@ -267,11 +267,7 @@ const themeEntry = computed(() =>
   getTheme(overlayTheme.value || "broadcast-classic", "overlay"),
 );
 const meta = computed(() => ({
-  sportLabel: (
-    matchMeta.value.eventName ||
-    config.value.sport ||
-    "badminton"
-  ).toUpperCase(),
+  sportLabel: matchMeta.value.eventName?.trim().toUpperCase() || undefined,
   courtLabel: matchMeta.value.courtLabel?.trim() || null,
   round: matchMeta.value.round?.trim() || null,
   category: matchMeta.value.category?.trim() || null,

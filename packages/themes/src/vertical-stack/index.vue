@@ -27,7 +27,7 @@ const {
   isLastGameWinner,
   isMatchWinner,
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
-const meta = useMetaLine(toRef(props, "meta"));
+const meta = useMetaLine(toRef(props, "meta"), toRef(props, "config"));
 const isLive = computed(() => props.meta?.isLive !== false);
 const status = useStatusPill(toRef(props, "state"));
 const endReason = computed(() => endReasonLabel(props.state.endReason));

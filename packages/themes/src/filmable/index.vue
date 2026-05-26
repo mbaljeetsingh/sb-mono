@@ -36,10 +36,17 @@ const endReason = computed(() => endReasonLabel(props.state.endReason));
 const playersOf = (side: "a" | "b") =>
   side === "a" ? playersA.value : playersB.value;
 
+// Singles = each side has exactly one player. In that case the "TEAM A" /
+// "TEAM B" badge is just noise — the player's name (which is also the team
+// name) is right next to it. Hide the badge unless we're in doubles.
+const isDoubles = computed(
+  () => playersA.value.length > 1 || playersB.value.length > 1,
+);
+
 const topMeta = computed(() => {
   const m = props.meta ?? {};
   return [
-    m.sportLabel ?? "BADMINTON",
+    m.sportLabel,
     `BO${(props.config.gamesToWin - 1) * 2 + 1}`,
     m.category,
     m.round,
@@ -53,6 +60,13 @@ const topMeta = computed(() => {
 const previousGames = computed(() => {
   const finished = props.state.games.length - (props.state.matchOver ? 0 : 1);
   return props.state.games.slice(0, Math.max(finished, 0));
+});
+
+const formatLine = computed(() => {
+  const c = props.config;
+  const heading =
+    c.gamesToWin === 1 ? "Single game" : `Best of ${c.gamesToWin * 2 - 1}`;
+  return `${heading} · first to ${c.pointsPerGame}`;
 });
 </script>
 
@@ -130,6 +144,7 @@ const previousGames = computed(() => {
           ]"
         >
           <span
+            v-if="isDoubles"
             class="px-2 py-0.5 rounded text-white text-[clamp(8px,1.1vmin,10px)] font-bold tracking-[0.1em]"
             :style="{ background: teamColor(side) }"
             >{{ side === "a" ? "TEAM A" : "TEAM B" }}</span
@@ -229,10 +244,9 @@ const previousGames = computed(() => {
       <span v-if="status.side">· TEAM {{ status.side }}</span>
     </div>
 
-    <!-- Bottom strip: previous-game history + optional sponsor. Hidden
-         entirely when there's nothing to show. -->
+    <!-- Bottom strip: previous-game history on the left, sponsor or wordmark
+         on the right. Always renders so the layout has a stable base line. -->
     <div
-      v-if="previousGames.length || meta?.sponsorName"
       class="shrink-0 bg-neutral-950 border-t border-neutral-900 px-[clamp(12px,3vw,36px)] py-[clamp(6px,1.5vh,18px)] flex items-center justify-between gap-3"
     >
       <div
@@ -253,7 +267,11 @@ const previousGames = computed(() => {
           </template>
         </span>
       </div>
-      <div v-else></div>
+      <span
+        v-else
+        class="text-[clamp(9px,1.2vmin,11px)] text-neutral-500 tracking-[0.14em] font-semibold uppercase truncate"
+        >{{ formatLine }}</span
+      >
       <div
         v-if="meta?.sponsorName"
         class="flex items-center gap-2 shrink-0 min-w-0"
@@ -267,6 +285,11 @@ const previousGames = computed(() => {
           >{{ meta.sponsorName }}</span
         >
       </div>
+      <span
+        v-else
+        class="shrink-0 text-[clamp(9px,1.2vmin,11px)] text-neutral-500 tracking-[0.14em] font-semibold uppercase"
+        >SCOREBOARD APP</span
+      >
     </div>
   </div>
 </template>

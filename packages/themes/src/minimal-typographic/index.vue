@@ -31,16 +31,30 @@ const {
   isLastGameWinner,
   isMatchWinner,
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
-const meta = useMetaLine(toRef(props, "meta"));
+const meta = useMetaLine(toRef(props, "meta"), toRef(props, "config"));
 const status = useStatusPill(toRef(props, "state"));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
 
 const playersOf = (side: "a" | "b") =>
   side === "a" ? playersA.value : playersB.value;
 
-const allGamesLine = computed(() =>
-  props.state.games.map((g) => `${g.a}–${g.b}`).join("  "),
-);
+const formatLine = computed(() => {
+  const c = props.config;
+  const heading =
+    c.gamesToWin === 1 ? "Single game" : `Best of ${c.gamesToWin * 2 - 1}`;
+  return `${heading} · first to ${c.pointsPerGame}`;
+});
+
+const allGamesLine = computed(() => {
+  // Only show *completed* games — the in-progress game is already on the
+  // big numerals above. In BO1 (or before the first game finishes) there's
+  // nothing to list, so fall back to the format caption.
+  const s = props.state;
+  const finished = s.games.length - (s.matchOver ? 0 : 1);
+  const completed = s.games.slice(0, Math.max(finished, 0));
+  if (!completed.length) return formatLine.value;
+  return completed.map((g) => `${g.a}–${g.b}`).join("  ");
+});
 
 const sideLabel = (side: "a" | "b") => {
   if (isMatchWinner(side)) return "WINNER";
@@ -174,8 +188,8 @@ const sideLabel = (side: "a" | "b") => {
       <div
         class="flex justify-between items-end gap-3 text-[clamp(9px,1.2vmin,12px)] text-neutral-500 tracking-[0.1em] font-semibold uppercase shrink-0"
       >
-        <span class="truncate">{{ allGamesLine || "—" }}</span>
-        <span class="shrink-0">SCOREBOARD.APP</span>
+        <span class="truncate">{{ allGamesLine || "&nbsp;" }}</span>
+        <span class="shrink-0">SCOREBOARD APP</span>
       </div>
     </div>
   </div>

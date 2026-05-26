@@ -62,7 +62,6 @@ const previewState = computed(() => props.state ?? defaultState);
 const previewConfig = computed(() => props.config ?? badminton21);
 const teamNames = { a: "Team A", b: "Team B" };
 const meta = {
-  sportLabel: "BADMINTON",
   courtLabel: "COURT 3",
   round: "QF",
   category: "MD U-19",

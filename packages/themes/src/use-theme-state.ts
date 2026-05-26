@@ -4,7 +4,7 @@
 // themes focus on layout.
 
 import { computed, type Ref } from "vue";
-import type { RacquetState } from "@sb/engine";
+import type { RacquetConfig, RacquetState } from "@sb/engine";
 
 export type SideKey = "a" | "b";
 
@@ -160,8 +160,11 @@ export function useStatusPill(stateRef: Ref<RacquetState>) {
 }
 
 /**
- * Concatenated meta string ("BADMINTON · QUARTERFINAL · COURT 1") used by
- * most overlay/scoreboard headers. Filters out empty fields.
+ * Concatenated meta string used by most overlay/scoreboard headers.
+ * `sportLabel` is only meant for tournament/event branding (e.g. "Pro League
+ * Finals") — the sport itself is conveyed visually by the SportIcon every
+ * theme renders, so callers should leave this empty for plain matches rather
+ * than passing "BADMINTON".
  */
 export function useMetaLine(
   metaRef: Ref<
@@ -173,10 +176,14 @@ export function useMetaLine(
       }
     | undefined
   >,
+  configRef?: Ref<RacquetConfig>,
 ) {
   return computed(() => {
     const m = metaRef.value ?? {};
-    return [m.sportLabel, m.round, m.category, m.courtLabel]
+    const bo = configRef
+      ? `BO${(configRef.value.gamesToWin - 1) * 2 + 1}`
+      : null;
+    return [m.sportLabel, bo, m.round, m.category, m.courtLabel]
       .filter(Boolean)
       .join(" · ");
   });

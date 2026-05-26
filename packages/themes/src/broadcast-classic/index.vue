@@ -32,7 +32,7 @@ const {
   isMatchWinner,
 } = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
 const status = useStatusPill(toRef(props, "state"));
-const meta = useMetaLine(toRef(props, "meta"));
+const meta = useMetaLine(toRef(props, "meta"), toRef(props, "config"));
 const isLive = computed(() => props.meta?.isLive !== false);
 
 const playersOf = (side: "a" | "b") =>
@@ -41,7 +41,7 @@ const playersOf = (side: "a" | "b") =>
 
 <template>
   <div
-    class="absolute left-9 bottom-9 w-[640px] rounded-xl overflow-hidden border border-white/10 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)] bg-neutral-950/90 backdrop-blur-md font-sans"
+    class="absolute left-9 bottom-9 w-[480px] rounded-xl overflow-hidden border border-white/10 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)] bg-neutral-950/90 backdrop-blur-md font-sans"
   >
     <!-- Meta strip -->
     <div
