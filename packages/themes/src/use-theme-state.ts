@@ -3,10 +3,10 @@
 // card counts, prior vs current games), so we keep the math here and let the
 // themes focus on layout.
 
-import { computed, type Ref } from "vue";
-import type { RacquetConfig, RacquetState } from "@sb/engine";
+import type { RacquetConfig, RacquetState } from '@sb/engine';
+import { type Ref, computed } from 'vue';
 
-export type SideKey = "a" | "b";
+export type SideKey = 'a' | 'b';
 
 export type Player = {
   name: string;
@@ -30,36 +30,36 @@ const EMPTY_CARDS = { yellow: 0, red: 0, black: 0 } as const;
  */
 export function useThemeState(
   stateRef: Ref<RacquetState>,
-  teamNamesRef: Ref<{ a: string; b: string }>,
+  teamNamesRef: Ref<{ a: string; b: string }>
 ) {
   const playersOf = (side: SideKey): Player[] => {
     const state = stateRef.value;
     const parts = teamNamesRef.value[side]
-      .split(" / ")
+      .split(' / ')
       .map((s) => s.trim())
       .filter(Boolean);
     if (parts.length < 2) {
-      return [{ name: parts[0] ?? "", isServer: false, isPartner: false }];
+      return [{ name: parts[0] ?? '', isServer: false, isPartner: false }];
     }
     const onRight = state.partnerOnRight?.[side] ?? 1;
     const isServingTeam =
       state.servingSide.toLowerCase() === side && !state.matchOver;
     const serverSlot =
-      state.serverCourt === "right" ? onRight : onRight === 1 ? 2 : 1;
+      state.serverCourt === 'right' ? onRight : onRight === 1 ? 2 : 1;
     return parts.map((name, idx) => {
       const isServer = isServingTeam && idx + 1 === serverSlot;
       return { name, isServer, isPartner: isServingTeam && !isServer };
     });
   };
 
-  const playersA = computed(() => playersOf("a"));
-  const playersB = computed(() => playersOf("b"));
+  const playersA = computed(() => playersOf('a'));
+  const playersB = computed(() => playersOf('b'));
 
   const cards = (side: SideKey) => stateRef.value.cards?.[side] ?? EMPTY_CARDS;
 
   const games = computed(() => stateRef.value.games);
   const currentGame = computed(
-    () => games.value[games.value.length - 1] ?? { a: 0, b: 0 },
+    () => games.value[games.value.length - 1] ?? { a: 0, b: 0 }
   );
   // Prior games = everything before the current. Match-over treats the final
   // game as still the "current" highlight column so the FINAL row stays
@@ -83,7 +83,7 @@ export function useThemeState(
     const last = s.games[s.games.length - 1];
     if (!last) return null;
     if (last.a === last.b) return null;
-    return last.a > last.b ? "a" : "b";
+    return last.a > last.b ? 'a' : 'b';
   });
 
   const isLastGameWinner = (side: SideKey) => lastGameWinner.value === side;
@@ -116,8 +116,8 @@ export function useThemeState(
  */
 export type StatusPill = {
   label: string;
-  tone: "accent" | "warn" | "muted";
-  side: "A" | "B" | null;
+  tone: 'accent' | 'warn' | 'muted';
+  side: 'A' | 'B' | null;
 };
 
 /**
@@ -125,36 +125,55 @@ export type StatusPill = {
  * Returns null when the match ended cleanly (or hasn't ended).
  */
 export const endReasonLabel = (
-  reason: RacquetState["endReason"] | undefined,
+  reason: RacquetState['endReason'] | undefined
 ): string | null => {
   switch (reason) {
-    case "walkover":
-      return "won by walkover";
-    case "retirement":
-      return "won by retirement";
-    case "default":
-      return "won by default";
+    case 'walkover':
+      return 'won by walkover';
+    case 'retirement':
+      return 'won by retirement';
+    case 'default':
+      return 'won by default';
     default:
       return null;
   }
+};
+
+/** Collapse a per-side flag pair into a pill side: null when both (or neither). */
+const pointSide = (p: { a: boolean; b: boolean }): 'A' | 'B' | null => {
+  if (p.a && p.b) return null;
+  if (p.a) return 'A';
+  if (p.b) return 'B';
+  return null;
 };
 
 export function useStatusPill(stateRef: Ref<RacquetState>) {
   return computed<StatusPill | null>(() => {
     const s = stateRef.value;
     if (s.matchOver) return null;
-    if (s.suspended) return { label: "SUSPENDED", tone: "warn", side: null };
+    if (s.suspended) return { label: 'SUSPENDED', tone: 'warn', side: null };
     if (s.timeout)
       return {
         label: `${s.timeout.kind.toUpperCase()} TIMEOUT`,
-        tone: "warn",
+        tone: 'warn',
         side: s.timeout.side,
       };
+    // Attribute the pill to the side actually at match/game point — under
+    // rally scoring that is often the receiver, not the server. When both
+    // sides are a point away (e.g. 29–29), side is null (neutral pill).
     if (s.isMatchPoint)
-      return { label: "MATCH POINT", tone: "accent", side: s.servingSide };
+      return {
+        label: 'MATCH POINT',
+        tone: 'accent',
+        side: pointSide(s.matchPoint),
+      };
     if (s.isGamePoint)
-      return { label: "GAME POINT", tone: "accent", side: s.servingSide };
-    if (s.atInterval) return { label: "INTERVAL", tone: "muted", side: null };
+      return {
+        label: 'GAME POINT',
+        tone: 'accent',
+        side: pointSide(s.gamePoint),
+      };
+    if (s.atInterval) return { label: 'INTERVAL', tone: 'muted', side: null };
     return null;
   });
 }
@@ -176,7 +195,7 @@ export function useMetaLine(
       }
     | undefined
   >,
-  configRef?: Ref<RacquetConfig>,
+  configRef?: Ref<RacquetConfig>
 ) {
   return computed(() => {
     const m = metaRef.value ?? {};
@@ -185,7 +204,7 @@ export function useMetaLine(
       : null;
     return [m.sportLabel, bo, m.round, m.category, m.courtLabel]
       .filter(Boolean)
-      .join(" · ");
+      .join(' · ');
   });
 }
 
@@ -193,5 +212,5 @@ export function useMetaLine(
  * CSS var lookup for team color. Centralized so themes don't repeat the
  * "side === 'a' ? var(--color-team-a) : var(--color-team-b)" ternary.
  */
-export const teamColor = (side: SideKey | "A" | "B") =>
-  side === "a" || side === "A" ? "var(--color-team-a)" : "var(--color-team-b)";
+export const teamColor = (side: SideKey | 'A' | 'B') =>
+  side === 'a' || side === 'A' ? 'var(--color-team-a)' : 'var(--color-team-b)';

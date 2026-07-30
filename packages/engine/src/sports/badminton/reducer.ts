@@ -88,6 +88,8 @@ function applyEvent(
         betweenGames: false,
         isGamePoint: false,
         isMatchPoint: false,
+        gamePoint: { a: false, b: false },
+        matchPoint: { a: false, b: false },
       };
 
     case 'retirement': {
@@ -102,6 +104,8 @@ function applyEvent(
         betweenGames: false,
         isGamePoint: false,
         isMatchPoint: false,
+        gamePoint: { a: false, b: false },
+        matchPoint: { a: false, b: false },
       };
     }
 
@@ -116,6 +120,8 @@ function applyEvent(
         betweenGames: false,
         isGamePoint: false,
         isMatchPoint: false,
+        gamePoint: { a: false, b: false },
+        matchPoint: { a: false, b: false },
       };
     }
 
@@ -164,6 +170,8 @@ function applyEvent(
         betweenGames: false,
         isGamePoint: false,
         isMatchPoint: false,
+        gamePoint: { a: false, b: false },
+        matchPoint: { a: false, b: false },
       };
     }
 
@@ -213,6 +221,8 @@ function applyEvent(
         betweenGames: false,
         isGamePoint: false,
         isMatchPoint: false,
+        gamePoint: { a: false, b: false },
+        matchPoint: { a: false, b: false },
         atInterval: false,
       };
     }
@@ -312,12 +322,13 @@ function applyPoint(
       atInterval: false,
       isGamePoint: false,
       isMatchPoint: false,
+      gamePoint: { a: false, b: false },
+      matchPoint: { a: false, b: false },
     };
   }
 
   const aWouldWinGame = wouldWinGameWithPoint(next, 'A', cfg);
   const bWouldWinGame = wouldWinGameWithPoint(next, 'B', cfg);
-  const isGamePoint = aWouldWinGame || bWouldWinGame;
   const aWouldWinMatch =
     aWouldWinGame && working.gamesWon.a + 1 >= cfg.gamesToWin;
   const bWouldWinMatch =
@@ -330,8 +341,10 @@ function applyPoint(
     serverCourt,
     partnerOnRight: nextPartnerOnRight,
     atInterval: reachedInterval,
-    isGamePoint,
+    isGamePoint: aWouldWinGame || bWouldWinGame,
     isMatchPoint: aWouldWinMatch || bWouldWinMatch,
+    gamePoint: { a: aWouldWinGame, b: bWouldWinGame },
+    matchPoint: { a: aWouldWinMatch, b: bWouldWinMatch },
   };
 }
 
