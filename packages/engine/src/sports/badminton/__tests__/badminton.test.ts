@@ -129,6 +129,70 @@ describe('match-state events', () => {
     expect(s.matchOver).toBe(false);
     expect(s.winner).toBe(null);
   });
+
+  it('game.end clears stale game/interval flags for the new game', () => {
+    // A manual game-end at 20-5 starts a fresh 0-0 game; carrying the leader's
+    // game point forward showed "GAME PT" at 0-0.
+    const seq: RacquetEvent[] = [start('A')];
+    for (let i = 0; i < 20; i++) seq.push(point('A'));
+    for (let i = 0; i < 5; i++) seq.push(point('B'));
+    const s = reduce([...seq, ev('game.end')], badminton21);
+    expect(s.games[s.games.length - 1]).toEqual({ a: 0, b: 0 });
+    expect(s.gamePoint).toEqual({ a: false, b: false });
+    expect(s.isGamePoint).toBe(false);
+    expect(s.atInterval).toBe(false);
+  });
+
+  it('score.correct recomputes game point from the corrected score', () => {
+    // Correcting to 20-5 puts A one point from the game. Clearing the flags
+    // instead of recomputing left the chip/pill hidden until the next rally.
+    const seq: RacquetEvent[] = [
+      start('A'),
+      ev('score.correct', {
+        games: [{ a: 20, b: 5 }],
+        gamesWon: { a: 0, b: 0 },
+      }),
+    ];
+    const s = reduce(seq, badminton21);
+    expect(s.gamePoint).toEqual({ a: true, b: false });
+    expect(s.isGamePoint).toBe(true);
+    expect(s.matchPoint).toEqual({ a: false, b: false });
+    expect(s.isMatchPoint).toBe(false);
+  });
+
+  it('score.correct recomputes match point when the game would clinch', () => {
+    const seq: RacquetEvent[] = [
+      start('A'),
+      ev('score.correct', {
+        games: [
+          { a: 21, b: 19 },
+          { a: 6, b: 20 },
+        ],
+        gamesWon: { a: 1, b: 0 },
+      }),
+    ];
+    const s = reduce(seq, badminton21);
+    expect(s.gamePoint).toEqual({ a: false, b: true });
+    // B winning game 2 only levels the match at 1-1, so it is not match point.
+    expect(s.matchPoint).toEqual({ a: false, b: false });
+  });
+
+  it('score.correct leaves flags clear when the correction ends the match', () => {
+    const seq: RacquetEvent[] = [
+      start('A'),
+      ev('score.correct', {
+        games: [
+          { a: 21, b: 19 },
+          { a: 21, b: 17 },
+        ],
+        gamesWon: { a: 2, b: 0 },
+      }),
+    ];
+    const s = reduce(seq, badminton21);
+    expect(s.matchOver).toBe(true);
+    expect(s.gamePoint).toEqual({ a: false, b: false });
+    expect(s.matchPoint).toEqual({ a: false, b: false });
+  });
 });
 
 describe('badminton 21-point — basic scoring', () => {
@@ -227,6 +291,26 @@ describe('badminton 21-point — game/match points', () => {
     expect(s.isMatchPoint).toBe(false);
   });
 
+  it('attributes game point to the receiver, not the serving side', () => {
+    // 20-5 with B winning the last rally: B serves, but A is at game point.
+    // Regression: UI used to pin the GAME PT chip on whoever was serving.
+    const seq: SideId[] = [];
+    for (let i = 0; i < 20; i++) seq.push('A');
+    for (let i = 0; i < 5; i++) seq.push('B');
+    const s = reduce([start('A'), ...points(seq)], badminton21);
+    expect(s.servingSide).toBe('B');
+    expect(s.gamePoint).toEqual({ a: true, b: false });
+    expect(s.matchPoint).toEqual({ a: false, b: false });
+  });
+
+  it('flags both sides at game point at 29-29 (cap point)', () => {
+    const seq: SideId[] = [];
+    for (let i = 0; i < 29; i++) seq.push('A', 'B'); // 29-29
+    const s = reduce([start('A'), ...points(seq)], badminton21);
+    expect(s.games[0]).toEqual({ a: 29, b: 29 });
+    expect(s.gamePoint).toEqual({ a: true, b: true });
+  });
+
   it('flags match point when game-winning point would also clinch the match', () => {
     const g1: SideId[] = [];
     for (let i = 0; i < 21; i++) g1.push('A');
@@ -235,6 +319,27 @@ describe('badminton 21-point — game/match points', () => {
     const s = reduce([start('A'), ...points([...g1, ...g2])], badminton21);
     expect(s.gamesWon.a).toBe(1);
     expect(s.isMatchPoint).toBe(true);
+  });
+
+  it('attributes match point to the receiver, not the serving side', () => {
+    // A takes game 1, leads 20-5 in game 2, then B wins rallies (B serves).
+    // A is at match point while receiving.
+    const seq: SideId[] = [];
+    for (let i = 0; i < 21; i++) seq.push('A'); // game 1 to A
+    for (let i = 0; i < 20; i++) seq.push('A');
+    for (let i = 0; i < 5; i++) seq.push('B'); // 20-5, B serving
+    const s = reduce([start('A'), ...points(seq)], badminton21);
+    expect(s.servingSide).toBe('B');
+    expect(s.matchPoint).toEqual({ a: true, b: false });
+    expect(s.gamePoint).toEqual({ a: true, b: false });
+  });
+
+  it('clears per-side flags once the game is won', () => {
+    const seq: SideId[] = [];
+    for (let i = 0; i < 21; i++) seq.push('A');
+    const s = reduce([start('A'), ...points(seq)], badminton21);
+    expect(s.gamePoint).toEqual({ a: false, b: false });
+    expect(s.matchPoint).toEqual({ a: false, b: false });
   });
 });
 

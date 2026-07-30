@@ -73,6 +73,14 @@ function applyEvent(
         ...state,
         games: [...state.games, { a: 0, b: 0 }],
         betweenGames: false,
+        // The new game starts 0–0, so any game/match-point or interval flag
+        // from the game just ended is stale. Without clearing, a manual
+        // game-end at 20–5 kept "GAME PT" on the leader at 0–0.
+        isGamePoint: false,
+        isMatchPoint: false,
+        gamePoint: { a: false, b: false },
+        matchPoint: { a: false, b: false },
+        atInterval: false,
       };
 
     case 'undo':
@@ -88,6 +96,8 @@ function applyEvent(
         betweenGames: false,
         isGamePoint: false,
         isMatchPoint: false,
+        gamePoint: { a: false, b: false },
+        matchPoint: { a: false, b: false },
       };
 
     case 'retirement': {
@@ -102,6 +112,8 @@ function applyEvent(
         betweenGames: false,
         isGamePoint: false,
         isMatchPoint: false,
+        gamePoint: { a: false, b: false },
+        matchPoint: { a: false, b: false },
       };
     }
 
@@ -116,6 +128,8 @@ function applyEvent(
         betweenGames: false,
         isGamePoint: false,
         isMatchPoint: false,
+        gamePoint: { a: false, b: false },
+        matchPoint: { a: false, b: false },
       };
     }
 
@@ -164,6 +178,8 @@ function applyEvent(
         betweenGames: false,
         isGamePoint: false,
         isMatchPoint: false,
+        gamePoint: { a: false, b: false },
+        matchPoint: { a: false, b: false },
       };
     }
 
@@ -200,6 +216,16 @@ function applyEvent(
       const serverCourt: 'right' | 'left' =
         serverScore % 2 === 0 ? 'right' : 'left';
       const atGameStart = cur.a === 0 && cur.b === 0;
+      // A correction can land the match straight onto game/match point (the
+      // operator fixes a mis-scored rally to 20–5). Recompute from the
+      // corrected score instead of clearing — otherwise the chip and status
+      // pill stay hidden until the next rally is scored.
+      const aWouldWinGame = !matchOver && wouldWinGameWithPoint(cur, 'A', cfg);
+      const bWouldWinGame = !matchOver && wouldWinGameWithPoint(cur, 'B', cfg);
+      const aWouldWinMatch =
+        aWouldWinGame && ev.gamesWon.a + 1 >= cfg.gamesToWin;
+      const bWouldWinMatch =
+        bWouldWinGame && ev.gamesWon.b + 1 >= cfg.gamesToWin;
       return {
         ...state,
         games: nextGames,
@@ -211,8 +237,10 @@ function applyEvent(
         winner: matchOver ? (ev.gamesWon.a > ev.gamesWon.b ? 'A' : 'B') : null,
         endReason: matchOver ? 'normal' : null,
         betweenGames: false,
-        isGamePoint: false,
-        isMatchPoint: false,
+        isGamePoint: aWouldWinGame || bWouldWinGame,
+        isMatchPoint: aWouldWinMatch || bWouldWinMatch,
+        gamePoint: { a: aWouldWinGame, b: bWouldWinGame },
+        matchPoint: { a: aWouldWinMatch, b: bWouldWinMatch },
         atInterval: false,
       };
     }
@@ -312,12 +340,13 @@ function applyPoint(
       atInterval: false,
       isGamePoint: false,
       isMatchPoint: false,
+      gamePoint: { a: false, b: false },
+      matchPoint: { a: false, b: false },
     };
   }
 
   const aWouldWinGame = wouldWinGameWithPoint(next, 'A', cfg);
   const bWouldWinGame = wouldWinGameWithPoint(next, 'B', cfg);
-  const isGamePoint = aWouldWinGame || bWouldWinGame;
   const aWouldWinMatch =
     aWouldWinGame && working.gamesWon.a + 1 >= cfg.gamesToWin;
   const bWouldWinMatch =
@@ -330,8 +359,10 @@ function applyPoint(
     serverCourt,
     partnerOnRight: nextPartnerOnRight,
     atInterval: reachedInterval,
-    isGamePoint,
+    isGamePoint: aWouldWinGame || bWouldWinGame,
     isMatchPoint: aWouldWinMatch || bWouldWinMatch,
+    gamePoint: { a: aWouldWinGame, b: bWouldWinGame },
+    matchPoint: { a: aWouldWinMatch, b: bWouldWinMatch },
   };
 }
 

@@ -483,10 +483,15 @@ const canSwapPlayersA = computed(
 );
 const canSwapPlayersB = canSwapPlayersA;
 
-const isGlowing = computed<SideId | null>(() => {
-  if (!state.value.isGamePoint && !state.value.isMatchPoint) return null;
-  return state.value.servingSide;
-});
+// Glow the team(s) actually at game/match point — under rally scoring the
+// receiver can be at game point, so this must not follow servingSide. Both
+// can glow at once (e.g. 29–29 under the BWF cap).
+const isGlowingA = computed(
+  () => state.value.gamePoint.a || state.value.matchPoint.a
+);
+const isGlowingB = computed(
+  () => state.value.gamePoint.b || state.value.matchPoint.b
+);
 
 const lastPointWinner = computed<SideId | null>(() => {
   for (let i = events.value.length - 1; i >= 0; i--) {
@@ -795,12 +800,11 @@ const orientationB = computed<Orientation>(() => {
             :score="score('A')"
             :games-won="gamesWon.a"
             :total-slots="config.gamesToWin + 1"
-            :is-serving-team="state.servingSide === 'A'"
-            :is-match-point="state.isMatchPoint"
-            :is-game-point="state.isGamePoint"
+            :is-match-point="state.matchPoint.a"
+            :is-game-point="state.gamePoint.a"
             :cells="cellsA"
             :match-over="state.matchOver"
-            :is-glowing="isGlowing === 'A'"
+            :is-glowing="isGlowingA"
             :last-winner="lastPointWinner === 'A'"
             :cell-is-server="(court) => cellIsServer('A', court)"
             :can-swap-players="canSwapPlayersA"
@@ -820,12 +824,11 @@ const orientationB = computed<Orientation>(() => {
             :score="score('B')"
             :games-won="gamesWon.b"
             :total-slots="config.gamesToWin + 1"
-            :is-serving-team="state.servingSide === 'B'"
-            :is-match-point="state.isMatchPoint"
-            :is-game-point="state.isGamePoint"
+            :is-match-point="state.matchPoint.b"
+            :is-game-point="state.gamePoint.b"
             :cells="cellsB"
             :match-over="state.matchOver"
-            :is-glowing="isGlowing === 'B'"
+            :is-glowing="isGlowingB"
             :last-winner="lastPointWinner === 'B'"
             :cell-is-server="(court) => cellIsServer('B', court)"
             :can-swap-players="canSwapPlayersB"

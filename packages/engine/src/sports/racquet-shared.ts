@@ -5,42 +5,42 @@
 // match.start / sides.swap / team.rename) but differ in rules and may attach
 // sport-specific extensions to MatchState.
 
-import type { BaseEvent, BaseState } from "../core/types";
+import type { BaseEvent, BaseState } from '../core/types';
 
-export type SideId = "A" | "B";
+export type SideId = 'A' | 'B';
 
 export type RacquetEvent =
   | (BaseEvent & {
-      type: "match.start";
+      type: 'match.start';
       serverSide: SideId;
-      serverCourt: "right" | "left";
+      serverCourt: 'right' | 'left';
     })
-  | (BaseEvent & { type: "point"; side: SideId })
-  | (BaseEvent & { type: "undo" })
-  | (BaseEvent & { type: "game.end" })
-  | (BaseEvent & { type: "sides.swap" })
-  | (BaseEvent & { type: "team.rename"; side: SideId; name: string })
-  | (BaseEvent & { type: "walkover"; winner: SideId })
+  | (BaseEvent & { type: 'point'; side: SideId })
+  | (BaseEvent & { type: 'undo' })
+  | (BaseEvent & { type: 'game.end' })
+  | (BaseEvent & { type: 'sides.swap' })
+  | (BaseEvent & { type: 'team.rename'; side: SideId; name: string })
+  | (BaseEvent & { type: 'walkover'; winner: SideId })
   | (BaseEvent & {
-      type: "retirement";
+      type: 'retirement';
       retiring: SideId;
       reason?: string;
     })
   | (BaseEvent & {
-      type: "default";
+      type: 'default';
       defaulted: SideId;
       reason?: string;
     })
   | (BaseEvent & {
-      type: "timeout.start";
+      type: 'timeout.start';
       side: SideId;
-      kind: "standard" | "medical" | "injury";
+      kind: 'standard' | 'medical' | 'injury';
     })
-  | (BaseEvent & { type: "timeout.end"; side: SideId })
-  | (BaseEvent & { type: "suspension.start"; reason?: string })
-  | (BaseEvent & { type: "suspension.end" })
+  | (BaseEvent & { type: 'timeout.end'; side: SideId })
+  | (BaseEvent & { type: 'suspension.start'; reason?: string })
+  | (BaseEvent & { type: 'suspension.end' })
   | (BaseEvent & {
-      type: "score.correct";
+      type: 'score.correct';
       games: GameScore[];
       gamesWon: { a: number; b: number };
       reason?: string;
@@ -48,9 +48,9 @@ export type RacquetEvent =
   | (BaseEvent & {
       // BWF Law 16 / ITTF analog. Yellow = warning (no score change),
       // red = fault (point to opponent), black = disqualification (match ends).
-      type: "penalty";
+      type: 'penalty';
       side: SideId;
-      card: "yellow" | "red" | "black";
+      card: 'yellow' | 'red' | 'black';
       reason?: string;
     });
 
@@ -64,19 +64,27 @@ export type RacquetState = BaseState & {
   /** Initial server of the match (set on match.start). Used by alternate-every-2
    * serve rules to derive each game's starting server. */
   matchInitialServer: SideId;
-  serverCourt: "right" | "left";
+  serverCourt: 'right' | 'left';
   betweenGames: boolean;
   winner: SideId | null;
   atInterval: boolean;
   isGamePoint: boolean;
   isMatchPoint: boolean;
+  /**
+   * Side-attributed game/match point. `isGamePoint`/`isMatchPoint` only say
+   * that *someone* is a point away — under rally scoring the receiving side
+   * can be at game point, so UI must use these to know *who*. Both sides can
+   * be true at once (e.g. 29–29 under the BWF cap).
+   */
+  gamePoint: { a: boolean; b: boolean };
+  matchPoint: { a: boolean; b: boolean };
   names: { a: string; b: string };
   sidesSwapped: boolean;
   /** How the match ended: 'normal' if scored to completion, or one of the
    * terminal events. null while in progress. */
-  endReason: "normal" | "walkover" | "retirement" | "default" | null;
+  endReason: 'normal' | 'walkover' | 'retirement' | 'default' | null;
   /** Set when a timeout is currently active. */
-  timeout: { side: SideId; kind: "standard" | "medical" | "injury" } | null;
+  timeout: { side: SideId; kind: 'standard' | 'medical' | 'injury' } | null;
   /** Set while the match is suspended (rain, power, crowd, etc.). */
   suspended: boolean;
   /**
@@ -126,22 +134,24 @@ export type RacquetConfig = {
    *   then every 1 point once both sides reach `pointsPerGame - 1` (deuce).
    *   Initial server also alternates between games. (ITTF table tennis.)
    */
-  serveRule: "rally-winner" | "alternate-every-2";
+  serveRule: 'rally-winner' | 'alternate-every-2';
 };
 
 export const initialRacquetState = (): RacquetState => ({
   games: [{ a: 0, b: 0 }],
   gamesWon: { a: 0, b: 0 },
-  servingSide: "A",
-  matchInitialServer: "A",
-  serverCourt: "right",
+  servingSide: 'A',
+  matchInitialServer: 'A',
+  serverCourt: 'right',
   betweenGames: false,
   matchOver: false,
   winner: null,
   atInterval: false,
   isGamePoint: false,
   isMatchPoint: false,
-  names: { a: "Team A", b: "Team B" },
+  gamePoint: { a: false, b: false },
+  matchPoint: { a: false, b: false },
+  names: { a: 'Team A', b: 'Team B' },
   sidesSwapped: false,
   endReason: null,
   timeout: null,
@@ -156,16 +166,16 @@ export const initialRacquetState = (): RacquetState => ({
 /** Returns the side that has won the game, or null if neither has yet. */
 export const isGameWon = (
   game: GameScore,
-  cfg: RacquetConfig,
+  cfg: RacquetConfig
 ): SideId | null => {
   const { a, b } = game;
   const need = cfg.pointsPerGame;
   const margin = cfg.winBy;
   const cap = cfg.cap ?? Number.POSITIVE_INFINITY;
-  if (a >= cap && a > b) return "A";
-  if (b >= cap && b > a) return "B";
-  if (a >= need && a - b >= margin) return "A";
-  if (b >= need && b - a >= margin) return "B";
+  if (a >= cap && a > b) return 'A';
+  if (b >= cap && b > a) return 'B';
+  if (a >= need && a - b >= margin) return 'A';
+  if (b >= need && b - a >= margin) return 'B';
   return null;
 };
 
@@ -184,15 +194,15 @@ export const computeAlternatingServer = (
   game: GameScore,
   gameIndex: number,
   matchInitialServer: SideId,
-  cfg: RacquetConfig,
+  cfg: RacquetConfig
 ): SideId => {
   const gameInitial: SideId =
     gameIndex % 2 === 0
       ? matchInitialServer
-      : matchInitialServer === "A"
-        ? "B"
-        : "A";
-  const other: SideId = gameInitial === "A" ? "B" : "A";
+      : matchInitialServer === 'A'
+        ? 'B'
+        : 'A';
+  const other: SideId = gameInitial === 'A' ? 'B' : 'A';
   const combined = game.a + game.b;
   const deuceCombined = (cfg.pointsPerGame - 1) * 2;
   if (combined >= deuceCombined) {
@@ -206,10 +216,10 @@ export const computeAlternatingServer = (
 export const wouldWinGameWithPoint = (
   game: GameScore,
   side: SideId,
-  cfg: RacquetConfig,
+  cfg: RacquetConfig
 ): boolean => {
   const next =
-    side === "A" ? { a: game.a + 1, b: game.b } : { a: game.a, b: game.b + 1 };
+    side === 'A' ? { a: game.a + 1, b: game.b } : { a: game.a, b: game.b + 1 };
   return isGameWon(next, cfg) === side;
 };
 
@@ -224,11 +234,11 @@ export const wouldWinGameWithPoint = (
  * Pure: returns a new array.
  */
 export const trimLastPointOrGameEnd = (
-  events: RacquetEvent[],
+  events: RacquetEvent[]
 ): RacquetEvent[] => {
   for (let i = events.length - 1; i >= 0; i--) {
     const t = events[i]!.type;
-    if (t === "point" || t === "game.end" || t === "score.correct") {
+    if (t === 'point' || t === 'game.end' || t === 'score.correct') {
       return [...events.slice(0, i), ...events.slice(i + 1)];
     }
   }

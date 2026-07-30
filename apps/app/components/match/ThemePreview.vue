@@ -47,6 +47,8 @@ const defaultState: RacquetState = {
   atInterval: true,
   isGamePoint: false,
   isMatchPoint: false,
+  gamePoint: { a: false, b: false },
+  matchPoint: { a: false, b: false },
   names: { a: 'Team A', b: 'Team B' },
   sidesSwapped: false,
   endReason: null,

@@ -31,7 +31,8 @@ const props = defineProps<{
   score: number;
   gamesWon: number;
   totalSlots: number;
-  isServingTeam: boolean;
+  /** THIS team is a point away from the match / game (side-attributed —
+   * under rally scoring the receiver can be at game point). */
   isMatchPoint: boolean;
   isGamePoint: boolean;
   cells: Cell[];
@@ -134,7 +135,7 @@ const isSecondVisualCell = (idx: number) =>
         />
       </div>
       <span
-        v-if="isServingTeam && (isMatchPoint || isGamePoint)"
+        v-if="isMatchPoint || isGamePoint"
         class="rounded-sm px-1.5 py-0.5 text-[10px] font-bold tracking-wider"
         :class="
           team === 'A'
