@@ -2,12 +2,12 @@
 import {
   ToggleGroup,
   ToggleGroupItem,
-} from "@sb/layer-ui/components/ui/toggle-group";
+} from '@sb/layer-ui/components/ui/toggle-group';
 
-export type SportId = "badminton" | "tennis" | "pickleball" | "table-tennis";
+export type SportId = 'badminton' | 'tennis' | 'pickleball' | 'table-tennis';
 
 const props = defineProps<{ modelValue: SportId }>();
-defineEmits<{ (e: "update:modelValue", v: SportId): void }>();
+defineEmits<(e: 'update:modelValue', v: SportId) => void>();
 
 // All four racquet sports ship engine configs in @sb/engine/registry. Badminton
 // and table tennis are public; tennis and pickleball stay listed but disabled
@@ -24,31 +24,31 @@ const sports: {
   enabled: boolean;
 }[] = [
   {
-    id: "badminton",
-    label: "Badminton",
-    preset: "21pt BWF",
-    emoji: "🏸",
+    id: 'badminton',
+    label: 'Badminton',
+    preset: '21pt BWF',
+    emoji: '🏸',
     enabled: true,
   },
   {
-    id: "table-tennis",
-    label: "Table tennis",
-    preset: "11pt, BO5",
-    emoji: "🏓",
+    id: 'table-tennis',
+    label: 'Table tennis',
+    preset: '11pt, BO5',
+    emoji: '🏓',
     enabled: false,
   },
   {
-    id: "tennis",
-    label: "Tennis",
-    preset: "Coming soon",
-    emoji: "🎾",
+    id: 'tennis',
+    label: 'Tennis',
+    preset: 'Coming soon',
+    emoji: '🎾',
     enabled: false,
   },
   {
-    id: "pickleball",
-    label: "Pickleball",
-    preset: "Coming soon",
-    emoji: "🥎",
+    id: 'pickleball',
+    label: 'Pickleball',
+    preset: 'Coming soon',
+    emoji: '🥎',
     enabled: false,
   },
 ];

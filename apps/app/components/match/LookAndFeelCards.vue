@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { Button } from "@sb/layer-ui/components/ui/button";
+import { Button } from '@sb/layer-ui/components/ui/button';
 
 defineProps<{
   overlayThemeName: string;
   scoreboardThemeName: string;
 }>();
 
-defineEmits<{ (e: "open-theme"): void }>();
+defineEmits<(e: 'open-theme') => void>();
 </script>
 
 <template>

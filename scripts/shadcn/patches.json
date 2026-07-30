@@ -16,5 +16,23 @@
     "find": "class=\"ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none\"",
     "replace": "class=\"ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none\"\n        :style=\"{ top: (side === 'right' || side === 'left') ? 'max(1rem, env(safe-area-inset-top))' : '1rem', right: side === 'right' ? 'max(1rem, env(safe-area-inset-right))' : '1rem', left: side === 'left' ? 'max(1rem, env(safe-area-inset-left))' : undefined }\"",
     "reason": "iOS safe area: close button needs safe-area offset on side sheets (right/left) but fixed 1rem on top/bottom sheets to avoid PWA status bar offset"
+  },
+  {
+    "file": "progress/Progress.vue",
+    "find": "  <ProgressRoot\n    :model-value=\"modelValue\"\n    v-bind=\"delegatedProps\"",
+    "replace": "  <ProgressRoot\n    v-bind=\"delegatedProps\"",
+    "reason": "delegatedProps already contains modelValue (only `class` is stripped), so the explicit :model-value binding is a duplicate — vue-tsc TS2783"
+  },
+  {
+    "file": "toggle-group/ToggleGroupItem.vue",
+    "find": "import type { toggleVariants } from '@sb/layer-ui/components/ui/toggle'",
+    "replace": "import { toggleVariants } from '@sb/layer-ui/components/ui/toggle'",
+    "reason": "toggleVariants is CALLED in the template, so the import must be a value import — `import type` is erased and vue-tsc errors (TS2339)"
+  },
+  {
+    "file": "input/Input.vue",
+    "find": "const emits = defineEmits<{\n  (e: \"update:modelValue\", payload: string | number): void\n}>()",
+    "replace": "const emits = defineEmits<(e: \"update:modelValue\", payload: string | number) => void>()",
+    "reason": "biome lint/style/useShorthandFunctionType — keep the generated file in the shape the repo linter enforces"
   }
 ]

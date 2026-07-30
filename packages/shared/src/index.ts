@@ -1,9 +1,9 @@
 // Shared types and constants for sb-mono. Re-export only from here.
 
-export type Database = unknown; // Replaced by `pnpm supabase:types` once schema lands.
+export type { Database, Json } from './types/supabase';
 
 /** What sport family a match belongs to — determines which engine + UI to load. */
-export type SportFamily = "racquet";
+export type SportFamily = 'racquet';
 
 /** Match record persisted in Supabase. State is computed from the events relation. */
 export type MatchRecord = {

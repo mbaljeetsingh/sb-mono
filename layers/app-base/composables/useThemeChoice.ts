@@ -1,6 +1,6 @@
-import { computed, onMounted, onUnmounted, ref, watch, type Ref } from "vue";
-import { watchDebounced } from "@vueuse/core";
-import { themes as themeRegistry } from "@sb/themes";
+import { themes as themeRegistry } from '@sb/themes';
+import { watchDebounced } from '@vueuse/core';
+import { type Ref, computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 // Per-match theme pair (overlay + scoreboard) backed by the matches row in
 // Supabase + a Realtime UPDATE subscription. A theme change on the
@@ -11,11 +11,11 @@ import { themes as themeRegistry } from "@sb/themes";
 // `scoreboard` ← `matches.scoreboard_theme_id`
 //
 // Same echo-guard pattern as useMatchMeta / useFormat: track the last-seen-
-// remote snapshot and skip the watch-driven upsert when current state
+// remote snapshot and skip the watch-driven update when current state
 // equals it, breaking the write-back loop without time-based heuristics.
 
-const DEFAULT_OVERLAY = "broadcast-classic";
-const DEFAULT_SCOREBOARD = "filmable";
+const DEFAULT_OVERLAY = 'broadcast-classic';
+const DEFAULT_SCOREBOARD = 'filmable';
 
 export function useThemeChoice(matchId: Ref<string>) {
   const supabase = useSupabaseClient();
@@ -49,34 +49,36 @@ export function useThemeChoice(matchId: Ref<string>) {
     const id = matchId.value;
     if (!id) return;
     const { data, error } = await supabase
-      .from("matches")
-      .select("overlay_theme_id, scoreboard_theme_id")
-      .eq("id", id)
+      .from('matches')
+      .select('overlay_theme_id, scoreboard_theme_id')
+      .eq('id', id)
       .maybeSingle();
     if (error) {
-      console.warn("[useThemeChoice] fetch failed", error);
+      console.warn('[useThemeChoice] fetch failed', error);
       return;
     }
     if (data) applyRemote(data);
   };
 
-  const upsertRemote = async () => {
+  const updateRemote = async () => {
     const id = matchId.value;
     if (!id) return;
     const currentStr = snapshot();
     if (currentStr === lastSeenRemote) return;
-    const { error } = await supabase.from("matches").upsert(
-      {
-        id,
-        sport_family: "racquet",
-        sport_preset: "badminton-21",
+    // UPDATE, not upsert — the row always exists (/new creates it before
+    // navigating here), and an upsert payload would have to carry sport
+    // columns, which this composable must never write: a hardcoded
+    // sport_preset here once retroactively rewrote non-badminton matches'
+    // rules on every theme change.
+    const { error } = await supabase
+      .from('matches')
+      .update({
         overlay_theme_id: overlay.value,
         scoreboard_theme_id: scoreboard.value,
-      },
-      { onConflict: "id" },
-    );
+      })
+      .eq('id', id);
     if (error) {
-      console.warn("[useThemeChoice] upsert failed", error);
+      console.warn('[useThemeChoice] update failed', error);
       return;
     }
     lastSeenRemote = currentStr;
@@ -92,11 +94,11 @@ export function useThemeChoice(matchId: Ref<string>) {
     realtimeChannel = supabase
       .channel(`match-theme:${id}:${channelSuffix}`)
       .on(
-        "postgres_changes",
+        'postgres_changes',
         {
-          event: "UPDATE",
-          schema: "public",
-          table: "matches",
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'matches',
           filter: `id=eq.${id}`,
         },
         (payload) =>
@@ -104,8 +106,8 @@ export function useThemeChoice(matchId: Ref<string>) {
             payload.new as {
               overlay_theme_id?: string;
               scoreboard_theme_id?: string;
-            },
-          ),
+            }
+          )
       )
       .subscribe();
   };
@@ -127,15 +129,15 @@ export function useThemeChoice(matchId: Ref<string>) {
     }
   });
 
-  watchDebounced([overlay, scoreboard], () => upsertRemote(), {
+  watchDebounced([overlay, scoreboard], () => updateRemote(), {
     debounce: 500,
   });
 
   const overlayName = computed(
-    () => themeRegistry[overlay.value]?.manifest.name ?? "—",
+    () => themeRegistry[overlay.value]?.manifest.name ?? '—'
   );
   const scoreboardName = computed(
-    () => themeRegistry[scoreboard.value]?.manifest.name ?? "—",
+    () => themeRegistry[scoreboard.value]?.manifest.name ?? '—'
   );
 
   return { overlay, scoreboard, overlayName, scoreboardName };

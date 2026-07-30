@@ -1,14 +1,15 @@
-import { computed, onMounted, onUnmounted, ref, watch, type Ref } from "vue";
-import { watchDebounced } from "@vueuse/core";
+import type { Json } from '@sb/shared';
+import { watchDebounced } from '@vueuse/core';
+import { type Ref, computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 // useMatchMeta — per-match display metadata (team / player names + tournament
 // info). Backed by the `matches` row in Supabase + a Realtime UPDATE
 // subscription so any device that opens the match URL stays live-in-sync
 // with the operator's edits (typo fix on phone → OBS overlay re-renders).
 //
-// Write path: deep watch on `meta` → debounced upsert.
+// Write path: deep watch on `meta` → debounced UPDATE.
 // Read path: initial fetch on mount + Realtime UPDATE listener thereafter.
-// Echo prevention: track the last-seen-remote snapshot; upsert skips when
+// Echo prevention: track the last-seen-remote snapshot; update skips when
 // the current state equals what we just received from Supabase, breaking
 // the write-back loop without time-based heuristics.
 //
@@ -40,26 +41,26 @@ const fromRow = (row: {
   is_doubles?: boolean | null;
   team_name_a?: string | null;
   team_name_b?: string | null;
-  players?: Record<string, unknown> | null;
+  players?: Json | null;
   event_name?: string | null;
   round?: string | null;
   category?: string | null;
   court_label?: string | null;
 }): MatchMeta => {
-  const p = (row.players ?? {}) as Partial<MatchMeta["players"]>;
+  const p = (row.players ?? {}) as Partial<MatchMeta['players']>;
   return {
-    sport: "racquet",
+    sport: 'racquet',
     sportPreset: row.sport_preset ?? undefined,
     isDoubles: row.is_doubles ?? false,
     teamNames: {
-      a: row.team_name_a ?? "",
-      b: row.team_name_b ?? "",
+      a: row.team_name_a ?? '',
+      b: row.team_name_b ?? '',
     },
     players: {
-      a1: p?.a1 ?? "",
-      a2: p?.a2 ?? "",
-      b1: p?.b1 ?? "",
-      b2: p?.b2 ?? "",
+      a1: p?.a1 ?? '',
+      a2: p?.a2 ?? '',
+      b1: p?.b1 ?? '',
+      b2: p?.b2 ?? '',
     },
     eventName: row.event_name ?? undefined,
     round: row.round ?? undefined,
@@ -72,7 +73,7 @@ export function useMatchMeta(matchId: Ref<string>) {
   const supabase = useSupabaseClient();
   const meta = ref<MatchMeta>({});
   // Snapshot of the last value applied from Supabase. The watch-driven
-  // upsert compares to this and skips when they match — that's how we
+  // update compares to this and skips when they match — that's how we
   // suppress the originator's own UPDATE echoing back as a duplicate write.
   let lastSeenRemote: string | null = null;
   let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
@@ -93,20 +94,20 @@ export function useMatchMeta(matchId: Ref<string>) {
     const id = matchId.value;
     if (!id) return;
     const { data, error } = await supabase
-      .from("matches")
+      .from('matches')
       .select(
-        "sport_preset, is_doubles, team_name_a, team_name_b, players, event_name, round, category, court_label",
+        'sport_preset, is_doubles, team_name_a, team_name_b, players, event_name, round, category, court_label'
       )
-      .eq("id", id)
+      .eq('id', id)
       .maybeSingle();
     if (error) {
-      console.warn("[useMatchMeta] fetch failed", error);
+      console.warn('[useMatchMeta] fetch failed', error);
       return;
     }
     if (data) applyRemote(data);
   };
 
-  const upsertRemote = async () => {
+  const updateRemote = async () => {
     const id = matchId.value;
     if (!id) return;
     const m = meta.value;
@@ -128,15 +129,15 @@ export function useMatchMeta(matchId: Ref<string>) {
     // new to push back. Realtime UPDATE round-trips of our own writes are
     // skipped here so we don't loop.
     const currentStr = JSON.stringify({
-      sport: "racquet",
+      sport: 'racquet',
       sportPreset: m.sportPreset,
       isDoubles: m.isDoubles ?? false,
-      teamNames: { a: m.teamNames?.a ?? "", b: m.teamNames?.b ?? "" },
+      teamNames: { a: m.teamNames?.a ?? '', b: m.teamNames?.b ?? '' },
       players: {
-        a1: m.players?.a1 ?? "",
-        a2: m.players?.a2 ?? "",
-        b1: m.players?.b1 ?? "",
-        b2: m.players?.b2 ?? "",
+        a1: m.players?.a1 ?? '',
+        a2: m.players?.a2 ?? '',
+        b1: m.players?.b1 ?? '',
+        b2: m.players?.b2 ?? '',
       },
       eventName: m.eventName,
       round: m.round,
@@ -145,11 +146,14 @@ export function useMatchMeta(matchId: Ref<string>) {
     });
     if (currentStr === lastSeenRemote) return;
 
-    const { error } = await supabase.from("matches").upsert(
-      {
-        id,
-        sport_family: "racquet",
-        sport_preset: m.sportPreset ?? "badminton-21",
+    // UPDATE, not upsert — the row always exists (/new creates it before any
+    // surface mounts this composable). Sport columns are owned by useFormat
+    // and must never be written from here: the old upsert's
+    // `sportPreset ?? "badminton-21"` fallback could stomp a non-badminton
+    // preset when a meta edit raced the initial fetch.
+    const { error } = await supabase
+      .from('matches')
+      .update({
         is_doubles: m.isDoubles ?? false,
         team_name_a: m.teamNames?.a?.trim() || null,
         team_name_b: m.teamNames?.b?.trim() || null,
@@ -158,11 +162,10 @@ export function useMatchMeta(matchId: Ref<string>) {
         round: m.round?.trim() || null,
         category: m.category?.trim() || null,
         court_label: m.courtLabel?.trim() || null,
-      },
-      { onConflict: "id" },
-    );
+      })
+      .eq('id', id);
     if (error) {
-      console.warn("[useMatchMeta] upsert failed", error);
+      console.warn('[useMatchMeta] update failed', error);
       return;
     }
     // Remember what we sent so the realtime echo skips itself.
@@ -179,14 +182,14 @@ export function useMatchMeta(matchId: Ref<string>) {
     realtimeChannel = supabase
       .channel(`match-meta:${id}:${channelSuffix}`)
       .on(
-        "postgres_changes",
+        'postgres_changes',
         {
-          event: "UPDATE",
-          schema: "public",
-          table: "matches",
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'matches',
           filter: `id=eq.${id}`,
         },
-        (payload) => applyRemote(payload.new as Parameters<typeof fromRow>[0]),
+        (payload) => applyRemote(payload.new as Parameters<typeof fromRow>[0])
       )
       .subscribe();
   };
@@ -208,20 +211,20 @@ export function useMatchMeta(matchId: Ref<string>) {
     }
   });
 
-  watchDebounced(meta, () => upsertRemote(), { debounce: 500, deep: true });
+  watchDebounced(meta, () => updateRemote(), { debounce: 500, deep: true });
 
   // Display names — title-cased exactly as typed. No placeholder fallback;
   // /new always seeds these. An empty string flows through unchanged.
   const teamNames = computed(() => ({
-    a: titleCase(meta.value.teamNames?.a?.trim() ?? ""),
-    b: titleCase(meta.value.teamNames?.b?.trim() ?? ""),
+    a: titleCase(meta.value.teamNames?.a?.trim() ?? ''),
+    b: titleCase(meta.value.teamNames?.b?.trim() ?? ''),
   }));
 
-  // Force an immediate upsert, bypassing the 500ms debounce. Used when the
+  // Force an immediate update, bypassing the 500ms debounce. Used when the
   // user closes the settings sheet and we want the matches list (or any
   // other reader) to see the change on the very next fetch — without this
   // flush, fast nav (sheet close → /matches) races the debounce.
-  const flush = () => upsertRemote();
+  const flush = () => updateRemote();
 
   return { meta, teamNames, flush };
 }

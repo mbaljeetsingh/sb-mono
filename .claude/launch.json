@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sb-app",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@sb/app", "dev"],
+      "port": 443,
+      "url": "https://sb-app.localhost"
+    }
+  ]
+}

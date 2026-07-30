@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button } from "@sb/layer-ui/components/ui/button";
+import { Button } from '@sb/layer-ui/components/ui/button';
 
 // Small floating pill used by the control surface for low-frequency setup
 // actions ("Swap", "Sides", "Serve first") that sit on top of the court. One
@@ -8,9 +8,7 @@ defineProps<{
   ariaLabel: string;
 }>();
 
-defineEmits<{
-  (e: "click", ev: MouseEvent): void;
-}>();
+defineEmits<(e: 'click', ev: MouseEvent) => void>();
 </script>
 
 <template>

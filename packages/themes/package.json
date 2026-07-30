@@ -6,6 +6,9 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./broadcast-classic": "./src/broadcast-classic/index.vue",

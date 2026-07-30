@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
-import { useClipboard } from "@vueuse/core";
-import { Film, QrCode, RefreshCw, Settings } from "lucide-vue-next";
-import { toast } from "vue-sonner";
-import { type ThemeSurface } from "@sb/themes";
-import type { MatchMeta } from "@sb/layer-app-base/composables/useMatchMeta";
-import { Button } from "@sb/layer-ui/components/ui/button";
-import MatchHeroCard from "~/components/match/MatchHeroCard.vue";
-import LookAndFeelCards from "~/components/match/LookAndFeelCards.vue";
-import SettingsSheet from "~/components/match/SettingsSheet.vue";
-import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
-import QrDialog from "~/components/match/QrDialog.vue";
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { useClipboard } from '@vueuse/core';
+import { Film, QrCode, RefreshCw, Settings } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
+import type { ThemeSurface } from '@sb/themes';
+import type { MatchMeta } from '@sb/layer-app-base/composables/useMatchMeta';
+import { Button } from '@sb/layer-ui/components/ui/button';
+import MatchHeroCard from '~/components/match/MatchHeroCard.vue';
+import LookAndFeelCards from '~/components/match/LookAndFeelCards.vue';
+import SettingsSheet from '~/components/match/SettingsSheet.vue';
+import ThemePickerDialog from '~/components/match/ThemePickerDialog.vue';
+import QrDialog from '~/components/match/QrDialog.vue';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,11 +20,11 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@sb/layer-ui/components/ui/alert-dialog";
-import { useUserStore } from "~/stores/user";
-import { useRolePermissions } from "~/composables/useRolePermissions";
+} from '@sb/layer-ui/components/ui/alert-dialog';
+import { useUserStore } from '~/stores/user';
+import { useRolePermissions } from '~/composables/useRolePermissions';
 
-useSeoMeta({ title: "Match" });
+useSeoMeta({ title: 'Match' });
 
 // /render is admin-only for now — it's BETA (WebCodecs, compute-heavy,
 // browser-dependent) and lines up with E2.10 (post-production burn-in) in
@@ -33,7 +33,7 @@ useSeoMeta({ title: "Match" });
 const { isAdmin } = useRolePermissions();
 
 const route = useRoute();
-const matchId = computed(() => String(route.params.id ?? ""));
+const matchId = computed(() => String(route.params.id ?? ''));
 const { state, config, events } = useMatchState(matchId);
 const { meta, teamNames, flush: flushMeta } = useMatchMeta(matchId);
 
@@ -71,7 +71,7 @@ onBeforeUnmount(() => {
 const userStore = useUserStore();
 const onMatchDeleted = () => {
   settingsOpen.value = false;
-  navigateTo(userStore.isAuthenticated ? "/matches" : "/");
+  navigateTo(userStore.isAuthenticated ? '/matches' : '/');
 };
 const {
   overlay: overlayTheme,
@@ -86,8 +86,8 @@ const themeSheetOpen = ref(false);
 // Shared QR enlarge dialog. Each Get Setup row opens it with the right URL +
 // per-surface description; the dialog itself shows the big scannable QR + copy.
 const qrOpen = ref(false);
-const qrUrl = ref("");
-const qrTitle = ref("");
+const qrUrl = ref('');
+const qrTitle = ref('');
 const qrDescription = ref<string | undefined>(undefined);
 const qrSensitive = ref(false);
 const openQr = (opts: {
@@ -103,7 +103,7 @@ const openQr = (opts: {
   qrOpen.value = true;
 };
 
-const score = (side: "a" | "b") => {
+const score = (side: 'a' | 'b') => {
   const last = state.value.games[state.value.games.length - 1];
   return last ? last[side] : 0;
 };
@@ -113,18 +113,18 @@ const displayName = computed(
     `${config.value.displayName}${
       config.value.gamesToWin > 1
         ? ` · BO${config.value.gamesToWin * 2 - 1}`
-        : " · Single"
-    }`,
+        : ' · Single'
+    }`
 );
 
 const statusLabel = computed(() => {
-  if (state.value.matchOver) return "Final";
-  if (events.value.length === 0) return "Ready · 0 events";
-  return `Game ${state.value.games.length} · ${score("a")}–${score("b")}`;
+  if (state.value.matchOver) return 'Final';
+  if (events.value.length === 0) return 'Ready · 0 events';
+  return `Game ${state.value.games.length} · ${score('a')}–${score('b')}`;
 });
 
 const { copy: clipboardCopy } = useClipboard({ legacy: true });
-const copy = async (text: string, label = "URL") => {
+const copy = async (text: string, label = 'URL') => {
   await clipboardCopy(text);
   toast.success(`${label} copied`);
 };
@@ -135,8 +135,8 @@ const copy = async (text: string, label = "URL") => {
 // with no back button. `window.open(url, "_blank")` pops out to the OS browser
 // (or at least a fresh popup) on every platform we care about.
 const openScoreboard = () => {
-  if (typeof window === "undefined") return;
-  window.open(urls.value.scoreboard, "_blank", "noopener");
+  if (typeof window === 'undefined') return;
+  window.open(urls.value.scoreboard, '_blank', 'noopener');
 };
 
 const onPickTheme = ({
@@ -146,8 +146,8 @@ const onPickTheme = ({
   surface: ThemeSurface;
   id: string;
 }) => {
-  if (surface === "overlay") overlayTheme.value = id;
-  if (surface === "scoreboard") scoreboardTheme.value = id;
+  if (surface === 'overlay') overlayTheme.value = id;
+  if (surface === 'scoreboard') scoreboardTheme.value = id;
 };
 
 // E2.8 — write token for delegated scoring. Anon matches stay open
@@ -162,9 +162,9 @@ const writeToken = ref<string | null>(null);
 const fetchOwnerToken = async () => {
   if (!isOwner.value) return;
   const { data } = await supabaseClient
-    .from("matches")
-    .select("write_token")
-    .eq("id", matchId.value)
+    .from('matches')
+    .select('write_token')
+    .eq('id', matchId.value)
     .maybeSingle();
   writeToken.value = data?.write_token ?? null;
 };
@@ -184,12 +184,12 @@ const controlShareUrl = computed(() => {
 const ensureToken = async (): Promise<string | null> => {
   if (writeToken.value) return writeToken.value;
   if (!isOwner.value) return null;
-  const { data, error } = await supabaseClient.rpc("regenerate_write_token", {
+  const { data, error } = await supabaseClient.rpc('regenerate_write_token', {
     p_match_id: matchId.value,
   });
   if (error) {
     toast.error("Couldn't create scoring link");
-    console.warn("[match] regenerate_write_token failed", error);
+    console.warn('[match] regenerate_write_token failed', error);
     return null;
   }
   writeToken.value = data as string;
@@ -205,10 +205,10 @@ const onShowControlQr = async () => {
   }
   openQr({
     url: controlShareUrl.value,
-    title: "Control",
+    title: 'Control',
     description: isOwner.value
-      ? "Scan with the device you want to score on. Anyone who has this link can score — use the rotate icon on the row to revoke."
-      : "Scan with the device you want to score on.",
+      ? 'Scan with the device you want to score on. Anyone who has this link can score — use the rotate icon on the row to revoke.'
+      : 'Scan with the device you want to score on.',
     sensitive: true,
   });
 };
@@ -226,7 +226,7 @@ const openRegenConfirm = () => {
 const onRegenerateToken = async () => {
   if (!isOwner.value || regenBusy.value) return;
   regenBusy.value = true;
-  const { data, error } = await supabaseClient.rpc("regenerate_write_token", {
+  const { data, error } = await supabaseClient.rpc('regenerate_write_token', {
     p_match_id: matchId.value,
   });
   regenBusy.value = false;
@@ -236,7 +236,7 @@ const onRegenerateToken = async () => {
   }
   writeToken.value = data as string;
   regenConfirmOpen.value = false;
-  toast.success("New scoring link generated — old links are revoked");
+  toast.success('New scoring link generated — old links are revoked');
 };
 </script>
 
@@ -452,7 +452,7 @@ const onRegenerateToken = async () => {
         <AlertDialogFooter>
           <AlertDialogCancel :disabled="regenBusy">Cancel</AlertDialogCancel>
           <AlertDialogAction :disabled="regenBusy" @click="onRegenerateToken">
-            {{ regenBusy ? "Regenerating…" : "Regenerate" }}
+            {{ regenBusy ? 'Regenerating…' : 'Regenerate' }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

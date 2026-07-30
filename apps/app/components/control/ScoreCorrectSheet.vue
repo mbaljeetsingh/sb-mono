@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { Button } from "@sb/layer-ui/components/ui/button";
-import { Input } from "@sb/layer-ui/components/ui/input";
-import { Label } from "@sb/layer-ui/components/ui/label";
+import { Button } from '@sb/layer-ui/components/ui/button';
+import { Input } from '@sb/layer-ui/components/ui/input';
+import { Label } from '@sb/layer-ui/components/ui/label';
+import { ref, watch } from 'vue';
 
 const props = defineProps<{
   initialGames: { a: number; b: number }[];
@@ -15,13 +15,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (
-    e: "apply",
+    e: 'apply',
     payload: {
       games: { a: number; b: number }[];
       gamesWon: { a: number; b: number };
-    },
+    }
   ): void;
-  (e: "close"): void;
+  (e: 'close'): void;
 }>();
 
 const games = ref<{ a: string; b: string }[]>([]);
@@ -34,25 +34,34 @@ watch(
   (g) => {
     games.value = g.map((x) => ({ a: String(x.a), b: String(x.b) }));
   },
-  { immediate: true, deep: true },
+  { immediate: true, deep: true }
 );
 watch(
   () => props.initialGamesWon,
   (w) => {
     gamesWon.value = { ...w };
   },
-  { immediate: true, deep: true },
+  { immediate: true, deep: true }
 );
+
+// Sanitize free-typed numbers: game points clamp to >= 0; games won clamp to
+// [0, gamesToWin] so a stray digit can't claim more games than the format has.
+const clampPoints = (raw: string) => Math.max(0, Number.parseInt(raw, 10) || 0);
+const clampWon = (raw: unknown) => {
+  const n =
+    typeof raw === 'number' && Number.isFinite(raw) ? Math.trunc(raw) : 0;
+  return Math.min(Math.max(n, 0), props.gamesToWin);
+};
 
 const apply = () => {
   // Spread into plain objects — Vue reactive proxies aren't
   // structured-cloneable, which breaks BroadcastChannel.postMessage in
   // useEvents.append. Sending plain values keeps the event log clonable.
-  emit("apply", {
+  emit('apply', {
     games: games.value
-      .map((g) => ({ a: parseInt(g.a, 10) || 0, b: parseInt(g.b, 10) || 0 }))
+      .map((g) => ({ a: clampPoints(g.a), b: clampPoints(g.b) }))
       .filter((g) => g.a > 0 || g.b > 0),
-    gamesWon: { a: gamesWon.value.a, b: gamesWon.value.b },
+    gamesWon: { a: clampWon(gamesWon.value.a), b: clampWon(gamesWon.value.b) },
   });
 };
 </script>
@@ -77,11 +86,11 @@ const apply = () => {
     <div class="flex items-center gap-2 mb-1.5">
       <div class="w-8" />
       <div class="flex-1 truncate text-[11px] font-semibold text-team-a">
-        {{ teamNames.a || "Team A" }}
+        {{ teamNames.a || 'Team A' }}
       </div>
       <span class="w-3" />
       <div class="flex-1 truncate text-[11px] font-semibold text-team-b">
-        {{ teamNames.b || "Team B" }}
+        {{ teamNames.b || 'Team B' }}
       </div>
     </div>
     <div class="flex flex-col gap-2 mb-3 flex-1 overflow-y-auto">

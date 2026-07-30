@@ -3,19 +3,19 @@
 // shows the URL underneath, exposes Copy. Reused from the primary "Get set
 // up" Control step and the per-row thumbnails in the URL-list disclosure.
 
-import { computed } from "vue";
-import QrcodeVue from "qrcode.vue";
-import { useClipboard } from "@vueuse/core";
-import { Clipboard } from "lucide-vue-next";
-import { toast } from "vue-sonner";
-import { Button } from "@sb/layer-ui/components/ui/button";
+import { computed } from 'vue';
+import QrcodeVue from 'qrcode.vue';
+import { useClipboard } from '@vueuse/core';
+import { Clipboard } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
+import { Button } from '@sb/layer-ui/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@sb/layer-ui/components/ui/dialog";
+} from '@sb/layer-ui/components/ui/dialog';
 
 const props = defineProps<{
   open: boolean;
@@ -25,13 +25,11 @@ const props = defineProps<{
   sensitive?: boolean;
 }>();
 
-const emit = defineEmits<{
-  (e: "update:open", v: boolean): void;
-}>();
+const emit = defineEmits<(e: 'update:open', v: boolean) => void>();
 
 const isOpen = computed({
   get: () => props.open,
-  set: (v) => emit("update:open", v),
+  set: (v) => emit('update:open', v),
 });
 
 const { copy } = useClipboard({ legacy: true });

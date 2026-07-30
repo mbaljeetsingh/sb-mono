@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import AppLogo from "~/components/common/AppLogo.vue";
-import NavUser from "~/components/common/NavUser.vue";
-import SyncStatusPill from "~/components/common/SyncStatusPill.vue";
-import ThemeToggle from "~/components/common/ThemeToggle.vue";
-import { Separator } from "@sb/layer-ui/components/ui/separator";
-import { useUserStore } from "~/stores/user";
+import { Separator } from '@sb/layer-ui/components/ui/separator';
+import AppLogo from '~/components/common/AppLogo.vue';
+import NavUser from '~/components/common/NavUser.vue';
+import SyncStatusPill from '~/components/common/SyncStatusPill.vue';
+import ThemeToggle from '~/components/common/ThemeToggle.vue';
+import { useUserStore } from '~/stores/user';
 
 const userStore = useUserStore();
+const route = useRoute();
+
+const isMatchesActive = computed(
+  () => route.path === '/matches' || route.path.startsWith('/matches/')
+);
 </script>
 
 <template>
@@ -19,7 +24,9 @@ const userStore = useUserStore();
       <SyncStatusPill />
       <NuxtLink
         to="/matches"
-        class="hidden text-sm font-medium text-fg-muted underline-offset-4 hover:text-foreground hover:underline md:inline"
+        class="hidden text-sm font-medium underline-offset-4 hover:text-foreground hover:underline md:inline"
+        :class="isMatchesActive ? 'text-foreground' : 'text-fg-muted'"
+        :aria-current="isMatchesActive ? 'page' : undefined"
       >
         Matches
       </NuxtLink>

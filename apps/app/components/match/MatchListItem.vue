@@ -3,16 +3,17 @@
 // kebab-menu actions, and the delete-confirmation flow — so the parent
 // `/matches` page stays a thin list shell that just fetches + paginates.
 
-import { computed } from "vue";
-import { MoreVertical, Trash2 } from "lucide-vue-next";
-import { Button } from "@sb/layer-ui/components/ui/button";
+import { Button } from '@sb/layer-ui/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@sb/layer-ui/components/ui/dropdown-menu";
-import DeleteMatchDialog from "~/components/match/DeleteMatchDialog.vue";
+} from '@sb/layer-ui/components/ui/dropdown-menu';
+import { MoreVertical, Trash2 } from 'lucide-vue-next';
+import { computed } from 'vue';
+import DeleteMatchDialog from '~/components/match/DeleteMatchDialog.vue';
+import type { MatchSummary } from '~/lib/matchSummaries';
 
 const props = defineProps<{
   id: string;
@@ -23,6 +24,9 @@ const props = defineProps<{
   eventName: string | null;
   courtLabel: string | null;
   updatedAt: string;
+  /** Status + scoreline from lib/matchSummaries. Optional — rows render
+   *  fine without it while summaries load. */
+  summary?: MatchSummary | null;
 }>();
 
 const formatBadge = computed(() => {
@@ -30,22 +34,20 @@ const formatBadge = computed(() => {
   return `BO${props.gamesToWin * 2 - 1}`;
 });
 
-const emit = defineEmits<{
-  (e: "deleted", id: string): void;
-}>();
+const emit = defineEmits<(e: 'deleted', id: string) => void>();
 
 const label = computed(() => {
-  const a = props.teamNameA?.trim() || "Team A";
-  const b = props.teamNameB?.trim() || "Team B";
+  const a = props.teamNameA?.trim() || 'Team A';
+  const b = props.teamNameB?.trim() || 'Team B';
   return `${a} vs ${b}`;
 });
 
-const sportLabel = computed(() => props.sportPreset.replace(/-/g, " "));
+const sportLabel = computed(() => props.sportPreset.replace(/-/g, ' '));
 
 const formattedDate = computed(() => {
   const d = new Date(props.updatedAt);
   const diffMin = Math.floor((Date.now() - d.getTime()) / 60_000);
-  if (diffMin < 1) return "just now";
+  if (diffMin < 1) return 'just now';
   if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
   if (diffHr < 24) return `${diffHr}h ago`;
@@ -54,7 +56,7 @@ const formattedDate = computed(() => {
   return d.toLocaleDateString();
 });
 
-const onDeleted = () => emit("deleted", props.id);
+const onDeleted = () => emit('deleted', props.id);
 </script>
 
 <template>
@@ -79,6 +81,40 @@ const onDeleted = () => emit("deleted", props.id);
           <span>· {{ formattedDate }}</span>
         </div>
       </NuxtLink>
+
+      <!-- Status + scoreline — answers "which match is live and what's the
+           score?" without opening the match. -->
+      <div
+        v-if="summary && summary.status !== 'ready'"
+        class="flex shrink-0 items-center gap-2"
+      >
+        <span
+          v-if="summary.status === 'live'"
+          class="flex items-center gap-1.5 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold tracking-wider text-destructive"
+        >
+          <span class="relative flex h-1.5 w-1.5">
+            <span
+              class="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-75"
+            />
+            <span
+              class="relative inline-flex h-1.5 w-1.5 rounded-full bg-destructive"
+            />
+          </span>
+          LIVE
+        </span>
+        <span
+          v-else
+          class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold tracking-wider text-fg-muted"
+        >
+          FINAL
+        </span>
+        <span
+          v-if="summary.scoreline"
+          class="font-mono text-sm font-semibold tabular-nums"
+        >
+          {{ summary.scoreline }}
+        </span>
+      </div>
 
       <DropdownMenu>
         <DropdownMenuTrigger as-child>

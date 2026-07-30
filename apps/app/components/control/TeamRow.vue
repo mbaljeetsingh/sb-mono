@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import type { Cell } from "@sb/layer-app-base/composables/useCourtCells";
-import PenaltyCards from "@sb/themes/penalty-cards";
-import { ArrowLeftRight, Repeat } from "lucide-vue-next";
+import type { Cell } from '@sb/layer-app-base/composables/useCourtCells';
+import PenaltyCards from '@sb/themes/penalty-cards';
+import { ArrowLeftRight, Repeat } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 // One team's half of the court — header strip (label + score + pips +
 // MATCH/GAME PT) and two service-court cells. Used twice in control.vue
@@ -26,8 +26,8 @@ import { ArrowLeftRight, Repeat } from "lucide-vue-next";
 //               reads as screen-top (mirror of the left team across the net).
 
 const props = defineProps<{
-  team: "A" | "B";
-  orientation: "top" | "bottom" | "left" | "right";
+  team: 'A' | 'B';
+  orientation: 'top' | 'bottom' | 'left' | 'right';
   score: number;
   gamesWon: number;
   totalSlots: number;
@@ -38,10 +38,10 @@ const props = defineProps<{
   matchOver: boolean;
   isGlowing: boolean;
   lastWinner: boolean;
-  cellIsServer: (court: "left" | "right") => boolean;
+  cellIsServer: (court: 'left' | 'right') => boolean;
   canSwapPlayers?: boolean;
   canChangeServer?: boolean;
-  serverCourt?: "left" | "right";
+  serverCourt?: 'left' | 'right';
   cards?: { yellow: number; red: number; black: number };
   // Singles: cells show the player name only on the active service court (it
   // shifts as service moves), so the header carries the team identity. In
@@ -57,19 +57,19 @@ const headerLabel = computed(() => {
 });
 
 defineEmits<{
-  (e: "tap"): void;
-  (e: "swap-players"): void;
-  (e: "change-server"): void;
+  (e: 'tap'): void;
+  (e: 'swap-players'): void;
+  (e: 'change-server'): void;
 }>();
 
 const isStacked = (o: typeof props.orientation) =>
-  o === "top" || o === "bottom";
+  o === 'top' || o === 'bottom';
 
 // Centerline border sits on the visually-SECOND cell. Top/right orientations
 // use a reversed flow (right court rendered first), so the second visual
 // cell is array index 0; bottom/left use natural flow, so index 1.
 const isSecondVisualCell = (idx: number) =>
-  props.orientation === "top" || props.orientation === "right"
+  props.orientation === 'top' || props.orientation === 'right'
     ? idx === 0
     : idx > 0;
 </script>
@@ -142,7 +142,7 @@ const isSecondVisualCell = (idx: number) =>
             : 'bg-team-b text-team-b-foreground'
         "
       >
-        {{ isMatchPoint ? "MATCH PT" : "GAME PT" }}
+        {{ isMatchPoint ? 'MATCH PT' : 'GAME PT' }}
       </span>
     </div>
 
@@ -224,7 +224,7 @@ const isSecondVisualCell = (idx: number) =>
              non-serving team that could become the server. -->
         <ControlPill
           v-if="canChangeServer && cell.court === serverCourt"
-          aria-label="Make this player serve first"
+          ariaLabel="Make this player serve first"
           class="absolute left-1/2 top-[62%] z-10 -translate-x-1/2"
           @click.stop="$emit('change-server')"
         >
@@ -239,7 +239,7 @@ const isSecondVisualCell = (idx: number) =>
            button on the row centerline. -->
       <ControlPill
         v-if="canSwapPlayers"
-        aria-label="Swap players on this side"
+        ariaLabel="Swap players on this side"
         class="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
         @click.stop="$emit('swap-players')"
       >

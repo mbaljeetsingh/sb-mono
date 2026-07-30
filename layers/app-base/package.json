@@ -7,8 +7,9 @@
   "dependencies": {
     "@sb/engine": "workspace:*",
     "@sb/shared": "workspace:*",
+    "@sb/themes": "workspace:*",
     "@vueuse/core": "^14.2.1",
-    "dexie": "^4.0.8",
+    "idb-keyval": "^6",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
     "ulid": "^2.3.0",

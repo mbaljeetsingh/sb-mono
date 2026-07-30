@@ -20,12 +20,19 @@
 // follow-up — for now the output is a silent MP4. Operators can re-attach
 // audio from the source file in an editor (single track combine).
 
-import { computed, ref, type Ref } from "vue";
-import { createFile, DataStream, type MP4ArrayBuffer } from "mp4box";
-import { Muxer, ArrayBufferTarget } from "mp4-muxer";
+import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
+import {
+  DataStream,
+  Endianness,
+  type MP4BoxBuffer,
+  type Movie,
+  type Sample,
+  createFile,
+} from 'mp4box';
+import { type Ref, computed, ref } from 'vue';
 
 export type RenderProgress = {
-  stage: "idle" | "demuxing" | "encoding" | "finalizing" | "done" | "error";
+  stage: 'idle' | 'demuxing' | 'encoding' | 'finalizing' | 'done' | 'error';
   ratio?: number;
   message?: string;
 };
@@ -34,7 +41,7 @@ export type OverlaySnapshot = { videoTimeSec: number; bitmap: ImageBitmap };
 
 type DemuxResult = {
   videoCodec: string;
-  videoCodecMuxer: "avc" | "hevc" | "vp9" | "av1";
+  videoCodecMuxer: 'avc' | 'hevc' | 'vp9' | 'av1';
   videoDescription: Uint8Array;
   width: number;
   height: number;
@@ -47,7 +54,7 @@ type DemuxResult = {
     duration: number;
   }>;
   audio: {
-    codec: "aac" | "opus";
+    codec: 'aac' | 'opus';
     description: Uint8Array; // AudioSpecificConfig for AAC, Opus head for Opus
     sampleRate: number;
     channels: number;
@@ -69,13 +76,13 @@ type DemuxResult = {
 const buildAacAsc = (
   sampleRate: number,
   channelCount: number,
-  codec: string,
+  codec: string
 ): Uint8Array | null => {
   const freqMap = [
     96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025,
     8000, 7350,
   ];
-  const profile = parseInt(codec.split(".")[2] ?? "2", 10);
+  const profile = Number.parseInt(codec.split('.')[2] ?? '2', 10);
   const freqIndex = freqMap.indexOf(sampleRate);
   if (freqIndex < 0 || channelCount < 1 || channelCount > 7) return null;
   const b0 = (profile << 3) | (freqIndex >> 1);
@@ -83,20 +90,37 @@ const buildAacAsc = (
   return new Uint8Array([b0 & 0xff, b1 & 0xff]);
 };
 
-const audioCodecMuxerKind = (codec: string): "aac" | "opus" | null => {
-  if (codec.startsWith("mp4a")) return "aac";
-  if (codec.startsWith("opus") || codec.startsWith("Opus")) return "opus";
+const audioCodecMuxerKind = (codec: string): 'aac' | 'opus' | null => {
+  if (codec.startsWith('mp4a')) return 'aac';
+  if (codec.startsWith('opus') || codec.startsWith('Opus')) return 'opus';
   return null;
 };
 
 // Pull the codec-specific config box (avcC / hvcC / vpcC / av1C) out of a
 // track and serialize it as the Uint8Array that VideoDecoder expects.
-const extractCodecDescription = (trak: any): Uint8Array | null => {
+// mp4box doesn't export a usable type for the trak box tree, so model just
+// the path we walk.
+type CodecConfigBox = { write: (ds: DataStream) => void };
+type TrakBoxLike = {
+  mdia?: {
+    minf?: {
+      stbl?: {
+        stsd?: {
+          entries?: Partial<
+            Record<'avcC' | 'hvcC' | 'vpcC' | 'av1C', CodecConfigBox>
+          >[];
+        };
+      };
+    };
+  };
+};
+
+const extractCodecDescription = (trak: TrakBoxLike): Uint8Array | null => {
   const entry = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
   if (!entry) return null;
   const box = entry.avcC ?? entry.hvcC ?? entry.vpcC ?? entry.av1C;
   if (!box) return null;
-  const ds = new DataStream(undefined, 0, DataStream.BIG_ENDIAN);
+  const ds = new DataStream(undefined, 0, Endianness.BIG_ENDIAN);
   box.write(ds);
   // First 8 bytes are box header (size + name), VideoDecoder wants the body.
   return new Uint8Array(ds.buffer, 8);
@@ -104,43 +128,49 @@ const extractCodecDescription = (trak: any): Uint8Array | null => {
 
 const pickAvcCodec = (width: number, height: number): string => {
   const px = width * height;
-  if (px <= 1280 * 720) return "avc1.42E01F";
-  if (px <= 1920 * 1088) return "avc1.4D4028";
-  if (px <= 2560 * 1440) return "avc1.4D4032";
-  return "avc1.640033";
+  if (px <= 1280 * 720) return 'avc1.42E01F';
+  if (px <= 1920 * 1088) return 'avc1.4D4028';
+  if (px <= 2560 * 1440) return 'avc1.4D4032';
+  return 'avc1.640033';
 };
 
 const codecToMuxerKind = (
-  codec: string,
-): "avc" | "hevc" | "vp9" | "av1" | null => {
-  if (codec.startsWith("avc1") || codec.startsWith("avc3")) return "avc";
-  if (codec.startsWith("hvc1") || codec.startsWith("hev1")) return "hevc";
-  if (codec.startsWith("vp09")) return "vp9";
-  if (codec.startsWith("av01")) return "av1";
+  codec: string
+): 'avc' | 'hevc' | 'vp9' | 'av1' | null => {
+  if (codec.startsWith('avc1') || codec.startsWith('avc3')) return 'avc';
+  if (codec.startsWith('hvc1') || codec.startsWith('hev1')) return 'hevc';
+  if (codec.startsWith('vp09')) return 'vp9';
+  if (codec.startsWith('av01')) return 'av1';
   return null;
 };
 
 const demuxFile = (videoBlob: Blob): Promise<DemuxResult> =>
   new Promise((resolve, reject) => {
     const file = createFile();
-    const videoSamples: DemuxResult["videoSamples"] = [];
-    let videoMeta: Omit<DemuxResult, "videoSamples" | "audio"> | null = null;
+    const videoSamples: DemuxResult['videoSamples'] = [];
+    let videoMeta: Omit<DemuxResult, 'videoSamples' | 'audio'> | null = null;
     let videoTrackId: number | null = null;
     let audioTrackId: number | null = null;
-    let audioMeta: Omit<NonNullable<DemuxResult["audio"]>, "samples"> | null =
+    let audioMeta: Omit<NonNullable<DemuxResult['audio']>, 'samples'> | null =
       null;
-    const audioSamples: NonNullable<DemuxResult["audio"]>["samples"] = [];
+    const audioSamples: NonNullable<DemuxResult['audio']>['samples'] = [];
 
     file.onError = (e: string) => reject(new Error(`mp4box: ${e}`));
 
-    file.onReady = (info: any) => {
+    file.onReady = (info: Movie) => {
       const v = info.videoTracks?.[0];
       if (!v) {
-        reject(new Error("No video track in source file"));
+        reject(new Error('No video track in source file'));
+        return;
+      }
+      if (!v.video) {
+        reject(new Error('Video track has no video metadata'));
         return;
       }
       const trak = file.getTrackById(v.id);
-      const description = extractCodecDescription(trak);
+      const description = extractCodecDescription(
+        trak as unknown as TrakBoxLike
+      );
       if (!description) {
         reject(new Error(`Could not extract codec config from ${v.codec}`));
         return;
@@ -164,18 +194,18 @@ const demuxFile = (videoBlob: Blob): Promise<DemuxResult> =>
       // Audio — best-effort passthrough. AAC is the common case for phone
       // recordings; Opus comes up for browser-recorded WebM-in-MP4.
       const a = info.audioTracks?.[0];
-      if (a) {
+      if (a?.audio) {
         const aKind = audioCodecMuxerKind(a.codec);
-        if (aKind === "aac") {
+        if (aKind === 'aac') {
           const asc = buildAacAsc(
             a.audio.sample_rate,
             a.audio.channel_count,
-            a.codec,
+            a.codec
           );
           if (asc) {
             audioTrackId = a.id;
             audioMeta = {
-              codec: "aac",
+              codec: 'aac',
               description: asc,
               sampleRate: a.audio.sample_rate,
               channels: a.audio.channel_count,
@@ -191,19 +221,11 @@ const demuxFile = (videoBlob: Blob): Promise<DemuxResult> =>
       file.start();
     };
 
-    file.onSamples = (
-      id: number,
-      _user: unknown,
-      samples: Array<{
-        is_sync: boolean;
-        cts: number;
-        dts: number;
-        duration: number;
-        data: Uint8Array;
-      }>,
-    ) => {
+    file.onSamples = (id: number, _user: unknown, samples: Sample[]) => {
       if (id === videoTrackId) {
         for (const s of samples) {
+          // mp4box types `data` as optional; a sample without bytes is useless.
+          if (!s.data) continue;
           videoSamples.push({
             data: s.data,
             is_sync: s.is_sync,
@@ -214,6 +236,7 @@ const demuxFile = (videoBlob: Blob): Promise<DemuxResult> =>
         }
       } else if (id === audioTrackId) {
         for (const s of samples) {
+          if (!s.data) continue;
           audioSamples.push({
             data: s.data,
             is_sync: s.is_sync,
@@ -233,12 +256,12 @@ const demuxFile = (videoBlob: Blob): Promise<DemuxResult> =>
     videoBlob
       .arrayBuffer()
       .then((ab) => {
-        const buf = ab as MP4ArrayBuffer;
+        const buf = ab as MP4BoxBuffer;
         buf.fileStart = 0;
         file.appendBuffer(buf);
         file.flush();
         if (!videoMeta) {
-          reject(new Error("mp4box never reached onReady"));
+          reject(new Error('mp4box never reached onReady'));
           return;
         }
         resolve({
@@ -255,7 +278,7 @@ const demuxFile = (videoBlob: Blob): Promise<DemuxResult> =>
 // pre-roll footage.
 const pickActiveOverlay = (
   snapshots: OverlaySnapshot[],
-  tSec: number,
+  tSec: number
 ): OverlaySnapshot | null => {
   if (snapshots.length === 0) return null;
   let active = snapshots[0]!;
@@ -267,14 +290,14 @@ const pickActiveOverlay = (
 };
 
 export function useVideoRenderWebCodecs() {
-  const progress = ref<RenderProgress>({ stage: "idle" });
+  const progress = ref<RenderProgress>({ stage: 'idle' });
   const outputUrl = ref<string | null>(null);
 
   const isSupported = computed(
     () =>
-      typeof window !== "undefined" &&
-      "VideoEncoder" in window &&
-      "VideoDecoder" in window,
+      typeof window !== 'undefined' &&
+      'VideoEncoder' in window &&
+      'VideoDecoder' in window
   );
 
   const render = async (params: {
@@ -283,24 +306,24 @@ export function useVideoRenderWebCodecs() {
   }): Promise<Blob> => {
     if (!isSupported.value) {
       throw new Error(
-        "WebCodecs not supported in this browser — try Chrome/Edge or Safari 16.4+",
+        'WebCodecs not supported in this browser — try Chrome/Edge or Safari 16.4+'
       );
     }
     if (params.overlaySnapshots.length === 0) {
-      throw new Error("no snapshots — sync at least one game first");
+      throw new Error('no snapshots — sync at least one game first');
     }
     outputUrl.value = null;
 
     // 1) Demux source.
-    progress.value = { stage: "demuxing", message: "Reading video…" };
+    progress.value = { stage: 'demuxing', message: 'Reading video…' };
     const demux = await demuxFile(params.videoBlob);
 
     // 2) Set up muxer (video-only for now).
-    progress.value = { stage: "encoding", message: "Encoding video…" };
+    progress.value = { stage: 'encoding', message: 'Encoding video…' };
     const muxer = new Muxer({
       target: new ArrayBufferTarget(),
       video: {
-        codec: "avc",
+        codec: 'avc',
         width: demux.width,
         height: demux.height,
       },
@@ -311,13 +334,13 @@ export function useVideoRenderWebCodecs() {
             sampleRate: demux.audio.sampleRate,
           }
         : undefined,
-      fastStart: "in-memory",
+      fastStart: 'in-memory',
       // Source videos often have a non-zero composition timestamp on the
       // first sample (small DTS offset from the muxing tool). Without this,
       // mp4-muxer rejects every chunk because it expects timestamps
       // anchored at 0. 'cross-track-offset' aligns video + audio together
       // so they stay in sync after the shift.
-      firstTimestampBehavior: "cross-track-offset",
+      firstTimestampBehavior: 'cross-track-offset',
     });
 
     // 3) Canvas matches source resolution. drawImage(VideoFrame, 0, 0) then
@@ -326,13 +349,13 @@ export function useVideoRenderWebCodecs() {
     //    "Cannot read properties of null (reading 'colorSpace')" when we hand
     //    the canvas to the VideoFrame constructor.
     const canvas = new OffscreenCanvas(demux.width, demux.height);
-    const ctx = canvas.getContext("2d", { colorSpace: "srgb" });
-    if (!ctx) throw new Error("OffscreenCanvas 2D context unavailable");
+    const ctx = canvas.getContext('2d', { colorSpace: 'srgb' });
+    if (!ctx) throw new Error('OffscreenCanvas 2D context unavailable');
 
     // 4) Encoder — bitrate scales loosely with resolution.
     const bitrate = Math.max(
       2_000_000,
-      Math.min(20_000_000, demux.width * demux.height * 4),
+      Math.min(20_000_000, demux.width * demux.height * 4)
     );
 
     // Check codec support before configuring so we fail with a clear message
@@ -350,20 +373,20 @@ export function useVideoRenderWebCodecs() {
       bitrate,
       framerate: 30,
       // mp4-muxer needs length-prefixed NAL units ('avc' format).
-      avc: { format: "avc" },
+      avc: { format: 'avc' },
       // Prefer the HW encoder explicitly — most browsers pick HW by default
       // but this avoids a SW fallback when both paths are available.
-      hardwareAcceleration: "prefer-hardware",
+      hardwareAcceleration: 'prefer-hardware',
       // Realtime mode is the encoder hint for "low-latency, fewer reorders"
       // — encodes faster at a slight bitrate efficiency cost. For our
       // overlay-composite case (no rate-control nuance needed) it's a clear
       // win.
-      latencyMode: "realtime",
+      latencyMode: 'realtime',
     };
     const support = await VideoEncoder.isConfigSupported(encoderConfig);
     if (!support.supported) {
       throw new Error(
-        `Encoder config not supported (codec=${encoderConfig.codec}, ${demux.width}×${demux.height})`,
+        `Encoder config not supported (codec=${encoderConfig.codec}, ${demux.width}×${demux.height})`
       );
     }
 
@@ -385,12 +408,12 @@ export function useVideoRenderWebCodecs() {
           muxer.addVideoChunk(chunk, metaToUse);
           chunkCount++;
         } catch (e) {
-          console.error("[muxer] addVideoChunk failed", e, "meta:", meta);
+          console.error('[muxer] addVideoChunk failed', e, 'meta:', meta);
           encoderError = e;
         }
       },
       error: (e) => {
-        console.error("[VideoEncoder]", e);
+        console.error('[VideoEncoder]', e);
         encoderError = e;
       },
     });
@@ -410,7 +433,7 @@ export function useVideoRenderWebCodecs() {
           ctx.drawImage(frame, 0, 0, demux.width, demux.height);
           const active = pickActiveOverlay(
             params.overlaySnapshots,
-            timestamp / 1_000_000,
+            timestamp / 1_000_000
           );
           if (active) {
             ctx.drawImage(active.bitmap, 0, 0, demux.width, demux.height);
@@ -432,7 +455,7 @@ export function useVideoRenderWebCodecs() {
           processed++;
           if (processed % 30 === 0 || processed === total) {
             progress.value = {
-              stage: "encoding",
+              stage: 'encoding',
               ratio: processed / total,
               message: `Encoding · ${Math.round((processed / total) * 100)}%`,
             };
@@ -440,7 +463,7 @@ export function useVideoRenderWebCodecs() {
         }
       },
       error: (e) => {
-        console.error("[VideoDecoder]", e);
+        console.error('[VideoDecoder]', e);
         decoderError = e;
       },
     });
@@ -453,7 +476,7 @@ export function useVideoRenderWebCodecs() {
     const decoderSupport = await VideoDecoder.isConfigSupported(decoderConfig);
     if (!decoderSupport.supported) {
       throw new Error(
-        `Decoder config not supported for codec ${demux.videoCodec}`,
+        `Decoder config not supported for codec ${demux.videoCodec}`
       );
     }
     decoder.configure(decoderConfig);
@@ -473,19 +496,19 @@ export function useVideoRenderWebCodecs() {
       try {
         decoder.decode(
           new EncodedVideoChunk({
-            type: s.is_sync ? "key" : "delta",
+            type: s.is_sync ? 'key' : 'delta',
             timestamp: (s.cts * 1_000_000) / demux.timescale,
             duration: (s.duration * 1_000_000) / demux.timescale,
             data: s.data,
-          }),
+          })
         );
         decodedSampleCount++;
       } catch (e) {
         if (!firstError) firstError = e;
         console.error(
-          "[render] decoder.decode threw on sample",
+          '[render] decoder.decode threw on sample',
           decodedSampleCount,
-          e,
+          e
         );
         break;
       }
@@ -500,26 +523,26 @@ export function useVideoRenderWebCodecs() {
     // with zero encoded chunks and a confusing crash inside muxer.finalize.
     if (decoderError) {
       throw new Error(
-        `Decoder error: ${(decoderError as Error).message ?? decoderError}`,
+        `Decoder error: ${(decoderError as Error).message ?? decoderError}`
       );
     }
     if (encoderError) {
       throw new Error(
-        `Encoder error: ${(encoderError as Error).message ?? encoderError}`,
+        `Encoder error: ${(encoderError as Error).message ?? encoderError}`
       );
     }
     if (chunkCount === 0) {
       throw new Error(
-        "No encoded chunks produced — the decoder likely couldn't process the source video. Check console for [VideoDecoder] errors.",
+        "No encoded chunks produced — the decoder likely couldn't process the source video. Check console for [VideoDecoder] errors."
       );
     }
 
     // Force progress to 100% — the per-30-frame update can leave the bar
     // short of full when the final batch < 30 frames.
     progress.value = {
-      stage: "encoding",
+      stage: 'encoding',
       ratio: 1,
-      message: "Encoding · 100%",
+      message: 'Encoding · 100%',
     };
 
     // 7) Audio passthrough — raw chunks straight into the muxer. No decode,
@@ -529,28 +552,28 @@ export function useVideoRenderWebCodecs() {
       for (const s of a.samples) {
         muxer.addAudioChunkRaw(
           s.data,
-          s.is_sync ? "key" : "delta",
+          s.is_sync ? 'key' : 'delta',
           (s.cts * 1_000_000) / a.timescale,
           (s.duration * 1_000_000) / a.timescale,
           {
             decoderConfig: {
-              codec: "mp4a.40.2",
+              codec: 'mp4a.40.2',
               sampleRate: a.sampleRate,
               numberOfChannels: a.channels,
               description: a.description,
             },
-          },
+          }
         );
       }
     }
 
     // 8) Finalize.
-    progress.value = { stage: "finalizing", message: "Finalizing MP4…" };
+    progress.value = { stage: 'finalizing', message: 'Finalizing MP4…' };
     muxer.finalize();
     const buffer = (muxer.target as ArrayBufferTarget).buffer;
-    const blob = new Blob([buffer], { type: "video/mp4" });
+    const blob = new Blob([buffer], { type: 'video/mp4' });
     outputUrl.value = URL.createObjectURL(blob);
-    progress.value = { stage: "done", ratio: 1, message: "Render complete" };
+    progress.value = { stage: 'done', ratio: 1, message: 'Render complete' };
 
     return blob;
   };

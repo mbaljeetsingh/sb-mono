@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { Camera } from 'lucide-vue-next';
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from '@sb/layer-ui/components/ui/avatar';
 import { Button } from '@sb/layer-ui/components/ui/button';
+import {
+  Dropzone,
+  useSupabaseUpload,
+} from '@sb/layer-ui/components/ui/dropzone';
 import { Label } from '@sb/layer-ui/components/ui/label';
-import { Avatar, AvatarImage, AvatarFallback } from '@sb/layer-ui/components/ui/avatar';
-import { Dropzone, useSupabaseUpload } from '@sb/layer-ui/components/ui/dropzone';
+import { Camera } from 'lucide-vue-next';
+import { type PropType, computed } from 'vue';
 import { compressImage } from '~/lib/image';
 import { uploadProfilePhoto } from '~/lib/storage';
 
@@ -13,7 +20,8 @@ const props = defineProps({
    * Current avatar URL
    */
   modelValue: {
-    type: String,
+    // Nullable — profile.vue holds `string | null` (no avatar yet).
+    type: String as PropType<string | null>,
     default: null,
   },
   /**
@@ -133,10 +141,11 @@ defineExpose({
     <Label class="text-sm font-medium">Profile Photo</Label>
     <div class="flex flex-col items-center gap-2">
       <!-- Dropzone wraps the avatar for click & drag support -->
+      <!-- Dropzone's `class` prop is typed String, so pass one merged string
+           rather than an object binding. -->
       <Dropzone
         :dropzone="dropzone"
-        class="border-0! bg-transparent! p-0! cursor-pointer"
-        :class="{ 'pointer-events-none opacity-60': isDisabled }"
+        :class="`border-0! bg-transparent! p-0! cursor-pointer${isDisabled ? ' pointer-events-none opacity-60' : ''}`"
       >
         <div class="relative group">
           <Avatar

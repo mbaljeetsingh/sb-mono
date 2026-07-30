@@ -1,0 +1,123 @@
+import {
+  type RacquetConfig,
+  type RacquetEvent,
+  type RacquetState,
+  getPreset,
+} from '@sb/engine';
+import type { Database } from '@sb/shared';
+// Compact per-match summaries (status + scoreline) for list/card contexts —
+// the /matches rows and the home page's recent-match card. One batched
+// events fetch for all requested matches, then a pure engine reduce per
+// match. This module is fetch-only; liveness is the caller's choice —
+// /matches layers a Realtime events subscription on top and re-calls this
+// per match, while the home card stays a mount-time snapshot.
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+export type MatchSummary = {
+  status: 'ready' | 'live' | 'final';
+  /** Compact scoreline — live multi-game: "1–0 · 14–11" (games won · current
+   *  game); final multi-game: "2–0"; single-game: just the points. */
+  scoreline: string | null;
+  winner: 'A' | 'B' | null;
+};
+
+export type SummaryInput = {
+  id: string;
+  sport_preset: string;
+  config: { gamesToWin?: number } | null;
+  ended_at?: string | null;
+};
+
+type EventRow = {
+  match_id: string;
+  id: string;
+  ts: string;
+  type: string;
+  payload: Record<string, unknown> | null;
+};
+
+const fromEventRow = (row: EventRow): RacquetEvent =>
+  ({
+    id: row.id,
+    ts: Date.parse(row.ts),
+    type: row.type,
+    ...(row.payload ?? {}),
+  }) as RacquetEvent;
+
+const summarize = (
+  state: RacquetState,
+  config: RacquetConfig,
+  endedAt: string | null | undefined
+): MatchSummary => {
+  const finished = state.matchOver || !!endedAt;
+  const cur = state.games[state.games.length - 1] ?? { a: 0, b: 0 };
+  const multiGame = config.gamesToWin > 1;
+  if (finished) {
+    return {
+      status: 'final',
+      scoreline: multiGame
+        ? `${state.gamesWon.a}–${state.gamesWon.b}`
+        : `${cur.a}–${cur.b}`,
+      winner: state.winner,
+    };
+  }
+  return {
+    status: 'live',
+    scoreline: multiGame
+      ? `${state.gamesWon.a}–${state.gamesWon.b} · ${cur.a}–${cur.b}`
+      : `${cur.a}–${cur.b}`,
+    winner: null,
+  };
+};
+
+export async function fetchMatchSummaries(
+  supabase: SupabaseClient<Database>,
+  matches: SummaryInput[]
+): Promise<Map<string, MatchSummary>> {
+  const out = new Map<string, MatchSummary>();
+  if (!matches.length) return out;
+
+  const { data, error } = await supabase
+    .from('events')
+    .select('match_id, id, ts, type, payload')
+    .in(
+      'match_id',
+      matches.map((m) => m.id)
+    );
+  if (error) {
+    console.warn('[matchSummaries] events fetch failed', error);
+    return out;
+  }
+
+  const byMatch = new Map<string, RacquetEvent[]>();
+  for (const row of (data ?? []) as EventRow[]) {
+    const list = byMatch.get(row.match_id);
+    const ev = fromEventRow(row);
+    if (list) list.push(ev);
+    else byMatch.set(row.match_id, [ev]);
+  }
+
+  for (const m of matches) {
+    const events = (byMatch.get(m.id) ?? []).sort((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+    );
+    if (!events.length) {
+      out.set(m.id, {
+        status: m.ended_at ? 'final' : 'ready',
+        scoreline: null,
+        winner: null,
+      });
+      continue;
+    }
+    const preset = getPreset(m.sport_preset);
+    const config: RacquetConfig = {
+      ...preset.config,
+      gamesToWin: m.config?.gamesToWin ?? preset.config.gamesToWin,
+    };
+    out.set(
+      m.id,
+      summarize(preset.reducer(events, config), config, m.ended_at)
+    );
+  }
+  return out;
+}

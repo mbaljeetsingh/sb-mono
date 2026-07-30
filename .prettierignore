@@ -1,0 +1,5 @@
+# Generated shadcn-vue components — maintained via `pnpm shadcn:update` +
+# scripts/shadcn/patches.json; formatting them creates churn the next regen clobbers.
+layers/ui/components/ui/*
+# Generated Supabase schema types (`pnpm supabase:types`).
+packages/shared/src/types/supabase.ts

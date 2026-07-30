@@ -19,7 +19,6 @@ const delegatedProps = computed(() => {
 
 <template>
   <ProgressRoot
-    :model-value="modelValue"
     v-bind="delegatedProps"
     :class="
       cn(

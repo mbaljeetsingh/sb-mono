@@ -19,6 +19,10 @@ Shared layers + packages:
 
 Backend: Supabase (Postgres + Auth + Realtime + Storage). RLS-gated. Anonymous matches via `owner_id IS NULL` policies.
 
+## Dev server
+
+`pnpm dev` runs through [portless](https://portless.sh) (Node 24+, see `.nvmrc`) — the app is served at the stable URL **https://sb-app.localhost** (no fixed port; portless injects `PORT` and `devServer.port` in `nuxt.config.ts` respects it). In a git worktree the branch name is prepended (`https://<branch>.sb-app.localhost`). The machine-wide 443 proxy is a one-time global install (`portless service install`). Troubleshooting: `portless list` shows who holds a hostname; a stale `nuxt dev` child must be killed explicitly (`pkill -f "nuxt dev"`) — stopping the turbo task doesn't kill it. Auth redirect allow-list for these origins lives in `supabase/config.toml` (`[auth].additional_redirect_urls`); restart local Supabase after editing it.
+
 ## Authoritative docs
 
 Read these before doing substantial work:
@@ -35,6 +39,7 @@ Read these before doing substantial work:
 If the work in front of you is "implement what BRD/PRD already say," the docs don't change. Iterating on layout, alignment, classes, animations, label text, button positions — none of that is a pivot, it's implementation. Don't touch the docs.
 
 A pivot is:
+
 - A locked business decision changing → `BRD.md` (rare; a few times a year).
 - A surface added, removed, or fundamentally repurposed → `PRD.md`.
 - A new technical concept (new package, new schema, new auth flow, new sync strategy, new third-party service) → `ARCHITECTURE.md`.
@@ -47,12 +52,14 @@ When you do update, do it in the same commit as the code, and keep the entry con
 ## Coding conventions
 
 ### Component & UI
+
 - **No shadcn `Ui` prefix.** Components are in `layers/ui/components/ui/<name>/index.ts` and imported explicitly: `import { Button } from "@sb/layer-ui/components/ui/button"`.
 - **Use shadcn primitives over raw HTML.** If a `Button`, `Input`, `Label`, `ToggleGroup`, `Dialog`, etc. exists in `layers/ui`, prefer it over a styled `<button>`/`<input>`. Exceptions: full-area tap zones with custom geometry (the score cells in `control.vue`) and decorative elements with no semantic role (slide-indicator dots).
 - **Use shadcn defaults.** Don't override `variant`/`size` with custom Tailwind classes for selected states; use the component's built-in active state. The only exception is when the component lacks a "selected" variant and we explicitly need one — prefer `ToggleGroup` over hand-rolled toggle pairs.
 - **Icons from `lucide-vue-next`** — no inline SVGs, no emoji-as-icon. Imported explicitly per-file.
 
 ### Imports & state
+
 - **All imports explicit** for VueUse composables (`useStorage`, `useClipboard`, `useVibrate`, `useWakeLock`, `useElementSize`), `vue-sonner`, `lucide-vue-next`, and shadcn components. Auto-imports are flaky during HMR and break SSR; the cost of one explicit `import` line is nothing.
 - **Auto-imports are limited** to `apps/app/components/**`, plus Nuxt framework standards (`useRoute`, `definePageMeta`, `useSeoMeta`, `useSupabaseClient`, `navigateTo`, `useHead`, `computed`, `ref`, `onMounted`, `watch`, `watchEffect`).
 - **Use VueUse, not raw browser APIs.** `useStorage` over `localStorage.getItem/setItem`. `useClipboard({ legacy: true })` over `navigator.clipboard.writeText`. `useVibrate` over `navigator.vibrate`. `useWakeLock` over the wake-lock API. `useElementSize` over manual `ResizeObserver`. The legacy clipboard fallback matters for HTTP captive portals + in-app webviews.
@@ -60,34 +67,41 @@ When you do update, do it in the same commit as the code, and keep the entry con
 - **Reactive storage keys.** `useStorage(computed(() => \`sb:control-layout:\${id.value}\`), default)` — the composable swaps which entry it reads/writes when the key changes. Use this whenever the matchId/dynamicId is reactive.
 
 ### Vue conventions
+
 - **Composition API + `<script setup lang="ts">` only.** Organize: imports → composables → props/emits → refs/computed → watchers → lifecycle → helpers.
 - **Naming:** PascalCase components, camelCase variables, `use` prefix for composables, `is`/`has` prefix for booleans.
 - **`import type`** for type-only imports.
 - **Don't add new dependencies without explicit user approval.** Adding a tiny utility from npm is rarely worth the lockfile churn — write it inline or extract a helper.
 
 ### shadcn-vue maintenance
+
 - **Never edit files in `layers/ui/` by hand.** Update via `pnpm shadcn:update` (full regen) or `pnpm shadcn:patches-only` (re-apply local patches). Local customizations live in `scripts/shadcn/patches.json`; add a patch entry rather than editing the component.
 - **Adding a single component:** `pnpm dlx shadcn-vue@2.4.0 add <name>` then run `pnpm shadcn:patches-only` if needed. The components.json `ui` alias is `@sb/layer-ui/components/ui`, so generated files use the workspace path natively.
 - **`apps/app/lib/utils.ts`** must exist as a re-export of `cn` from `@sb/layer-ui/lib/utils` — shadcn-vue components in the layer resolve `@/lib/utils` via Nuxt's app-root alias.
+- **biome's `useImportType` is off for `.vue` files** (biome.json override) — biome can't see templates, so it rewrites template-called imports (e.g. `toggleVariants` in ToggleGroupItem) into type-only imports, which vue-tsc then rejects. Don't re-enable it for Vue files.
 
 ### Layouts & auth
+
 - **Layouts:** `apps/app/layouts/default.vue` is the app shell with header. `auth.vue` is the signin/signup carousel layout. Pages that should render bare (`/m/*/scoreboard`, `/m/*/overlay`, `/m/*/control`, `/d/*/overlay`) opt out via `definePageMeta({ layout: false })`. **Toaster + TooltipProvider live in `app.vue`**, not the default layout, so layoutless pages get them too.
 - **Auth model — Option A.** Anonymous-OK scoring is the default. RLS allows `owner_id IS NULL` matches with permissive insert/update for both `anon` and `authenticated`. Per-match URL is the only access protection for anonymous matches; per-match write tokens (E2.8) come in Phase 2 for delegated scoring.
 
 ### Engine & sync
+
 - **Engine config** is in `packages/engine/src/registry.ts` — every shipped preset (badminton-21, badminton-15, tennis-basic, pickleball-classic, pickleball-rally, table-tennis) maps to `{ config, reducer, sport, displayName }`. Adding a sport in the racquet family = one entry. New family = sibling reducer + entries.
 - **Source of truth = the `matches` row in Supabase.** Meta (team names, players, tournament fields), format (sport_preset + config.gamesToWin), and theme choice (overlay_theme_id + scoreboard_theme_id) all live in the row and sync cross-device via Realtime UPDATE. `useMatchMeta`, `useFormat`, and `useThemeChoice` are the consumer composables — none of them write to localStorage.
 - **IndexedDB (via `idb-keyval`) is used for:**
   - `sb:events:{matchId}` — the event log (offline-first per E1.11 — durable through tab crashes, no quota anxiety, async transactions). `useEvents` reads/writes through `layers/app-base/lib/eventStore.ts` and mirrors to Supabase + BroadcastChannel for cross-tab. **Do not** swap this for `useStorage` / localStorage — venue WiFi flakes and points must not be lost.
+  - `sb:tombstones:{matchId}` — ids of events deleted on this device (undo). Reconcile and realtime handlers must never re-merge these, and the remote delete retries until a fetch confirms it's gone.
 - **localStorage is used only for:**
   - `sb:control-layout:{matchId}` — per-device operator UI preference (`'stacked' | 'sideBySide'`). Not synced; each device picks its own.
   - `sb:dynamic:{dynamicId}` — v1 binding for `/d/{id}` dynamic URLs. ARCHITECTURE.md §6 moves this to a `dynamic_urls` table in v1.x.
   - `sb:device-id` — stable per-browser ULID used for event provenance. Lives in localStorage (not IDB) because it must be read synchronously at module init.
   - `sb:theme` — color-mode user preference (light/dark/system), set by `@nuxtjs/color-mode`.
 - **Theme resolution order** in overlay/scoreboard surfaces: `?theme=` query param → `useThemeChoice` (Supabase) → hardcoded baseline (`broadcast-classic` / `filmable`).
-- **Event sync.** `useEvents` writes to IDB first → BroadcastChannel (same-device cross-tab) → fire-and-forget Supabase upsert (idempotent: `onConflict: 'id', ignoreDuplicates: true`). Subscribes to Realtime INSERT + DELETE for cross-device sync. Pending count (`localIds − remoteIds`) is reported to the global `useSyncStatus` store, surfaced as a pill in `AppHeader`. Reconciliation runs on mount, on `online` event, and every 10s while pending. Match rows are created lazily on first event with `owner_id` from current auth state.
+- **Event sync.** `useEvents` writes to IDB first → BroadcastChannel (same-device cross-tab) → fire-and-forget Supabase upsert (idempotent: `onConflict: 'id', ignoreDuplicates: true`). Subscribes to Realtime INSERT + DELETE for cross-device sync. Pending count (`localIds − remoteIds`) is reported to the global `useSyncStatus` store, surfaced as a pill in `AppHeader`. Reconciliation runs on mount, on `online` event, and every 10s while pending. **`/new` is the only writer that creates `matches` rows** — every other composable (`useMatchMeta`, `useFormat`, `useThemeChoice`) must use UPDATE, never upsert, so a viewer can't backfill a stub row and a partial payload can't stomp columns it doesn't own (a hardcoded `sport_preset` in an upsert once corrupted non-badminton matches on theme change).
 
 ### Pre-merge validation
+
 - **Always run `pnpm --filter @sb/engine test`** after engine or registry changes — 29 tests cover the BWF rule set + match-state events.
 - **Boot the dev server and click the surface** for any UI change. Type checks and tests verify code correctness, not feature correctness.
 

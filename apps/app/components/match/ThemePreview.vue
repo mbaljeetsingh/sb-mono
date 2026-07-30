@@ -4,22 +4,22 @@
 // Uses VueUse useElementSize so the scale follows the container's actual width
 // — looks crisp from a 320px thumbnail to a 600px hero card.
 
-import { computed, useTemplateRef } from "vue";
-import { useElementSize } from "@vueuse/core";
-import { type RacquetConfig, type RacquetState, badminton21 } from "@sb/engine";
+import { type RacquetConfig, type RacquetState, badminton21 } from '@sb/engine';
+import { useElementSize } from '@vueuse/core';
+import { computed, useTemplateRef } from 'vue';
 
 const props = defineProps<{
   /** Theme component (already imported from @sb/themes registry). */
   component: unknown;
   /** Surface — overlay themes need a transparent backdrop, scoreboard themes need black. */
-  surface: "overlay" | "scoreboard";
+  surface: 'overlay' | 'scoreboard';
   /** Optional override; defaults to a realistic mid-match badminton state. */
   state?: RacquetState;
   /** Optional override; defaults to badminton21. */
   config?: RacquetConfig;
 }>();
 
-const wrapper = useTemplateRef<HTMLDivElement>("wrapper");
+const wrapper = useTemplateRef<HTMLDivElement>('wrapper');
 const { width } = useElementSize(wrapper);
 
 // Source size that the themes were authored against (per docs/PRD §3.10 +
@@ -38,15 +38,16 @@ const defaultState: RacquetState = {
     { a: 14, b: 11 },
   ],
   gamesWon: { a: 1, b: 0 },
-  servingSide: "A",
-  serverCourt: "right",
+  servingSide: 'A',
+  matchInitialServer: 'A',
+  serverCourt: 'right',
   betweenGames: false,
   matchOver: false,
   winner: null,
   atInterval: true,
   isGamePoint: false,
   isMatchPoint: false,
-  names: { a: "Team A", b: "Team B" },
+  names: { a: 'Team A', b: 'Team B' },
   sidesSwapped: false,
   endReason: null,
   timeout: null,
@@ -60,11 +61,11 @@ const defaultState: RacquetState = {
 
 const previewState = computed(() => props.state ?? defaultState);
 const previewConfig = computed(() => props.config ?? badminton21);
-const teamNames = { a: "Team A", b: "Team B" };
+const teamNames = { a: 'Team A', b: 'Team B' };
 const meta = {
-  courtLabel: "COURT 3",
-  round: "QF",
-  category: "MD U-19",
+  courtLabel: 'COURT 3',
+  round: 'QF',
+  category: 'MD U-19',
   venue: null,
   sponsorName: null,
 };

@@ -1,8 +1,9 @@
 [build]
   ignore = "bash scripts/netlify-ignore.sh app"
 
+# Keep in sync with .nvmrc (portless requires Node 24+ locally).
 [build.environment]
-  NODE_VERSION = "22"
+  NODE_VERSION = "24"
 
 # SPA fallback. `nuxt build` produces a Nitro server bundle (not a static
 # 200.html), so deep links like /m/[id]/control return 404 from the static

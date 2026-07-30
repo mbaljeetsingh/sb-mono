@@ -12,7 +12,10 @@
 //  4. BroadcastChannel handles same-device cross-tab sync (faster than going
 //     via Supabase).
 //  5. append() writes to IDB + tries Supabase upsert (idempotent retry-safe);
-//     replace() truncates IDB + deletes the diff from Supabase.
+//     replace() truncates IDB + deletes the diff from Supabase. Deleted ids
+//     are tombstoned (persisted in IDB) so no later reconcile, realtime echo,
+//     or stale device can resurrect an undone point; the remote delete is
+//     retried until a fetch confirms the rows are gone.
 //  6. Pending count (`localIds - remoteIds`) is reported to the global
 //     `useSyncStatus` store so AppHeader can render the offline pill.
 //
@@ -20,12 +23,19 @@
 // event pushes fail with an FK violation rather than backfilling a stub —
 // keeps the row's ownership intact for legitimate creators.
 
-import type { RacquetEvent } from "@sb/engine";
-import { useOnline } from "@vueuse/core";
-import { ulid } from "ulid";
-import { onMounted, onUnmounted, ref, watch, type Ref } from "vue";
-import { markScored, readEvents, writeEvents } from "../lib/eventStore";
-import { setPending } from "./useSyncStatus";
+import type { RacquetEvent } from '@sb/engine';
+import type { Json } from '@sb/shared';
+import { useOnline } from '@vueuse/core';
+import { ulid } from 'ulid';
+import { type Ref, onMounted, onUnmounted, ref, watch } from 'vue';
+import {
+  markScored,
+  readEvents,
+  readTombstones,
+  writeEvents,
+  writeTombstones,
+} from '../lib/eventStore';
+import { setPending } from './useSyncStatus';
 
 type ParsedEvent = RacquetEvent;
 
@@ -35,13 +45,13 @@ const fromRow = (row: {
   id: string;
   ts: string;
   type: string;
-  payload: Record<string, unknown> | null;
+  payload: Json | null;
 }): ParsedEvent => {
   return {
     id: row.id,
     ts: Date.parse(row.ts),
     type: row.type,
-    ...(row.payload ?? {}),
+    ...((row.payload ?? {}) as Record<string, unknown>),
   } as ParsedEvent;
 };
 
@@ -49,14 +59,14 @@ const fromRow = (row: {
 const toRow = (
   ev: ParsedEvent,
   matchId: string,
-  deviceId: string,
+  deviceId: string
 ): {
   id: string;
   match_id: string;
   device_id: string;
   ts: string;
   type: string;
-  payload: Record<string, unknown>;
+  payload: Json;
 } => {
   const { id, ts, type, ...rest } = ev as ParsedEvent & Record<string, unknown>;
   return {
@@ -65,14 +75,14 @@ const toRow = (
     device_id: deviceId,
     ts: new Date(ts).toISOString(),
     type,
-    payload: rest as Record<string, unknown>,
+    payload: rest as Json,
   };
 };
 
 // Stable per-browser device id used for event provenance + dedupe heuristics.
-const deviceIdKey = "sb:device-id";
+const deviceIdKey = 'sb:device-id';
 const getDeviceId = (): string => {
-  if (typeof localStorage === "undefined") return "ssr";
+  if (typeof localStorage === 'undefined') return 'ssr';
   let id = localStorage.getItem(deviceIdKey);
   if (!id) {
     id = ulid();
@@ -85,12 +95,22 @@ const getDeviceId = (): string => {
 // within the window as accidental double-presses. Cross-device dedup is
 // separate: active-scorer handoff ensures one writer at a time, and realtime
 // echoes are de-duped by id in `upsertLocal`. Only physical double-taps
-// (~150–250 ms) need to be caught here.
+// (~150–250 ms) need to be caught here — but the window is compared with an
+// absolute diff because the events scanned may have been authored on another
+// device whose clock runs ahead of ours (see append()).
 const POINT_DEDUP_WINDOW_MS = 250;
 
 // Retry cadence for pushing local-only events when Supabase is offline /
 // failing. Cheap on a healthy connection (single SELECT + nothing to push).
 const SYNC_RETRY_INTERVAL_MS = 10_000;
+
+// Postgres failures carry a SQLSTATE code (e.g. 23503 FK violation, 42501 RLS
+// denial) — retrying those can never succeed, so they must not block the rest
+// of the push queue. Network failures surface with no code and are retryable.
+const isTerminalError = (error: { code?: string }): boolean =>
+  typeof error.code === 'string' && /^[0-9A-Z]{5}$/.test(error.code);
+
+type PushResult = 'ok' | 'retryable' | 'terminal';
 
 type UseEventsOptions = {
   // When set, all writes are routed through the SECURITY DEFINER RPCs
@@ -117,10 +137,21 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
   // Set of event IDs we know are in Supabase. Anything in `events` not in
   // here is part of the pending queue.
   const remoteIds = ref<Set<string>>(new Set());
+  // Event ids deleted on this device (undo). Persisted per match; reconcile
+  // and the realtime INSERT handler must never re-merge these.
+  const tombstones = ref<Set<string>>(new Set());
+  // Tombstoned ids whose remote delete hasn't been confirmed by a fetch yet —
+  // keeps the retry tick alive until the delete lands.
+  const pendingDeletes = new Set<string>();
 
   let channel: BroadcastChannel | null = null;
   let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
   let retryTimer: ReturnType<typeof setInterval> | null = null;
+  // Bumped on matchId change / unmount. In-flight async loops (init,
+  // reconcile) capture the value at start and bail once it moves on, so a
+  // stale continuation can never push the old match's events under the new
+  // matchId.
+  let generation = 0;
   // Per-instance unique channel-name suffix — see explanation below in
   // subscribeRealtime().
   const channelSuffix = Math.random().toString(36).slice(2, 10);
@@ -130,6 +161,18 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
 
   const persist = async () => {
     await writeEvents(matchId.value, events.value);
+  };
+
+  const persistTombstones = async () => {
+    await writeTombstones(matchId.value, [...tombstones.value]);
+  };
+
+  const addTombstones = (ids: string[]) => {
+    if (!ids.length) return;
+    const next = new Set(tombstones.value);
+    for (const id of ids) next.add(id);
+    tombstones.value = next;
+    void persistTombstones();
   };
 
   const reportPending = () => {
@@ -156,12 +199,12 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
 
   const fetchRemote = async (): Promise<RacquetEvent[]> => {
     const { data, error } = await supabase
-      .from("events")
-      .select("id, ts, type, payload")
-      .eq("match_id", matchId.value)
-      .order("ts", { ascending: true });
+      .from('events')
+      .select('id, ts, type, payload')
+      .eq('match_id', matchId.value)
+      .order('ts', { ascending: true });
     if (error) {
-      console.warn("[useEvents] fetch remote failed", error);
+      console.warn('[useEvents] fetch remote failed', error);
       return [];
     }
     return (data ?? []).map(fromRow);
@@ -169,52 +212,89 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
 
   // Push one event to Supabase. Idempotent: uses upsert with `ignoreDuplicates`
   // (direct path) or the RPC which already does `on conflict (id) do nothing`.
-  // Returns true on success, false on network/server failure.
-  const pushEvent = async (ev: RacquetEvent): Promise<boolean> => {
+  const pushEvent = async (ev: RacquetEvent): Promise<PushResult> => {
     if (writeToken?.value) {
       const { id, ts, type, ...rest } = ev as ParsedEvent &
         Record<string, unknown>;
-      const { error } = await supabase.rpc("append_event_with_token", {
+      const { error } = await supabase.rpc('append_event_with_token', {
         p_match_id: matchId.value,
         p_token: writeToken.value,
         p_event_id: id,
         p_device_id: getDeviceId(),
         p_ts: new Date(ts).toISOString(),
         p_type: type,
-        p_payload: rest as Record<string, unknown>,
+        p_payload: rest as Json,
       });
       if (error) {
-        console.warn("[useEvents] rpc append failed", error);
-        return false;
+        console.warn('[useEvents] rpc append failed', error);
+        return isTerminalError(error) ? 'terminal' : 'retryable';
       }
-      return true;
+      return 'ok';
     }
 
     const { error } = await supabase
-      .from("events")
+      .from('events')
       .upsert(toRow(ev, matchId.value, getDeviceId()), {
-        onConflict: "id",
+        onConflict: 'id',
         ignoreDuplicates: true,
       });
     if (error) {
-      console.warn("[useEvents] event upsert failed", error);
-      return false;
+      console.warn('[useEvents] event upsert failed', error);
+      return isTerminalError(error) ? 'terminal' : 'retryable';
     }
-    return true;
+    return 'ok';
+  };
+
+  // Delete events remotely. Failures are tolerated — the ids stay tombstoned
+  // and reconcile re-issues the delete until a fetch confirms they're gone.
+  const deleteRemote = async (ids: string[]) => {
+    if (!ids.length) return;
+    if (writeToken?.value) {
+      const { error } = await supabase.rpc('delete_events_with_token', {
+        p_match_id: matchId.value,
+        p_token: writeToken.value,
+        p_event_ids: ids,
+      });
+      if (error) console.warn('[useEvents] rpc delete failed', error);
+      return;
+    }
+    const { error } = await supabase.from('events').delete().in('id', ids);
+    if (error) console.warn('[useEvents] event delete failed', error);
   };
 
   // Reconcile local IDB state with Supabase. Pushes local-only events, merges
-  // remote-only events, rebuilds remoteIds. Safe to call repeatedly.
+  // remote-only events, retries unconfirmed deletes, rebuilds remoteIds. Safe
+  // to call repeatedly.
   const reconcile = async () => {
+    const gen = generation;
     const remote = await fetchRemote();
+    if (gen !== generation) return;
     const remoteIdSet = new Set(remote.map((e) => e.id));
     const localIdSet = new Set(events.value.map((e) => e.id));
 
-    // Pull: merge any remote-only events into local.
-    const remoteOnly = remote.filter((e) => !localIdSet.has(e.id));
+    // Deletes confirmed gone drop out of the retry set; anything tombstoned
+    // but still present remotely (failed delete, or a stale device pushed it
+    // back) gets the delete re-issued.
+    for (const id of [...pendingDeletes]) {
+      if (!remoteIdSet.has(id)) pendingDeletes.delete(id);
+    }
+    const undeleted = remote
+      .filter((e) => tombstones.value.has(e.id))
+      .map((e) => e.id);
+    if (undeleted.length) {
+      for (const id of undeleted) pendingDeletes.add(id);
+      void deleteRemote(undeleted);
+    }
+
+    // Pull: merge any remote-only events into local — never tombstoned ones,
+    // or an undo would silently resurrect on the next reconcile.
+    const remoteOnly = remote.filter(
+      (e) => !localIdSet.has(e.id) && !tombstones.value.has(e.id)
+    );
     if (remoteOnly.length) {
       events.value = [...events.value, ...remoteOnly].sort(sortById);
       await persist();
+      if (gen !== generation) return;
     }
 
     // Update confirmed-remote set from this fetch before pushing, so the
@@ -226,20 +306,28 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
     // failure early in the queue doesn't fan out a hundred requests.
     const localOnly = events.value.filter((e) => !remoteIdSet.has(e.id));
     for (const ev of localOnly) {
-      const ok = await pushEvent(ev);
-      if (ok) markRemote(ev.id);
-      else break; // network's down; back off until next retry tick.
+      if (gen !== generation) return;
+      const res = await pushEvent(ev);
+      if (res === 'ok') markRemote(ev.id);
+      else if (res === 'retryable') break; // network's down; back off until next retry tick.
+      // 'terminal' (RLS/FK rejection): skip — this event can never land, and
+      // it must not block everything queued behind it.
     }
   };
 
   // Local-only mutation helpers (used by realtime + broadcast handlers).
   const upsertLocal = (incoming: RacquetEvent) => {
+    if (tombstones.value.has(incoming.id)) return; // deleted here; don't resurrect
     if (events.value.some((e) => e.id === incoming.id)) return;
     events.value = [...events.value, incoming].sort(sortById);
     void persist();
   };
 
   const removeLocal = (id: string) => {
+    // Tombstone even when the id isn't present locally — a remote DELETE that
+    // races an in-flight reconcile() fetch would otherwise re-merge the event
+    // from the stale fetch snapshot and push it back to Supabase.
+    addTombstones([id]);
     if (!events.value.some((e) => e.id === id)) return;
     events.value = events.value.filter((e) => e.id !== id);
     unmarkRemote(id);
@@ -248,29 +336,34 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
 
   // ─── Public API ───────────────────────────────────────────────────────────
 
-  const append = (partial: Omit<RacquetEvent, "id" | "ts">): RacquetEvent => {
+  const append = (partial: Omit<RacquetEvent, 'id' | 'ts'>): RacquetEvent => {
     // JSON round-trip strips Vue reactive proxies (which `structuredClone`
     // can't clone) — callers can pass reactive state directly without hitting
     // `DataCloneError` on the BroadcastChannel hop below.
     const ev = JSON.parse(
-      JSON.stringify({ id: ulid(), ts: Date.now(), ...partial }),
+      JSON.stringify({ id: ulid(), ts: Date.now(), ...partial })
     ) as RacquetEvent;
 
-    // Cross-device + fat-finger dedup for point events. If the same side
-    // already scored within the window, treat as duplicate observation.
-    if (ev.type === "point") {
+    // Fat-finger dedup for point events. If the same side already scored
+    // within the window, treat as duplicate observation. Absolute diff:
+    // events from other devices can carry a ts *ahead* of this clock, and a
+    // signed comparison would then treat every future tap as a duplicate.
+    if (ev.type === 'point') {
       const side = (ev as RacquetEvent & { side?: string }).side;
       const recent = events.value.find((e) => {
-        if (e.type !== "point") return false;
+        if (e.type !== 'point') return false;
         if ((e as RacquetEvent & { side?: string }).side !== side) return false;
-        return ev.ts - (e.ts ?? 0) < POINT_DEDUP_WINDOW_MS;
+        return Math.abs(ev.ts - (e.ts ?? 0)) < POINT_DEDUP_WINDOW_MS;
       });
       if (recent) {
         console.warn(
-          "[useEvents] dropping duplicate point within",
+          '[useEvents] dropping duplicate point within',
           POINT_DEDUP_WINDOW_MS,
-          "ms",
-          { kept: recent.id, dropped: ev.id },
+          'ms',
+          {
+            kept: recent.id,
+            dropped: ev.id,
+          }
         );
         return recent;
       }
@@ -283,13 +376,12 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
     // so passive viewers (venue TV, scoreboard, overlay) stay out of the list.
     void markScored(matchId.value);
     reportPending();
-    channel?.postMessage({ type: "append", event: ev });
+    channel?.postMessage({ type: 'append', event: ev });
 
     // Fire-and-forget push. On failure the event stays in the pending queue
     // and the retry tick will catch it.
     (async () => {
-      const ok = await pushEvent(ev);
-      if (ok) markRemote(ev.id);
+      if ((await pushEvent(ev)) === 'ok') markRemote(ev.id);
     })();
 
     return ev;
@@ -304,7 +396,11 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
     const plain = JSON.parse(JSON.stringify(next)) as RacquetEvent[];
     events.value = [...plain].sort(sortById);
     void persist();
-    channel?.postMessage({ type: "replace", events: plain });
+    // Tombstone before broadcasting/deleting so nothing can re-merge the
+    // removed ids in the meantime; sibling tabs tombstone via the message.
+    addTombstones(removed);
+    for (const id of removed) pendingDeletes.add(id);
+    channel?.postMessage({ type: 'replace', events: plain, removed });
 
     // Drop removed events from the confirmed-remote set so pending stays
     // accurate even if the Supabase delete races.
@@ -312,24 +408,8 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
     reportPending();
 
     // Propagate deletions to Supabase so cross-device viewers see the undo.
-    if (removed.length) {
-      (async () => {
-        if (writeToken?.value) {
-          const { error } = await supabase.rpc("delete_events_with_token", {
-            p_match_id: matchId.value,
-            p_token: writeToken.value,
-            p_event_ids: removed,
-          });
-          if (error) console.warn("[useEvents] rpc delete failed", error);
-          return;
-        }
-        const { error } = await supabase
-          .from("events")
-          .delete()
-          .in("id", removed);
-        if (error) console.warn("[useEvents] event delete failed", error);
-      })();
-    }
+    // On failure the ids stay in pendingDeletes and reconcile retries.
+    void deleteRemote(removed);
   };
 
   const clear = () => replace([]);
@@ -348,11 +428,11 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
     realtimeChannel = supabase
       .channel(`match:${matchId.value}:${channelSuffix}`)
       .on(
-        "postgres_changes",
+        'postgres_changes',
         {
-          event: "INSERT",
-          schema: "public",
-          table: "events",
+          event: 'INSERT',
+          schema: 'public',
+          table: 'events',
           filter: `match_id=eq.${matchId.value}`,
         },
         (payload) => {
@@ -360,32 +440,33 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
           const ev = fromRow(row);
           upsertLocal(ev);
           markRemote(ev.id);
-        },
+        }
       )
       .on(
-        "postgres_changes",
+        'postgres_changes',
         {
-          event: "DELETE",
-          schema: "public",
-          table: "events",
+          event: 'DELETE',
+          schema: 'public',
+          table: 'events',
           filter: `match_id=eq.${matchId.value}`,
         },
         (payload) => {
           const row = payload.old as { id?: string };
           if (row?.id) removeLocal(row.id);
-        },
+        }
       )
       .subscribe();
   };
 
   const subscribeBroadcast = () => {
     channel?.close();
-    if (typeof window === "undefined") return;
+    if (typeof window === 'undefined') return;
     channel = new BroadcastChannel(`sb-match-${matchId.value}`);
     channel.onmessage = (msg) => {
-      if (msg.data?.type === "append") {
+      if (msg.data?.type === 'append') {
         upsertLocal(msg.data.event);
-      } else if (msg.data?.type === "replace") {
+      } else if (msg.data?.type === 'replace') {
+        addTombstones((msg.data.removed as string[] | undefined) ?? []);
         events.value = [...(msg.data.events as RacquetEvent[])].sort(sortById);
         void persist();
       }
@@ -395,10 +476,11 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
   const startRetryLoop = () => {
     if (retryTimer) return;
     retryTimer = setInterval(() => {
-      // Only reconcile when there's something to push. Saves a SELECT every
-      // 10s while the user is just spectating.
+      // Only reconcile when there's something to push or a delete to confirm.
+      // Saves a SELECT every 10s while the user is just spectating.
       const hasPending =
         events.value.some((e) => !remoteIds.value.has(e.id)) ||
+        pendingDeletes.size > 0 ||
         !remoteIds.value.size;
       if (hasPending) void reconcile();
     }, SYNC_RETRY_INTERVAL_MS);
@@ -412,9 +494,19 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
   };
 
   const init = async () => {
-    if (typeof window === "undefined") return;
-    // 1. Hydrate from IDB immediately (await — but cheap, single key read).
-    events.value = (await readEvents(matchId.value)).sort(sortById);
+    if (typeof window === 'undefined') return;
+    const gen = ++generation;
+    const mid = matchId.value;
+    // 1. Hydrate from IDB immediately (await — but cheap, two key reads).
+    const [storedEvents, storedTombstones] = await Promise.all([
+      readEvents(mid),
+      readTombstones(mid),
+    ]);
+    if (gen !== generation) return;
+    tombstones.value = new Set(storedTombstones);
+    events.value = storedEvents
+      .filter((e) => !tombstones.value.has(e.id))
+      .sort(sortById);
     // Don't reportPending here — remoteIds is empty so the count would be
     // misleadingly high until reconcile confirms what's actually in Supabase.
     // 2. Wire same-device cross-tab sync.
@@ -423,6 +515,7 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
     subscribeRealtime();
     // 4. Reconcile with Supabase (pull + push).
     await reconcile();
+    if (gen !== generation) return;
     // Mark loaded *after* reconcile so consumers gating on "is the match
     // actually fresh?" only run their logic once we've heard from Supabase.
     loaded.value = true;
@@ -440,6 +533,7 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
   });
 
   onUnmounted(() => {
+    generation++;
     channel?.close();
     channel = null;
     if (realtimeChannel) {
@@ -457,6 +551,14 @@ export function useEvents(matchId: Ref<string>, opts: UseEventsOptions = {}) {
   // Re-init on matchId change.
   watch(matchId, (next, prev) => {
     if (prev) setPending(prev, 0);
+    // Clear state synchronously — an in-flight reconcile or retry tick must
+    // never see the old match's events paired with the new matchId (it would
+    // push them under the wrong match_id). The generation bump in init()
+    // cancels those loops at their next await boundary.
+    generation++;
+    events.value = [];
+    tombstones.value = new Set();
+    pendingDeletes.clear();
     remoteIds.value = new Set();
     loaded.value = false;
     void init();

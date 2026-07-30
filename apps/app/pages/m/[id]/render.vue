@@ -6,26 +6,27 @@
 // finished. The /m/[id] hub only surfaces the entry point once state.matchOver
 // is true.
 
-import { ref, computed, nextTick, onMounted, watch } from "vue";
-import { ArrowLeft, Download, Film, Upload } from "lucide-vue-next";
-import { domToCanvas } from "modern-screenshot";
-import { getTheme } from "@sb/themes";
-import { Button } from "@sb/layer-ui/components/ui/button";
-import { Progress } from "@sb/layer-ui/components/ui/progress";
-import AppLogo from "~/components/common/AppLogo.vue";
-import ThemeToggle from "~/components/common/ThemeToggle.vue";
-import { useRolePermissions } from "~/composables/useRolePermissions";
+import { Button } from '@sb/layer-ui/components/ui/button';
+import { Progress } from '@sb/layer-ui/components/ui/progress';
+import { getErrorMessage } from '@sb/shared/errors';
+import { getTheme } from '@sb/themes';
+import { ArrowLeft, Download, Film, Upload } from 'lucide-vue-next';
+import { domToCanvas } from 'modern-screenshot';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { toast } from 'vue-sonner';
+import AppLogo from '~/components/common/AppLogo.vue';
+import ThemeToggle from '~/components/common/ThemeToggle.vue';
+import { useRolePermissions } from '~/composables/useRolePermissions';
 import {
-  useVideoRenderWebCodecs,
   type OverlaySnapshot,
-} from "~/composables/useVideoRenderWebCodecs";
-import { toast } from "vue-sonner";
+  useVideoRenderWebCodecs,
+} from '~/composables/useVideoRenderWebCodecs';
 
 definePageMeta({ layout: false });
-useSeoMeta({ title: "Render · Scoreboard" });
+useSeoMeta({ title: 'Render · Scoreboard' });
 
 const route = useRoute();
-const matchId = computed(() => String(route.params.id ?? ""));
+const matchId = computed(() => String(route.params.id ?? ''));
 
 // Admin-only for now — BETA, browser-dependent, compute-heavy. Future broader
 // access lines up with E2.10 (post-production burn-in) in the roadmap.
@@ -74,16 +75,16 @@ const firstPointPerGame = computed<((typeof events.value)[number] | null)[]>(
     let currentGame = 0;
     let needFirstPoint = true;
     for (const ev of events.value) {
-      if (ev.type === "point" && needFirstPoint) {
+      if (ev.type === 'point' && needFirstPoint) {
         result[currentGame] = ev;
         needFirstPoint = false;
-      } else if (ev.type === "game.end") {
+      } else if (ev.type === 'game.end') {
         currentGame += 1;
         needFirstPoint = true;
       }
     }
     return result;
-  },
+  }
 );
 
 const totalGames = computed(() => firstPointPerGame.value.length);
@@ -97,15 +98,14 @@ const { state, config, loaded, events } = useReplayState(matchId, replayTimeMs);
 // or null (no overlay updates) before any anchor is set.
 const activeAnchor = computed<Anchor | null>(() => {
   const list = Object.values(anchors.value).filter(
-    (a): a is Anchor => !!a && a.videoMs <= videoTimeMs.value,
+    (a): a is Anchor => !!a && a.videoMs <= videoTimeMs.value
   );
   if (list.length === 0) {
     // Before any anchor is reached — fall back to whichever anchor exists
     // (typically game 0) so the overlay still updates while user scrubs
     // backwards through the file.
     const any = Object.values(anchors.value).find(Boolean) as
-      | Anchor
-      | undefined;
+      Anchor | undefined;
     return any ?? null;
   }
   return list.reduce((latest, a) => (a.videoMs > latest.videoMs ? a : latest));
@@ -121,7 +121,7 @@ watch([videoTimeMs, activeAnchor], () => {
 // match.started_at column isn't on the critical path. As long as events
 // have loaded and we have a video mounted, sync is available.
 const canSync = computed(
-  () => loaded.value && !!videoEl.value && totalGames.value > 0,
+  () => loaded.value && !!videoEl.value && totalGames.value > 0
 );
 
 // Capture current video moment as the anchor for game `gameIndex`. The
@@ -155,7 +155,7 @@ const { render, progress, outputUrl } = useVideoRenderWebCodecs();
 // skipped from the render — at least one game must be synced.
 const eventToVideoTimeSec = (
   ev: { ts: number },
-  gameIndex: number,
+  gameIndex: number
 ): number | null => {
   const a = anchors.value[gameIndex];
   if (!a) return null;
@@ -171,11 +171,11 @@ const snapshotPlan = computed<SnapshotPlan[]>(() => {
   const plan: SnapshotPlan[] = [];
   let currentGame = 0;
   for (const ev of events.value) {
-    if (ev.type === "game.end") {
+    if (ev.type === 'game.end') {
       currentGame += 1;
       continue;
     }
-    if (ev.type !== "point" && ev.type !== "match.start") continue;
+    if (ev.type !== 'point' && ev.type !== 'match.start') continue;
     const t = eventToVideoTimeSec(ev, currentGame);
     if (t === null) continue;
     // Clamp pre-anchor events (typically `match.start`, which fires a few
@@ -189,7 +189,7 @@ const snapshotPlan = computed<SnapshotPlan[]>(() => {
 });
 
 const canRender = computed(
-  () => !!videoFile.value && snapshotPlan.value.length > 0,
+  () => !!videoFile.value && snapshotPlan.value.length > 0
 );
 
 const snapshotting = ref(false);
@@ -201,7 +201,7 @@ const snapshotProgress = ref({ done: 0, total: 0 });
 const collectOverlayBitmaps = async (): Promise<OverlaySnapshot[]> => {
   const overlay = overlayEl.value;
   const video = videoEl.value;
-  if (!overlay || !video) throw new Error("overlay or video not mounted");
+  if (!overlay || !video) throw new Error('overlay or video not mounted');
 
   const overlayRect = overlay.getBoundingClientRect();
   const videoW = video.videoWidth || overlayRect.width;
@@ -235,19 +235,19 @@ const onRender = async () => {
       videoBlob: videoFile.value,
       overlaySnapshots: bitmaps,
     });
-    toast.success("Render complete");
+    toast.success('Render complete');
   } catch (err) {
     snapshotting.value = false;
-    console.warn("[render] failed", err);
-    toast.error(`Render failed: ${(err as Error).message}`);
+    console.warn('[render] failed', err);
+    toast.error(`Render failed: ${getErrorMessage(err)}`);
   }
 };
 
 const downloadOutput = () => {
   if (!outputUrl.value || !videoFile.value) return;
-  const a = document.createElement("a");
+  const a = document.createElement('a');
   a.href = outputUrl.value;
-  a.download = videoFile.value.name.replace(/\.[^.]+$/, "") + "-overlay.mp4";
+  a.download = `${videoFile.value.name.replace(/\.[^.]+$/, '')}-overlay.mp4`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -257,14 +257,14 @@ const formatTime = (ms: number) => {
   const total = Math.round(ms / 1000);
   const m = Math.floor(total / 60);
   const s = total % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
 };
 
 // Theme — reuse the overlay theme the operator chose for this match.
 const { overlay: overlayTheme } = useThemeChoice(matchId);
 const { teamNames, meta: matchMeta } = useMatchMeta(matchId);
 const themeEntry = computed(() =>
-  getTheme(overlayTheme.value || "broadcast-classic", "overlay"),
+  getTheme(overlayTheme.value || 'broadcast-classic', 'overlay')
 );
 const meta = computed(() => ({
   sportLabel: matchMeta.value.eventName?.trim().toUpperCase() || undefined,
@@ -397,7 +397,7 @@ const meta = computed(() => ({
                 :variant="anchors[i] ? 'outline' : 'default'"
                 @click="syncGame(i)"
               >
-                {{ anchors[i] ? "Re-sync here" : "Sync here" }}
+                {{ anchors[i] ? 'Re-sync here' : 'Sync here' }}
               </Button>
               <div class="text-xs font-mono text-fg-subtle flex-1">
                 <template v-if="anchors[i]">
@@ -437,7 +437,7 @@ const meta = computed(() => ({
             </Button>
             <span class="text-xs text-fg-muted">
               {{ snapshotPlan.length }}
-              event{{ snapshotPlan.length === 1 ? "" : "s" }} will be drawn.
+              event{{ snapshotPlan.length === 1 ? '' : 's' }} will be drawn.
               Sync at least one game above; games without a sync row are
               skipped.
             </span>

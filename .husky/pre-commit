@@ -7,3 +7,6 @@ if git diff --cached --name-only | grep -q "^apps/app/"; then
   pnpm run release
   git add apps/app/package.json
 fi
+
+# Format staged files + regenerate Supabase types when migrations change
+pnpm exec lint-staged

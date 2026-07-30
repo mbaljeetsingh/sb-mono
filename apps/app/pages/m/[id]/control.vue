@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { onLongPress, useStorage, useVibrate, useWakeLock } from "@vueuse/core";
+import {
+  type RacquetEvent,
+  type SideId,
+  applyRacquetUndo,
+  reduceRacquet,
+} from '@sb/engine';
+import { Button } from '@sb/layer-ui/components/ui/button';
+import { onLongPress, useStorage, useVibrate, useWakeLock } from '@vueuse/core';
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -9,29 +15,23 @@ import {
   MoreHorizontal,
   Rows3,
   Undo2,
-} from "lucide-vue-next";
-import {
-  type RacquetEvent,
-  type SideId,
-  applyRacquetUndo,
-  reduceRacquet,
-} from "@sb/engine";
-import { toast } from "vue-sonner";
-import { Button } from "@sb/layer-ui/components/ui/button";
-import AppLogo from "~/components/common/AppLogo.vue";
-import ThemeToggle from "~/components/common/ThemeToggle.vue";
-import TeamRow from "~/components/control/TeamRow.vue";
-import MatchStateSheet from "~/components/control/MatchStateSheet.vue";
-import FormatSheet from "~/components/control/FormatSheet.vue";
-import ScoreCorrectSheet from "~/components/control/ScoreCorrectSheet.vue";
-import GameOverModal from "~/components/control/GameOverModal.vue";
-import MatchOverModal from "~/components/control/MatchOverModal.vue";
-import TossSheet from "~/components/control/TossSheet.vue";
+} from 'lucide-vue-next';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { toast } from 'vue-sonner';
+import AppLogo from '~/components/common/AppLogo.vue';
+import ThemeToggle from '~/components/common/ThemeToggle.vue';
+import FormatSheet from '~/components/control/FormatSheet.vue';
+import GameOverModal from '~/components/control/GameOverModal.vue';
+import MatchOverModal from '~/components/control/MatchOverModal.vue';
+import MatchStateSheet from '~/components/control/MatchStateSheet.vue';
+import ScoreCorrectSheet from '~/components/control/ScoreCorrectSheet.vue';
+import TeamRow from '~/components/control/TeamRow.vue';
+import TossSheet from '~/components/control/TossSheet.vue';
 
 definePageMeta({ layout: false });
 
 const route = useRoute();
-const matchId = computed(() => String(route.params.id ?? ""));
+const matchId = computed(() => String(route.params.id ?? ''));
 
 // Resolve who can score here: owner, anon-match-anyone, or token holder.
 // Token-only access routes writes through SECURITY DEFINER RPCs that
@@ -56,8 +56,8 @@ watch([accessLoaded, canScore], ([l, ok]) => {
   // The match was deleted while we were here — the scoreboard view would be
   // an empty shell, so send the user somewhere meaningful instead.
   if (matchDeleted.value) {
-    toast.error("This match was deleted.");
-    navigateTo("/", { replace: true });
+    toast.error('This match was deleted.');
+    navigateTo('/', { replace: true });
     return;
   }
   toast.error("You don't have permission to score this match.");
@@ -93,8 +93,8 @@ const {
 
 const teamMeta = computed(() => ({
   isDoubles: matchMeta.value.isDoubles ?? false,
-  teamNames: matchMeta.value.teamNames ?? { a: "", b: "" },
-  players: matchMeta.value.players ?? { a1: "", a2: "", b1: "", b2: "" },
+  teamNames: matchMeta.value.teamNames ?? { a: '', b: '' },
+  players: matchMeta.value.players ?? { a1: '', a2: '', b1: '', b2: '' },
 }));
 
 const state = computed(() => reduceRacquet(events.value, config.value));
@@ -114,11 +114,11 @@ watch(
   async (isOver, wasOver) => {
     if (isOver === wasOver) return;
     const { error } = await supabaseClient
-      .from("matches")
+      .from('matches')
       .update({ ended_at: isOver ? new Date().toISOString() : null })
-      .eq("id", matchId.value);
-    if (error) console.warn("[control] sync ended_at failed", error);
-  },
+      .eq('id', matchId.value);
+    if (error) console.warn('[control] sync ended_at failed', error);
+  }
 );
 
 // Seed the match.start event only when this device is the *first* one to
@@ -134,10 +134,10 @@ watch(
 const maybeSeedMatchStart = () => {
   if (!canScore.value || events.value.length !== 0) return;
   append({
-    type: "match.start",
-    serverSide: "A",
-    serverCourt: "right",
-  } as Omit<RacquetEvent, "id" | "ts">);
+    type: 'match.start',
+    serverSide: 'A',
+    serverCourt: 'right',
+  } as Omit<RacquetEvent, 'id' | 'ts'>);
 };
 
 watch(
@@ -145,7 +145,7 @@ watch(
   ([access, evs]) => {
     if (access && evs) maybeSeedMatchStart();
   },
-  { immediate: true },
+  { immediate: true }
 );
 
 // Pre-match toss flow. Toss is a match-level prompt, but the "has this
@@ -157,19 +157,19 @@ watch(
 // same device won't re-prompt.
 const tossSeen = ref(false);
 const refreshTossSeen = () => {
-  if (typeof localStorage === "undefined") {
+  if (typeof localStorage === 'undefined') {
     tossSeen.value = true;
     return;
   }
   tossSeen.value =
-    localStorage.getItem(`sb:toss-seen:${matchId.value}`) === "1";
+    localStorage.getItem(`sb:toss-seen:${matchId.value}`) === '1';
 };
 onMounted(refreshTossSeen);
 watch(matchId, refreshTossSeen);
 
 const markTossSeen = () => {
   try {
-    localStorage.setItem(`sb:toss-seen:${matchId.value}`, "1");
+    localStorage.setItem(`sb:toss-seen:${matchId.value}`, '1');
   } catch {
     // ignore — flag is best-effort
   }
@@ -182,23 +182,23 @@ const showToss = computed(() => {
   if (tossSeen.value) return false;
   if (!canScore.value || !isActive.value) return false;
   if (events.value.length !== 1) return false;
-  return events.value[0]?.type === "match.start";
+  return events.value[0]?.type === 'match.start';
 });
 
 const onTossCommit = (payload: {
   tossWinner: SideId;
-  choice: "serve" | "receive";
+  choice: 'serve' | 'receive';
   serverSide: SideId;
   startingServerSlot?: 1 | 2;
   startingReceiverSlot?: 1 | 2;
 }) => {
   if (matchMeta.value.isDoubles) {
-    const receivingSide: SideId = payload.serverSide === "A" ? "B" : "A";
+    const receivingSide: SideId = payload.serverSide === 'A' ? 'B' : 'A';
     const current = matchMeta.value.players ?? {
-      a1: "",
-      a2: "",
-      b1: "",
-      b2: "",
+      a1: '',
+      a2: '',
+      b1: '',
+      b2: '',
     };
     const next = { ...current };
     // Engine's initial partnerOnRight = {a:1, b:1}; serverCourt starts "right",
@@ -207,7 +207,7 @@ const onTossCommit = (payload: {
     // either role, swap that team's a1/a2 (or b1/b2) so slot 1 becomes the
     // picked starter — no engine change required.
     if (payload.startingServerSlot === 2) {
-      if (payload.serverSide === "A") {
+      if (payload.serverSide === 'A') {
         next.a1 = current.a2;
         next.a2 = current.a1;
       } else {
@@ -216,7 +216,7 @@ const onTossCommit = (payload: {
       }
     }
     if (payload.startingReceiverSlot === 2) {
-      if (receivingSide === "A") {
+      if (receivingSide === 'A') {
         next.a1 = current.a2;
         next.a2 = current.a1;
       } else {
@@ -230,12 +230,12 @@ const onTossCommit = (payload: {
   }
   replace([]);
   append({
-    type: "match.start",
+    type: 'match.start',
     serverSide: payload.serverSide,
-    serverCourt: "right",
-  } as Omit<RacquetEvent, "id" | "ts">);
+    serverCourt: 'right',
+  } as Omit<RacquetEvent, 'id' | 'ts'>);
   const serverName =
-    payload.serverSide === "A" ? displayNameA.value : displayNameB.value;
+    payload.serverSide === 'A' ? displayNameA.value : displayNameB.value;
   toast.success(`${serverName} serves first`, {
     description: 'Wrong? Tap "Change server" above the court.',
   });
@@ -246,7 +246,7 @@ const onTossSkip = () => markTossSeen();
 
 const score = (side: SideId) => {
   const last = state.value.games[state.value.games.length - 1];
-  return last ? (side === "A" ? last.a : last.b) : 0;
+  return last ? (side === 'A' ? last.a : last.b) : 0;
 };
 
 const { vibrate } = useVibrate();
@@ -271,7 +271,7 @@ const onTap = (side: SideId) => {
   if (state.value.betweenGames) return;
   if (!guardActive()) return;
   vibrate(10);
-  append({ type: "point", side } as Omit<RacquetEvent, "id" | "ts">);
+  append({ type: 'point', side } as Omit<RacquetEvent, 'id' | 'ts'>);
 };
 
 // Service-over haptic cue. Fires whenever the active server cell changes
@@ -280,7 +280,7 @@ const onTap = (side: SideId) => {
 // operator without looking. Skip the first tick so opening a page doesn't
 // buzz on initial server assignment.
 const serveSignature = computed(
-  () => `${state.value.servingSide}-${state.value.serverCourt}`,
+  () => `${state.value.servingSide}-${state.value.serverCourt}`
 );
 let serveWatchSkippedFirst = false;
 watch(serveSignature, () => {
@@ -307,10 +307,10 @@ const onReset = () => {
   sidesSwapped.value = false;
   replace([]);
   append({
-    type: "match.start",
-    serverSide: "A",
-    serverCourt: "right",
-  } as Omit<RacquetEvent, "id" | "ts">);
+    type: 'match.start',
+    serverSide: 'A',
+    serverCourt: 'right',
+  } as Omit<RacquetEvent, 'id' | 'ts'>);
 };
 
 // Reset just the current game's score (mistake recovery without losing
@@ -322,11 +322,11 @@ const onResetCurrentGame = () => {
   if (!guardActive()) return;
   vibrate(20);
   append({
-    type: "score.correct",
+    type: 'score.correct',
     games: [...games.slice(0, -1), { a: 0, b: 0 }],
     gamesWon: state.value.gamesWon,
-    reason: "Reset current game",
-  } as Omit<RacquetEvent, "id" | "ts">);
+    reason: 'Reset current game',
+  } as Omit<RacquetEvent, 'id' | 'ts'>);
 };
 
 // Between-games dialog: explicit transition into the next game. Engine
@@ -336,14 +336,14 @@ const onResetCurrentGame = () => {
 const onStartNextGame = () => {
   if (!guardActive()) return;
   vibrate(10);
-  append({ type: "game.end" } as Omit<RacquetEvent, "id" | "ts">);
+  append({ type: 'game.end' } as Omit<RacquetEvent, 'id' | 'ts'>);
 };
 
 // Pre-rally swaps. Only valid before the first point — once a rally is
 // scored, server identity is derived from the event log so we shouldn't
 // rewrite history.
 const canSwapInitial = computed(
-  () => events.value.length === 1 && events.value[0]?.type === "match.start",
+  () => events.value.length === 1 && events.value[0]?.type === 'match.start'
 );
 
 // Sides swap: mirrors the entire pre-match setup. Flips which screen edge
@@ -351,7 +351,7 @@ const canSwapInitial = computed(
 // backwards). Replaces match.start so the log stays clean.
 const sidesSwapped = useStorage<boolean>(
   computed(() => `sb:control-sides-swapped:${matchId.value}`),
-  false,
+  false
 );
 // Visual-only ends swap. Used in GameOverModal between games and as the
 // post-rally swap action — engine state untouched, only `sidesSwapped`
@@ -371,15 +371,15 @@ const swapServerOnly = () => {
   if (!canSwapInitial.value) return;
   if (!guardActive()) return;
   const first = events.value[0];
-  if (!first || first.type !== "match.start") return;
+  if (!first || first.type !== 'match.start') return;
   vibrate(10);
-  const opposite: SideId = first.serverSide === "A" ? "B" : "A";
+  const opposite: SideId = first.serverSide === 'A' ? 'B' : 'A';
   replace([]);
   append({
-    type: "match.start",
+    type: 'match.start',
     serverSide: opposite,
-    serverCourt: "right",
-  } as Omit<RacquetEvent, "id" | "ts">);
+    serverCourt: 'right',
+  } as Omit<RacquetEvent, 'id' | 'ts'>);
 };
 
 const swapSides = () => {
@@ -396,14 +396,14 @@ const swapSides = () => {
   if (isPreMatch) {
     if (!guardActive()) return;
     const first = events.value[0];
-    if (first && first.type === "match.start") {
-      const opposite: SideId = first.serverSide === "A" ? "B" : "A";
+    if (first && first.type === 'match.start') {
+      const opposite: SideId = first.serverSide === 'A' ? 'B' : 'A';
       replace([]);
       append({
-        type: "match.start",
+        type: 'match.start',
         serverSide: opposite,
-        serverCourt: "right",
-      } as Omit<RacquetEvent, "id" | "ts">);
+        serverCourt: 'right',
+      } as Omit<RacquetEvent, 'id' | 'ts'>);
     }
   }
 };
@@ -416,7 +416,7 @@ const swapSides = () => {
 const isDecidingGame = computed(
   () =>
     state.value.gamesWon.a === config.value.gamesToWin - 1 &&
-    state.value.gamesWon.b === config.value.gamesToWin - 1,
+    state.value.gamesWon.b === config.value.gamesToWin - 1
 );
 // Visible only at the interval moment in the deciding game (11 for BWF-21,
 // 8 for BWF-15 — `state.atInterval` is engine-derived from `cfg.intervalAt`
@@ -429,7 +429,7 @@ const canSwapAtDecider = computed(
     isDecidingGame.value &&
     !state.value.matchOver &&
     !state.value.betweenGames &&
-    state.value.atInterval,
+    state.value.atInterval
 );
 // Start of any in-progress game (score still 0-0) is also a valid swap
 // moment — covers operators who clicked "Start Game N" without first
@@ -439,11 +439,11 @@ const canSwapAtGameStart = computed(
     !state.value.matchOver &&
     !state.value.betweenGames &&
     lastGame.value.a === 0 &&
-    lastGame.value.b === 0,
+    lastGame.value.b === 0
 );
 const canSwapSidesVisible = computed(
   () =>
-    canSwapInitial.value || canSwapAtGameStart.value || canSwapAtDecider.value,
+    canSwapInitial.value || canSwapAtGameStart.value || canSwapAtDecider.value
 );
 
 // Per-team player swap (doubles only, pre-match). Swaps a1↔a2 (or b1↔b2)
@@ -457,15 +457,15 @@ const swapPlayers = (side: SideId) => {
   if (!isDoubles) return;
   vibrate(10);
   const current = matchMeta.value.players ?? {
-    a1: "",
-    a2: "",
-    b1: "",
-    b2: "",
+    a1: '',
+    a2: '',
+    b1: '',
+    b2: '',
   };
   matchMeta.value = {
     ...matchMeta.value,
     players:
-      side === "A"
+      side === 'A'
         ? { ...current, a1: current.a2, a2: current.a1 }
         : { ...current, b1: current.b2, b2: current.b1 },
   };
@@ -479,7 +479,7 @@ const canSwapPlayersA = computed(
   () =>
     canEditMeta.value &&
     (canSwapInitial.value || canSwapAtGameStart.value) &&
-    (matchMeta.value.isDoubles ?? false),
+    (matchMeta.value.isDoubles ?? false)
 );
 const canSwapPlayersB = canSwapPlayersA;
 
@@ -491,7 +491,7 @@ const isGlowing = computed<SideId | null>(() => {
 const lastPointWinner = computed<SideId | null>(() => {
   for (let i = events.value.length - 1; i >= 0; i--) {
     const ev = events.value[i] as { type: string; side?: SideId };
-    if (ev.type === "point") return ev.side ?? null;
+    if (ev.type === 'point') return ev.side ?? null;
   }
   return null;
 });
@@ -499,10 +499,10 @@ const lastPointWinner = computed<SideId | null>(() => {
 const games = computed(() => state.value.games);
 const gamesWon = computed(() => state.value.gamesWon);
 const lastGame = computed(
-  () => games.value[games.value.length - 1] ?? { a: 0, b: 0 },
+  () => games.value[games.value.length - 1] ?? { a: 0, b: 0 }
 );
 const lastGameWinnerName = computed(() =>
-  lastGame.value.a > lastGame.value.b ? displayNameA.value : displayNameB.value,
+  lastGame.value.a > lastGame.value.b ? displayNameA.value : displayNameB.value
 );
 const lastGameScore = computed(() => ({
   winner: Math.max(lastGame.value.a, lastGame.value.b),
@@ -510,7 +510,7 @@ const lastGameScore = computed(() => ({
 }));
 
 const headerLabel = computed(() => {
-  if (state.value.matchOver) return "Match complete";
+  if (state.value.matchOver) return 'Match complete';
   if (state.value.betweenGames)
     return `Between games · ${gamesWon.value.a}–${gamesWon.value.b}`;
   return `Game ${games.value.length} · ${presetLabel.value} · ${seriesLabel.value}`;
@@ -518,20 +518,20 @@ const headerLabel = computed(() => {
 
 // Wake-lock keeps the phone screen on during a match.
 const wakeLock = useWakeLock();
-onMounted(() => wakeLock.request("screen"));
+onMounted(() => wakeLock.request('screen'));
 onUnmounted(() => wakeLock.release());
 
 // Layout — operator picks based on where they sit relative to the court.
 //   stacked    — phone portrait, A on top / B on bottom (default).
 //   sideBySide — phone landscape (or umpire's chair), A left / B right.
-type ControlLayout = "stacked" | "sideBySide";
+type ControlLayout = 'stacked' | 'sideBySide';
 const layout = useStorage<ControlLayout>(
   computed(() => `sb:control-layout:${matchId.value}`),
-  "stacked",
+  'stacked'
 );
 
 // Sheets ────────────────────────────────────────────────────────────────────
-type SheetKind = "matchState" | "scoreCorrect" | "format" | null;
+type SheetKind = 'matchState' | 'scoreCorrect' | 'format' | null;
 const openSheet = ref<SheetKind>(null);
 const closeSheet = () => {
   openSheet.value = null;
@@ -547,37 +547,37 @@ onLongPress(
   undoBtn,
   () => {
     vibrate(15);
-    openSheet.value = "scoreCorrect";
+    openSheet.value = 'scoreCorrect';
   },
   {
     delay: 400,
     onMouseUp: (_duration, _distance, isLongPress) => {
       if (!isLongPress) onUndo();
     },
-  },
+  }
 );
 
 // Match-state actions
 const onWalkover = (winner: SideId) => {
   if (!guardActive()) return;
-  append({ type: "walkover", winner } as Omit<RacquetEvent, "id" | "ts">);
+  append({ type: 'walkover', winner } as Omit<RacquetEvent, 'id' | 'ts'>);
   closeSheet();
 };
 const onRetirement = (retiring: SideId) => {
   if (!guardActive()) return;
-  append({ type: "retirement", retiring } as Omit<RacquetEvent, "id" | "ts">);
+  append({ type: 'retirement', retiring } as Omit<RacquetEvent, 'id' | 'ts'>);
   closeSheet();
 };
-const onPenalty = (side: SideId, card: "yellow" | "red" | "black") => {
+const onPenalty = (side: SideId, card: 'yellow' | 'red' | 'black') => {
   if (!guardActive()) return;
-  append({ type: "penalty", side, card } as Omit<RacquetEvent, "id" | "ts">);
+  append({ type: 'penalty', side, card } as Omit<RacquetEvent, 'id' | 'ts'>);
   closeSheet();
 };
-const onTimeout = (side: SideId, kind: "standard" | "medical" | "injury") => {
+const onTimeout = (side: SideId, kind: 'standard' | 'medical' | 'injury') => {
   if (!guardActive()) return;
-  append({ type: "timeout.start", side, kind } as Omit<
+  append({ type: 'timeout.start', side, kind } as Omit<
     RacquetEvent,
-    "id" | "ts"
+    'id' | 'ts'
   >);
   closeSheet();
 };
@@ -585,9 +585,9 @@ const onClearTimeout = () => {
   const t = state.value.timeout;
   if (!t) return;
   if (!guardActive()) return;
-  append({ type: "timeout.end", side: t.side } as Omit<
+  append({ type: 'timeout.end', side: t.side } as Omit<
     RacquetEvent,
-    "id" | "ts"
+    'id' | 'ts'
   >);
 };
 const onResetFromSheet = () => {
@@ -605,15 +605,15 @@ const onApplyScoreCorrect = (payload: {
 }) => {
   if (!guardActive()) return;
   append({
-    type: "score.correct",
+    type: 'score.correct',
     games: payload.games,
     gamesWon: payload.gamesWon,
-  } as Omit<RacquetEvent, "id" | "ts">);
+  } as Omit<RacquetEvent, 'id' | 'ts'>);
   closeSheet();
 };
 
 const winnerName = computed(() =>
-  state.value.winner === "A" ? displayNameA.value : displayNameB.value,
+  state.value.winner === 'A' ? displayNameA.value : displayNameB.value
 );
 const goHome = () => navigateTo(`/m/${matchId.value}`);
 
@@ -622,20 +622,20 @@ const goHome = () => navigateTo(`/m/${matchId.value}`);
 // with the source id so the form pre-fills the same teams/format/court;
 // submitting creates a new match row, preserving the just-played one.
 const onRematch = () =>
-  navigateTo({ path: "/new", query: { rematch: matchId.value } });
+  navigateTo({ path: '/new', query: { rematch: matchId.value } });
 
 // Orientation prop for TeamRow: geometric edge each team occupies. Combines
 // outer layout with the visual sides-swap toggle.
-type Orientation = "top" | "bottom" | "left" | "right";
+type Orientation = 'top' | 'bottom' | 'left' | 'right';
 const orientationA = computed<Orientation>(() => {
-  if (layout.value === "sideBySide")
-    return sidesSwapped.value ? "right" : "left";
-  return sidesSwapped.value ? "bottom" : "top";
+  if (layout.value === 'sideBySide')
+    return sidesSwapped.value ? 'right' : 'left';
+  return sidesSwapped.value ? 'bottom' : 'top';
 });
 const orientationB = computed<Orientation>(() => {
-  if (layout.value === "sideBySide")
-    return sidesSwapped.value ? "left" : "right";
-  return sidesSwapped.value ? "top" : "bottom";
+  if (layout.value === 'sideBySide')
+    return sidesSwapped.value ? 'left' : 'right';
+  return sidesSwapped.value ? 'top' : 'bottom';
 });
 </script>
 
@@ -859,7 +859,7 @@ const orientationB = computed<Orientation>(() => {
           "
         >
           <ControlPill
-            aria-label="Swap sides (put the other team on the other court)"
+            ariaLabel="Swap sides (put the other team on the other court)"
             class="pointer-events-auto"
             @click="swapSides"
           >

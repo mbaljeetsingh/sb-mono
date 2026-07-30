@@ -1,30 +1,32 @@
 <script setup lang="ts">
-import { computed, ref, watchEffect, useTemplateRef } from "vue";
-import { toast } from "vue-sonner";
-import { Button } from "@sb/layer-ui/components/ui/button";
-import { Input } from "@sb/layer-ui/components/ui/input";
-import { Label } from "@sb/layer-ui/components/ui/label";
-import ProfilePhotoUpload from "~/components/common/ProfilePhotoUpload.vue";
-import { useUserStore } from "~/stores/user";
-import { useAuth } from "~/composables/useAuth";
+import { Button } from '@sb/layer-ui/components/ui/button';
+import { Input } from '@sb/layer-ui/components/ui/input';
+import { Label } from '@sb/layer-ui/components/ui/label';
+import { computed, ref, useTemplateRef, watchEffect } from 'vue';
+import { toast } from 'vue-sonner';
+// Value import — rendered in the template (don't let a lint autofix turn
+// this into `import type`; it only resolves at runtime via Nuxt auto-import).
+import ProfilePhotoUpload from '~/components/common/ProfilePhotoUpload.vue';
+import { useAuth } from '~/composables/useAuth';
+import { useUserStore } from '~/stores/user';
 
 definePageMeta({ requiresAuth: true });
-useSeoMeta({ title: "Profile", robots: "noindex, nofollow" });
+useSeoMeta({ title: 'Profile', robots: 'noindex, nofollow' });
 
 const userStore = useUserStore();
 const { updatePassword: doUpdatePassword } = useAuth();
 
-const displayName = ref("");
+const displayName = ref('');
 const avatarUrl = ref<string | null>(null);
 const isSavingProfile = ref(false);
 const profileError = ref<string | null>(null);
 
 const photoUploadRef =
-  useTemplateRef<InstanceType<typeof ProfilePhotoUpload>>("photoUpload");
+  useTemplateRef<InstanceType<typeof ProfilePhotoUpload>>('photoUpload');
 
 watchEffect(() => {
   const profile = userStore.currentUser?.profile;
-  displayName.value = profile?.display_name ?? "";
+  displayName.value = profile?.display_name ?? '';
   avatarUrl.value = profile?.avatar_url ?? null;
 });
 
@@ -32,9 +34,9 @@ const fallbackInitial = computed(() => {
   const source = (
     displayName.value ||
     userStore.currentUser?.email ||
-    "?"
+    '?'
   ).trim();
-  return (source.charAt(0) || "?").toUpperCase();
+  return (source.charAt(0) || '?').toUpperCase();
 });
 
 const saveProfile = async () => {
@@ -57,39 +59,39 @@ const saveProfile = async () => {
     });
 
     photoUploadRef.value?.reset();
-    toast.success("Profile updated");
+    toast.success('Profile updated');
   } catch (err) {
     profileError.value =
-      err instanceof Error ? err.message : "Failed to save profile";
+      err instanceof Error ? err.message : 'Failed to save profile';
   } finally {
     isSavingProfile.value = false;
   }
 };
 
-const newPassword = ref("");
-const confirmNewPassword = ref("");
+const newPassword = ref('');
+const confirmNewPassword = ref('');
 const isSavingPassword = ref(false);
 const passwordError = ref<string | null>(null);
 
 const savePassword = async () => {
   passwordError.value = null;
   if (newPassword.value !== confirmNewPassword.value) {
-    passwordError.value = "Passwords do not match";
+    passwordError.value = 'Passwords do not match';
     return;
   }
   if (newPassword.value.length < 6) {
-    passwordError.value = "Password must be at least 6 characters";
+    passwordError.value = 'Password must be at least 6 characters';
     return;
   }
   isSavingPassword.value = true;
   const result = await doUpdatePassword(newPassword.value);
   isSavingPassword.value = false;
   if (result.success) {
-    toast.success("Password updated");
-    newPassword.value = "";
-    confirmNewPassword.value = "";
+    toast.success('Password updated');
+    newPassword.value = '';
+    confirmNewPassword.value = '';
   } else {
-    passwordError.value = "Failed to update password";
+    passwordError.value = 'Failed to update password';
   }
 };
 </script>
@@ -101,7 +103,7 @@ const savePassword = async () => {
         {{ displayName || userStore.currentUser?.email }}
       </h1>
       <p class="text-sm text-muted-foreground">
-        Role: <span class="font-medium">{{ userStore.userRole ?? "—" }}</span>
+        Role: <span class="font-medium">{{ userStore.userRole ?? '—' }}</span>
       </p>
     </header>
 
@@ -139,7 +141,7 @@ const savePassword = async () => {
         </p>
 
         <Button type="submit" :disabled="isSavingProfile">
-          {{ isSavingProfile ? "Saving..." : "Save profile" }}
+          {{ isSavingProfile ? 'Saving...' : 'Save profile' }}
         </Button>
       </form>
     </section>
@@ -176,7 +178,7 @@ const savePassword = async () => {
           {{ passwordError }}
         </p>
         <Button type="submit" :disabled="isSavingPassword">
-          {{ isSavingPassword ? "Updating..." : "Update password" }}
+          {{ isSavingPassword ? 'Updating...' : 'Update password' }}
         </Button>
       </form>
     </section>

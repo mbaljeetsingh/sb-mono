@@ -1,4 +1,4 @@
-import { ref, computed, onUnmounted } from 'vue';
+import { computed, onUnmounted, ref } from 'vue';
 import { useSupabaseClient } from '#imports';
 
 /**
@@ -25,7 +25,7 @@ export const formatBytes = (
     size !== undefined
       ? sizes.indexOf(size)
       : Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  return `${Number.parseFloat((bytes / k ** i).toFixed(dm))} ${sizes[i]}`;
 };
 
 export interface FileWithPreview extends File {
@@ -120,7 +120,13 @@ export function useSupabaseUpload(options: UseSupabaseUploadOptions) {
   /**
    * Handle dropped or selected files
    */
-  const onDrop = (acceptedFiles: File[], rejectedFiles: any[] = []) => {
+  const onDrop = (
+    acceptedFiles: File[],
+    rejectedFiles: {
+      file: File;
+      errors?: { code: string; message: string }[];
+    }[] = []
+  ) => {
     // Filter out duplicates
     const existingNames = new Set(files.value.map((f) => f.name));
 
@@ -146,8 +152,8 @@ export function useSupabaseUpload(options: UseSupabaseUploadOptions) {
     // Check for too-many-files error
     const newFiles = [...files.value, ...validFiles, ...invalidFiles];
     if (newFiles.length > maxFiles) {
-      newFiles.forEach((file) => {
-        if (!file.errors.some((e: any) => e.code === 'too-many-files')) {
+      for (const file of newFiles) {
+        if (!file.errors.some((e) => e.code === 'too-many-files')) {
           file.errors = [
             ...file.errors,
             {
@@ -156,7 +162,7 @@ export function useSupabaseUpload(options: UseSupabaseUploadOptions) {
             },
           ];
         }
-      });
+      }
     }
 
     files.value = newFiles;
@@ -167,11 +173,11 @@ export function useSupabaseUpload(options: UseSupabaseUploadOptions) {
    */
   const setFiles = (newFiles: FileWithPreview[]) => {
     // Clean up old previews
-    files.value.forEach((file) => {
+    for (const file of files.value) {
       if (file.preview) {
         URL.revokeObjectURL(file.preview);
       }
-    });
+    }
 
     files.value = newFiles;
 
@@ -333,11 +339,11 @@ export function useSupabaseUpload(options: UseSupabaseUploadOptions) {
 
   // Cleanup preview URLs on unmount
   onUnmounted(() => {
-    files.value.forEach((file) => {
+    for (const file of files.value) {
       if (file.preview) {
         URL.revokeObjectURL(file.preview);
       }
-    });
+    }
   });
 
   return {

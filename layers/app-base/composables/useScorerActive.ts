@@ -17,15 +17,15 @@
 // event RPCs; the `claim_scoring` RPC re-checks the token (and rejects
 // after match end) so a stale invite can't reclaim scoring.
 
-import { computed, onMounted, onUnmounted, ref, watch, type Ref } from "vue";
-import { ulid } from "ulid";
+import { ulid } from 'ulid';
+import { type Ref, computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
-const DEVICE_ID_KEY = "sb:device-id";
+const DEVICE_ID_KEY = 'sb:device-id';
 // Match `useEvents.getDeviceId` so a tap registers the same device id the
 // trigger then stamps onto the row. If these ever diverge, a single device
 // would look like two and break the lock.
 const getDeviceId = (): string => {
-  if (typeof localStorage === "undefined") return "ssr";
+  if (typeof localStorage === 'undefined') return 'ssr';
   let id = localStorage.getItem(DEVICE_ID_KEY);
   if (!id) {
     id = ulid();
@@ -36,13 +36,13 @@ const getDeviceId = (): string => {
 
 export function useScorerActive(
   matchId: Ref<string>,
-  opts: { writeToken?: Ref<string | null> } = {},
+  opts: { writeToken?: Ref<string | null> } = {}
 ) {
   const supabase = useSupabaseClient();
   const writeToken = opts.writeToken;
 
   // Resolved on mount because localStorage is unavailable during SSR.
-  const myDeviceId = ref<string>("");
+  const myDeviceId = ref<string>('');
   const activeDeviceId = ref<string | null>(null);
   const activeAt = ref<string | null>(null);
 
@@ -50,12 +50,12 @@ export function useScorerActive(
     const id = matchId.value;
     if (!id) return;
     const { data, error } = await supabase
-      .from("matches")
-      .select("active_scorer_device_id, active_scorer_at")
-      .eq("id", id)
+      .from('matches')
+      .select('active_scorer_device_id, active_scorer_at')
+      .eq('id', id)
       .maybeSingle();
     if (error) {
-      console.warn("[useScorerActive] fetch failed", error);
+      console.warn('[useScorerActive] fetch failed', error);
       return;
     }
     const row = data as {
@@ -84,25 +84,25 @@ export function useScorerActive(
     channel = supabase
       .channel(`scorer-active:${id}:${Math.random().toString(36).slice(2, 8)}`)
       .on(
-        "postgres_changes",
+        'postgres_changes',
         {
-          event: "UPDATE",
-          schema: "public",
-          table: "matches",
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'matches',
           filter: `id=eq.${id}`,
         },
-        (payload) => apply(payload.new as Parameters<typeof apply>[0]),
+        (payload) => apply(payload.new as Parameters<typeof apply>[0])
       )
       // INSERT in case the matches row is created lazily after we mount.
       .on(
-        "postgres_changes",
+        'postgres_changes',
         {
-          event: "INSERT",
-          schema: "public",
-          table: "matches",
+          event: 'INSERT',
+          schema: 'public',
+          table: 'matches',
           filter: `id=eq.${id}`,
         },
-        (payload) => apply(payload.new as Parameters<typeof apply>[0]),
+        (payload) => apply(payload.new as Parameters<typeof apply>[0])
       )
       .subscribe();
   };
@@ -134,13 +134,14 @@ export function useScorerActive(
 
   const claim = async () => {
     if (!myDeviceId.value) return false;
-    const { error } = await supabase.rpc("claim_scoring", {
+    const { error } = await supabase.rpc('claim_scoring', {
       p_match_id: matchId.value,
       p_device_id: myDeviceId.value,
-      p_token: writeToken?.value ?? null,
+      // Generated RPC types model the SQL default as optional, not nullable.
+      p_token: writeToken?.value ?? undefined,
     });
     if (error) {
-      console.warn("[useScorerActive] claim failed", error);
+      console.warn('[useScorerActive] claim failed', error);
       return false;
     }
     // Optimistic local flip; realtime UPDATE will reconcile shortly.

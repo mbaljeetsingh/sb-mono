@@ -1,31 +1,13 @@
-import { useRuntimeConfig } from "#imports";
+// PostHog access for app code. The client is initialized in exactly one
+// place — plugins/posthog.client.ts — which calls setPostHog() after init.
+// Everything else goes through trackEvent()/getPostHog(); both no-op safely
+// when analytics is disabled (localhost, missing key).
+import type posthogJs from 'posthog-js';
 
-let posthogInstance: typeof import("posthog-js").default | null = null;
+let posthogInstance: typeof posthogJs | null = null;
 
-export async function initPostHog() {
-  if (import.meta.server) return;
-  const config = useRuntimeConfig();
-  const posthogKey = config.public.posthogKey as string;
-
-  if (
-    !posthogKey ||
-    window.location.href.includes("localhost") ||
-    window.location.href.includes("127.0.0.1")
-  ) {
-    return;
-  }
-
-  const posthog = (await import("posthog-js")).default;
-
-  posthog.init(posthogKey, {
-    api_host: "https://us.i.posthog.com",
-    person_profiles: "identified_only",
-    capture_pageview: false,
-    capture_pageleave: true,
-    autocapture: true,
-  });
-
-  posthogInstance = posthog;
+export function setPostHog(instance: typeof posthogJs) {
+  posthogInstance = instance;
 }
 
 export function getPostHog() {
@@ -34,7 +16,7 @@ export function getPostHog() {
 
 export function trackEvent(
   event: string,
-  properties?: Record<string, unknown>,
+  properties?: Record<string, unknown>
 ) {
   getPostHog()?.capture(event, properties);
 }

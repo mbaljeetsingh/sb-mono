@@ -5,20 +5,25 @@
 // `useEvents` needs imperative read/write coordinated with Supabase + the
 // BroadcastChannel, plus `keys()` for enumeration in `localMatches.ts`.
 
-import type { RacquetEvent } from "@sb/engine";
-import { del, entries, get, keys, set } from "idb-keyval";
+import type { RacquetEvent } from '@sb/engine';
+import { del, entries, get, keys, set } from 'idb-keyval';
 
-const PREFIX = "sb:events:";
+const PREFIX = 'sb:events:';
 // Distinct from sb:events:* — set only when THIS device authored at least one
 // event for the match (via `useEvents.append`). Read-only / passive surfaces
 // (venue TV, scoreboard, overlay) still populate sb:events via realtime, but
 // never set this flag. The /matches list and claim-on-login both read this
 // scoped view, so viewing-only devices don't pollute their match list.
-const SCORED_PREFIX = "sb:scored:";
+const SCORED_PREFIX = 'sb:scored:';
+// Event ids this device deleted (undo). Reconcile must never resurrect these
+// from a remote fetch, and must retry the remote delete until it lands.
+const TOMBSTONE_PREFIX = 'sb:tombstones:';
 
 export const eventKey = (matchId: string): string => `${PREFIX}${matchId}`;
 export const scoredKey = (matchId: string): string =>
   `${SCORED_PREFIX}${matchId}`;
+export const tombstoneKey = (matchId: string): string =>
+  `${TOMBSTONE_PREFIX}${matchId}`;
 
 export const readEvents = async (matchId: string): Promise<RacquetEvent[]> => {
   return (await get<RacquetEvent[]>(eventKey(matchId))) ?? [];
@@ -26,7 +31,7 @@ export const readEvents = async (matchId: string): Promise<RacquetEvent[]> => {
 
 export const writeEvents = async (
   matchId: string,
-  events: RacquetEvent[],
+  events: RacquetEvent[]
 ): Promise<void> => {
   // JSON round-trip strips Vue reactive proxies — IDB's structured clone
   // algorithm can't serialize them.
@@ -36,6 +41,18 @@ export const writeEvents = async (
 export const deleteEvents = async (matchId: string): Promise<void> => {
   await del(eventKey(matchId));
   await del(scoredKey(matchId));
+  await del(tombstoneKey(matchId));
+};
+
+export const readTombstones = async (matchId: string): Promise<string[]> => {
+  return (await get<string[]>(tombstoneKey(matchId))) ?? [];
+};
+
+export const writeTombstones = async (
+  matchId: string,
+  ids: string[]
+): Promise<void> => {
+  await set(tombstoneKey(matchId), ids);
 };
 
 // Mark this match as scored on this device. Called from `useEvents.append`
@@ -50,7 +67,7 @@ export const listLocalMatchIds = async (): Promise<string[]> => {
   const ks = await keys();
   const ids: string[] = [];
   for (const k of ks) {
-    if (typeof k === "string" && k.startsWith(PREFIX)) {
+    if (typeof k === 'string' && k.startsWith(PREFIX)) {
       ids.push(k.slice(PREFIX.length));
     }
   }
@@ -64,7 +81,7 @@ export const listScoredMatchIds = async (): Promise<string[]> => {
   const ks = await keys();
   const ids: string[] = [];
   for (const k of ks) {
-    if (typeof k === "string" && k.startsWith(SCORED_PREFIX)) {
+    if (typeof k === 'string' && k.startsWith(SCORED_PREFIX)) {
       ids.push(k.slice(SCORED_PREFIX.length));
     }
   }
@@ -79,7 +96,7 @@ export const debugAllEvents = async (): Promise<
   const all = await entries<string, RacquetEvent[]>();
   const out: Record<string, RacquetEvent[]> = {};
   for (const [k, v] of all) {
-    if (typeof k === "string" && k.startsWith(PREFIX)) {
+    if (typeof k === 'string' && k.startsWith(PREFIX)) {
       out[k.slice(PREFIX.length)] = v;
     }
   }

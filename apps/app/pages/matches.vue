@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, useTemplateRef, watch } from "vue";
-import { useInfiniteScroll } from "@vueuse/core";
-import { Button } from "@sb/layer-ui/components/ui/button";
-import MatchListItem from "~/components/match/MatchListItem.vue";
-import { useUserStore } from "~/stores/user";
-import { collectLocalMatchIds } from "~/lib/localMatches";
+import { Button } from '@sb/layer-ui/components/ui/button';
+import { useInfiniteScroll } from '@vueuse/core';
+import { Plus } from 'lucide-vue-next';
+import { computed, onUnmounted, ref, useTemplateRef, watch } from 'vue';
+import MatchListItem from '~/components/match/MatchListItem.vue';
+import { collectLocalMatchIds } from '~/lib/localMatches';
+import { type MatchSummary, fetchMatchSummaries } from '~/lib/matchSummaries';
+import { useUserStore } from '~/stores/user';
 
-useSeoMeta({ title: "Matches · Scoreboard" });
+useSeoMeta({ title: 'Matches · Scoreboard' });
 
 type MatchRow = {
   id: string;
@@ -17,13 +19,14 @@ type MatchRow = {
   event_name: string | null;
   court_label: string | null;
   updated_at: string;
+  ended_at: string | null;
 };
 
 const PAGE_SIZE = 20;
 
 const supabase = useSupabaseClient();
 const userStore = useUserStore();
-const ownerId = computed(() => userStore.currentUser?.id ?? "");
+const ownerId = computed(() => userStore.currentUser?.id ?? '');
 const isAuthed = computed(() => userStore.isAuthenticated);
 
 const matches = ref<MatchRow[]>([]);
@@ -31,18 +34,77 @@ const loading = ref(false);
 const done = ref(false);
 const error = ref<string | null>(null);
 
+// Status + scoreline per match id, filled in after each page of rows lands.
+// Rows render immediately; badges/scores pop in when the batch resolves.
+const summaries = ref<Map<string, MatchSummary>>(new Map());
+const loadSummaries = async (rows: MatchRow[]) => {
+  if (!rows.length) return;
+  const batch = await fetchMatchSummaries(supabase, rows);
+  if (!batch.size) return;
+  summaries.value = new Map([...summaries.value, ...batch]);
+};
+
+// Keep the LIVE rows honest: one Realtime channel for all listed matches —
+// a new point (events INSERT) re-summarizes just that match; an undo
+// (events DELETE) re-summarizes every listed match, because Supabase
+// Realtime can't filter DELETEs (old record only carries the PK) and undo
+// is rare enough that a single batched refetch is fine.
+let summariesChannel: ReturnType<typeof supabase.channel> | null = null;
+const channelSuffix = Math.random().toString(36).slice(2, 10);
+
+const refreshSummary = (matchId: string | undefined) => {
+  if (!matchId) return;
+  const row = matches.value.find((m) => m.id === matchId);
+  if (row) void loadSummaries([row]);
+};
+
+const subscribeSummaries = () => {
+  if (summariesChannel) {
+    supabase.removeChannel(summariesChannel);
+    summariesChannel = null;
+  }
+  const ids = matches.value.map((m) => m.id);
+  if (!ids.length) return;
+  summariesChannel = supabase
+    .channel(`match-summaries:${channelSuffix}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'events',
+        filter: `match_id=in.(${ids.join(',')})`,
+      },
+      (payload) =>
+        refreshSummary((payload.new as { match_id?: string }).match_id)
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'events' },
+      () => void loadSummaries(matches.value)
+    )
+    .subscribe();
+};
+
+onUnmounted(() => {
+  if (summariesChannel) {
+    supabase.removeChannel(summariesChannel);
+    summariesChannel = null;
+  }
+});
+
 const loadRemote = async () => {
   if (loading.value || done.value || !ownerId.value) return;
   loading.value = true;
   const from = matches.value.length;
   const to = from + PAGE_SIZE - 1;
   const { data, error: err } = await supabase
-    .from("matches")
+    .from('matches')
     .select(
-      "id, sport_preset, config, team_name_a, team_name_b, event_name, court_label, updated_at",
+      'id, sport_preset, config, team_name_a, team_name_b, event_name, court_label, updated_at, ended_at'
     )
-    .eq("owner_id", ownerId.value)
-    .order("updated_at", { ascending: false })
+    .eq('owner_id', ownerId.value)
+    .order('updated_at', { ascending: false })
     .range(from, to);
   loading.value = false;
   if (err) {
@@ -52,6 +114,8 @@ const loadRemote = async () => {
   const rows = (data ?? []) as MatchRow[];
   matches.value.push(...rows);
   if (rows.length < PAGE_SIZE) done.value = true;
+  void loadSummaries(rows);
+  subscribeSummaries();
 };
 
 // Signed-out: filter to match IDs this device scored AND that are still
@@ -69,13 +133,13 @@ const loadLocalScoped = async () => {
     return;
   }
   const { data, error: err } = await supabase
-    .from("matches")
+    .from('matches')
     .select(
-      "id, sport_preset, config, team_name_a, team_name_b, event_name, court_label, updated_at",
+      'id, sport_preset, config, team_name_a, team_name_b, event_name, court_label, updated_at, ended_at'
     )
-    .in("id", ids)
-    .is("owner_id", null)
-    .order("updated_at", { ascending: false });
+    .in('id', ids)
+    .is('owner_id', null)
+    .order('updated_at', { ascending: false });
   loading.value = false;
   if (err) {
     error.value = err.message;
@@ -83,23 +147,26 @@ const loadLocalScoped = async () => {
   }
   matches.value = (data ?? []) as MatchRow[];
   done.value = true;
+  void loadSummaries(matches.value);
+  subscribeSummaries();
 };
 
 const reload = () => {
   matches.value = [];
+  summaries.value = new Map();
   done.value = false;
   error.value = null;
   if (isAuthed.value) loadRemote();
   else loadLocalScoped();
 };
 
-const scroller = useTemplateRef<HTMLElement>("scroller");
+const scroller = useTemplateRef<HTMLElement>('scroller');
 useInfiniteScroll(
   scroller,
   () => {
     if (isAuthed.value) loadRemote();
   },
-  { distance: 200 },
+  { distance: 200 }
 );
 
 onMounted(reload);
@@ -112,7 +179,7 @@ const onMatchDeleted = (id: string) => {
 };
 
 const emptyLabel = computed(() =>
-  isAuthed.value ? "No matches yet." : "No matches on this device yet.",
+  isAuthed.value ? 'No matches yet.' : 'No matches on this device yet.'
 );
 </script>
 
@@ -121,14 +188,14 @@ const emptyLabel = computed(() =>
     ref="scroller"
     class="mx-auto h-[calc(100vh-3.5rem)] w-full max-w-3xl overflow-y-auto px-6 py-10"
   >
-    <header class="mb-6 flex items-baseline justify-between gap-4">
+    <header class="mb-6 flex items-center justify-between gap-4">
       <h1 class="text-3xl font-semibold tracking-tight">Matches</h1>
-      <NuxtLink
-        to="/new"
-        class="text-sm font-medium text-brand underline-offset-4 hover:underline"
-      >
-        Start a match →
-      </NuxtLink>
+      <Button as-child size="sm" class="font-semibold">
+        <NuxtLink to="/new">
+          <Plus class="size-4" />
+          New match
+        </NuxtLink>
+      </Button>
     </header>
 
     <div
@@ -165,6 +232,7 @@ const emptyLabel = computed(() =>
         :event-name="m.event_name"
         :court-label="m.court_label"
         :updated-at="m.updated_at"
+        :summary="summaries.get(m.id) ?? null"
         @deleted="onMatchDeleted"
       />
     </ul>

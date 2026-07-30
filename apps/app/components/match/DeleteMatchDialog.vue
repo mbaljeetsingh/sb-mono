@@ -4,8 +4,8 @@
 // and a `deleted` event. Keeps SettingsSheet, the matches list, and any
 // future surface (history page, admin) using the same destructive flow.
 
-import { ref } from "vue";
-import { toast } from "vue-sonner";
+import { ref } from 'vue';
+import { toast } from 'vue-sonner';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,17 +16,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@sb/layer-ui/components/ui/alert-dialog";
-import { useDeleteMatch } from "@sb/layer-app-base/composables/useDeleteMatch";
+} from '@sb/layer-ui/components/ui/alert-dialog';
+import { useDeleteMatch } from '@sb/layer-app-base/composables/useDeleteMatch';
 
 const props = defineProps<{
   matchId: string;
   matchLabel?: string;
 }>();
 
-const emit = defineEmits<{
-  (e: "deleted", matchId: string): void;
-}>();
+const emit = defineEmits<(e: 'deleted', matchId: string) => void>();
 
 const open = ref(false);
 const busy = ref(false);
@@ -37,11 +35,11 @@ const confirm = async () => {
   busy.value = true;
   try {
     await deleteMatch(props.matchId);
-    toast.success("Match deleted");
+    toast.success('Match deleted');
     open.value = false;
-    emit("deleted", props.matchId);
+    emit('deleted', props.matchId);
   } catch (err) {
-    console.warn("[DeleteMatchDialog] failed", err);
+    console.warn('[DeleteMatchDialog] failed', err);
     toast.error("Couldn't delete the match");
   } finally {
     busy.value = false;
@@ -76,7 +74,7 @@ const confirm = async () => {
           class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           @click="confirm"
         >
-          {{ busy ? "Deleting…" : "Delete match" }}
+          {{ busy ? 'Deleting…' : 'Delete match' }}
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>

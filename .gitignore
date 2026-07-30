@@ -15,3 +15,7 @@ coverage
 .netlify
 .playwright-mcp
 .tmp/
+
+# Stray shadcn-CLI output — the CLI sometimes resolves the @sb/ alias as a
+# literal directory. Real components live in layers/ui/components/ui/.
+/@sb/

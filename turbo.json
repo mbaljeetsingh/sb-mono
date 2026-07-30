@@ -9,6 +9,10 @@
       "cache": false,
       "persistent": true
     },
+    "generate": {
+      "dependsOn": ["^build"],
+      "outputs": [".output/**", ".nuxt/**"]
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     },

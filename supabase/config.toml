@@ -151,11 +151,18 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+site_url = "https://sb-app.localhost"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
+# Dev servers run through portless at https://sb-app.localhost; the *. entries cover
+# git-worktree branch prefixes (e.g. https://my-branch.sb-app.localhost). The
+# localhost:3000 entries are kept as a fallback for running `nuxt dev` directly.
 additional_redirect_urls = [
+    "https://sb-app.localhost",
+    "https://sb-app.localhost/auth/callback",
+    "https://*.sb-app.localhost",
+    "https://*.sb-app.localhost/auth/callback",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:3000/auth/callback",
