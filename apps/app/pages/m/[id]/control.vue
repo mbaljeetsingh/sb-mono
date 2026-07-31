@@ -907,14 +907,12 @@ const orientationB = computed<Orientation>(() => {
                 match.start serverSide WITHOUT touching visual ends.
                 Single-tap correction for "I tapped the wrong team during
                 the toss" without forcing an ends flip too. -->
+        <!-- Centred on the net in both layouts. Side-by-side used to carry a
+             hand-tuned top offset to duck under each half's header strip;
+             those strips are gone, and the net is the midpoint either way. -->
         <div
           v-if="canSwapSidesVisible"
-          class="pointer-events-none absolute left-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5"
-          :class="
-            layout === 'sideBySide'
-              ? 'top-[calc(0.625rem+clamp(16px,3vh,26px))]'
-              : 'top-1/2'
-          "
+          class="pointer-events-none absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5"
         >
           <ControlPill
             ariaLabel="Swap sides (put the other team on the other court)"
