@@ -249,7 +249,11 @@ const onRegenerateToken = async () => {
 </script>
 
 <template>
-  <div class="font-sans pb-8">
+  <!-- Same column width as /matches. Left to the layout's max-w-6xl, the hero
+       card pushed the two team scores ~1100px apart on a laptop — far enough
+       that you cannot read the scoreline in one glance, which is the card's
+       entire job. -->
+  <div class="mx-auto w-full max-w-3xl font-sans pb-8">
     <div class="flex items-center justify-between gap-3 px-4 pt-4 pb-2">
       <!-- Teams, not the ULID slice. "Match · 01HXZ…" occupied the most
            prominent text slot on the page with a value no user can act on,

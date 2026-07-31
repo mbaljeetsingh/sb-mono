@@ -535,9 +535,12 @@ const canSwapPlayersB = canSwapPlayersA;
 // the court: the pills were live targets sitting inside the score button, and
 // four of them at once (ends, two partner swaps, first server) buried the
 // surface. The bar is free at this moment anyway — with nothing scored, Undo
-// has nothing to undo and Correct nothing to correct. Gated on canSwapInitial
-// only (not canSwapAtGameStart), so Undo is never taken away at the start of a
-// later game, where undoing the previous game.end is a real thing to want.
+// has nothing to undo and Correct nothing to correct.
+//
+// Gated on canSwapInitial only (not canSwapAtGameStart), so Undo is never taken
+// away at the start of a later game, where undoing the previous game.end is a
+// real thing to want. Partner swap is rendered outside this branch precisely
+// because it stays legal in that second window.
 const showSetupBar = computed(
   () => canSwapInitial.value && !state.value.matchOver
 );
@@ -997,26 +1000,6 @@ const swapLabelB = computed(() =>
             <Repeat class="size-4" />
             Switch server
           </Button>
-          <Button
-            v-if="canSwapPlayersA"
-            variant="outline"
-            class="flex-1 min-w-[9rem]"
-            title="Swap which partner starts in the right service court"
-            @click="swapPlayers('A')"
-          >
-            <ArrowLeftRight class="size-4 text-team-a" />
-            <span class="truncate">{{ swapLabelA }}</span>
-          </Button>
-          <Button
-            v-if="canSwapPlayersB"
-            variant="outline"
-            class="flex-1 min-w-[9rem]"
-            title="Swap which partner starts in the right service court"
-            @click="swapPlayers('B')"
-          >
-            <ArrowLeftRight class="size-4 text-team-b" />
-            <span class="truncate">{{ swapLabelB }}</span>
-          </Button>
         </template>
         <template v-else>
           <Button
@@ -1050,6 +1033,30 @@ const swapLabelB = computed(() =>
             Correct
           </Button>
         </template>
+        <!-- Partner swap sits outside both branches: it is legal pre-match
+             AND at the start of any later game (score back to 0-0), and that
+             second window is in-play, where the bar is showing Undo. Scoping it
+             to the setup branch made it unreachable exactly there. -->
+        <Button
+          v-if="canSwapPlayersA"
+          variant="outline"
+          class="flex-1 min-w-[9rem]"
+          title="Swap which partner starts in the right service court"
+          @click="swapPlayers('A')"
+        >
+          <ArrowLeftRight class="size-4 text-team-a" />
+          <span class="truncate">{{ swapLabelA }}</span>
+        </Button>
+        <Button
+          v-if="canSwapPlayersB"
+          variant="outline"
+          class="flex-1 min-w-[9rem]"
+          title="Swap which partner starts in the right service court"
+          @click="swapPlayers('B')"
+        >
+          <ArrowLeftRight class="size-4 text-team-b" />
+          <span class="truncate">{{ swapLabelB }}</span>
+        </Button>
       </footer>
 
       <MatchOverModal

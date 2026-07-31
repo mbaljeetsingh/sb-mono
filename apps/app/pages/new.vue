@@ -255,10 +255,13 @@ const createMatch = async () => {
 </script>
 
 <template>
-  <div class="flex flex-col font-sans">
+  <!-- Form column, not full width. The page inherits the layout's max-w-6xl,
+       which stretched a player-name field across 1150px on a laptop; a form
+       this short reads as one column at any size. -->
+  <div class="mx-auto flex w-full max-w-xl flex-col font-sans">
     <h1 class="px-4 pt-6 pb-3 text-xl font-semibold">New match</h1>
 
-    <main class="flex-1 px-4 pb-48 pt-2 space-y-6">
+    <main class="flex-1 px-4 pb-48 pt-2 space-y-6 md:pb-6">
       <section>
         <Label
           for="team-a-p1"
@@ -514,14 +517,17 @@ const createMatch = async () => {
       "
     />
 
-    <!-- Anchored to the bottom edge and padded to clear the tab bar, rather
-         than floated 3.5rem up. MobileTabBar is a detached pill that hides on
-         scroll-down (MobileTabBar.vue:152); with the old offset this footer
-         kept its gap and left a strip of scrolling page content visible below
-         it, and it overlapped the bar's top edge while the bar was shown.
-         Padding = 0.75rem bar gap + 3.5rem bar height + breathing room. -->
+    <!-- Mobile: anchored to the bottom edge and padded to clear the tab bar,
+         rather than floated 3.5rem up. MobileTabBar is a detached pill that
+         hides on scroll-down (MobileTabBar.vue:152); with the old offset this
+         footer kept its gap and left a strip of scrolling page content visible
+         below it, and it overlapped the bar's top edge while shown. Padding =
+         0.75rem bar gap + 3.5rem bar height + breathing room.
+         Desktop: there is no tab bar to clear and the form is short, so the
+         CTA rejoins the flow instead of floating full-bleed across a mostly
+         empty viewport. -->
     <footer
-      class="fixed inset-x-0 bottom-0 px-4 pt-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] bg-background border-t border-border md:pb-[max(1rem,env(safe-area-inset-bottom))]"
+      class="fixed inset-x-0 bottom-0 px-4 pt-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] bg-background border-t border-border md:static md:border-t-0 md:px-4 md:pt-2 md:pb-10"
     >
       <Button
         type="button"
