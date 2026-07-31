@@ -12,6 +12,7 @@ import {
   ToggleGroupItem,
 } from '@sb/layer-ui/components/ui/toggle-group';
 import { themes as themeRegistry } from '@sb/themes';
+import { useStorage } from '@vueuse/core';
 import { ChevronDown, Loader2, Minus, Play, Plus } from 'lucide-vue-next';
 import { ulid } from 'ulid';
 import { computed, nextTick, ref, watch } from 'vue';
@@ -32,11 +33,58 @@ type MatchLength = 'single' | 'best-of';
 // no orphan data anywhere.
 const matchId = ref(ulid());
 
-const sport = ref<SportId>('badminton');
-const isDoubles = ref(false);
-const formatPreset = ref<SportPresetId>('badminton-21');
-const matchLength = ref<MatchLength>('single');
-const bestOfN = ref<number>(3);
+// Format is sticky per browser. Re-picking the same sport / doubles / best-of
+// is the single most repeated action in the app — a club scorer runs ten
+// doubles matches in an evening — and none of it is match-specific the way the
+// names are. Only viable because the format summary now sits at the very top of
+// the form: the restored format is the first line you read, and doubles visibly
+// turns two name fields into four. Names are deliberately never remembered.
+const lastFormat = useStorage<{
+  sport: SportId;
+  isDoubles: boolean;
+  formatPreset: SportPresetId;
+  matchLength: MatchLength;
+  bestOfN: number;
+}>('sb:last-format', {
+  sport: 'badminton',
+  isDoubles: false,
+  formatPreset: 'badminton-21',
+  matchLength: 'single',
+  bestOfN: 3,
+});
+
+// Stored values go stale across releases — a sport gets disabled, a preset id
+// is renamed. Validate each one back against the registry rather than seeding
+// the form with a format the engine can't score.
+const stored = lastFormat.value;
+const seedSport: SportId = SPORTS.some(
+  (s) => s.id === stored.sport && s.enabled
+)
+  ? stored.sport
+  : 'badminton';
+const seedPreset: SportPresetId =
+  sportPresets[stored.formatPreset]?.sport === seedSport
+    ? stored.formatPreset
+    : (defaultPresetBySport[seedSport] ?? 'badminton-21');
+const seedBestOf =
+  Number.isInteger(stored.bestOfN) &&
+  stored.bestOfN >= 3 &&
+  stored.bestOfN <= 11 &&
+  stored.bestOfN % 2 === 1
+    ? stored.bestOfN
+    : 3;
+
+const sport = ref<SportId>(seedSport);
+// TT can't do doubles yet (see supportsDoubles below); don't restore into a
+// state the sport watcher would immediately have to undo.
+const isDoubles = ref(
+  seedSport === 'table-tennis' ? false : !!stored.isDoubles
+);
+const formatPreset = ref<SportPresetId>(seedPreset);
+const matchLength = ref<MatchLength>(
+  stored.matchLength === 'best-of' ? 'best-of' : 'single'
+);
+const bestOfN = ref<number>(seedBestOf);
 const teamA = ref({ p1: '', p2: '' });
 const teamB = ref({ p1: '', p2: '' });
 const eventName = ref('');
@@ -65,6 +113,19 @@ watch(sport, (s) => {
     matchLength.value = 'best-of';
     bestOfN.value = natural * 2 - 1;
   }
+});
+
+// Write the format back on every change, including the rematch prefill below —
+// a rematch's format becomes the new sticky default, which is what you want
+// when you're running a bracket.
+watch([sport, isDoubles, formatPreset, matchLength, bestOfN], () => {
+  lastFormat.value = {
+    sport: sport.value,
+    isDoubles: isDoubles.value,
+    formatPreset: formatPreset.value,
+    matchLength: matchLength.value,
+    bestOfN: bestOfN.value,
+  };
 });
 
 const gamesToWin = computed(() =>
@@ -262,56 +323,14 @@ const createMatch = async () => {
     <h1 class="px-4 pt-6 pb-3 text-xl font-semibold">New match</h1>
 
     <main class="flex-1 px-4 pb-48 pt-2 space-y-6 md:pb-6">
-      <section>
-        <Label
-          for="team-a-p1"
-          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
-        >
-          {{ isDoubles ? 'Team A' : 'Player 1' }}
-        </Label>
-        <Input
-          id="team-a-p1"
-          v-model="teamA.p1"
-          type="text"
-          :placeholder="isDoubles ? 'Player 1' : 'Name'"
-          class="h-11"
-        />
-        <Input
-          v-if="isDoubles"
-          v-model="teamA.p2"
-          type="text"
-          placeholder="Player 2"
-          class="h-11 mt-2"
-        />
-      </section>
-
-      <section>
-        <Label
-          for="team-b-p1"
-          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
-        >
-          {{ isDoubles ? 'Team B' : 'Player 2' }}
-        </Label>
-        <Input
-          id="team-b-p1"
-          v-model="teamB.p1"
-          type="text"
-          :placeholder="isDoubles ? 'Player 1' : 'Name'"
-          class="h-11"
-        />
-        <Input
-          v-if="isDoubles"
-          v-model="teamB.p2"
-          type="text"
-          placeholder="Player 2"
-          class="h-11 mt-2"
-        />
-      </section>
-
-      <!-- Format sits behind a summary: every field in here has a good default
-           (badminton, 21 BWF, singles, single game) while the names above are
-           the only required input. Leading with four toggle groups pushed the
-           fields that actually gate the submit button below the fold. -->
+      <!-- Format sits above the names, collapsed behind a one-line summary.
+           Every field in here has a good default (badminton, 21 BWF, singles,
+           single game) so it costs one row, not a scroll — but it has to come
+           first because Singles/Doubles decides the *shape* of the name fields
+           below (two inputs vs four, "Player 1" vs "Team A", and two more
+           required names). Putting it after meant flipping to doubles reflowed
+           fields the user had already filled and knocked the submit button back
+           to disabled. -->
       <section>
         <button
           type="button"
@@ -460,6 +479,52 @@ const createMatch = async () => {
             </div>
           </section>
         </div>
+      </section>
+
+      <section>
+        <Label
+          for="team-a-p1"
+          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
+        >
+          {{ isDoubles ? 'Team A' : 'Player 1' }}
+        </Label>
+        <Input
+          id="team-a-p1"
+          v-model="teamA.p1"
+          type="text"
+          :placeholder="isDoubles ? 'Player 1' : 'Name'"
+          class="h-11"
+        />
+        <Input
+          v-if="isDoubles"
+          v-model="teamA.p2"
+          type="text"
+          placeholder="Player 2"
+          class="h-11 mt-2"
+        />
+      </section>
+
+      <section>
+        <Label
+          for="team-b-p1"
+          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
+        >
+          {{ isDoubles ? 'Team B' : 'Player 2' }}
+        </Label>
+        <Input
+          id="team-b-p1"
+          v-model="teamB.p1"
+          type="text"
+          :placeholder="isDoubles ? 'Player 1' : 'Name'"
+          class="h-11"
+        />
+        <Input
+          v-if="isDoubles"
+          v-model="teamB.p2"
+          type="text"
+          placeholder="Player 2"
+          class="h-11 mt-2"
+        />
       </section>
 
       <section>

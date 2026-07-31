@@ -95,6 +95,7 @@ When you do update, do it in the same commit as the code, and keep the entry con
 - **localStorage is used only for:**
   - `sb:control-layout:{matchId}` — per-device operator UI preference (`'stacked' | 'sideBySide'`). Not synced; each device picks its own.
   - `sb:dynamic:{dynamicId}` — v1 binding for `/d/{id}` dynamic URLs. ARCHITECTURE.md §6 moves this to a `dynamic_urls` table in v1.x.
+  - `sb:last-format` — the last format picked on `/new` (sport, singles/doubles, preset, match length). Sticky per browser so a scorer running a bracket doesn't re-pick it every match; validated back against the preset registry on read. Player names are never remembered.
   - `sb:device-id` — stable per-browser ULID used for event provenance. Lives in localStorage (not IDB) because it must be read synchronously at module init.
   - `sb:theme` — color-mode user preference (light/dark/system), set by `@nuxtjs/color-mode`.
 - **Theme resolution order** in overlay/scoreboard surfaces: `?theme=` query param → `useThemeChoice` (Supabase) → hardcoded baseline (`broadcast-classic` / `filmable`).

@@ -297,6 +297,8 @@ const onRegenerateToken = async () => {
         :games-won-b="state.gamesWon.b"
         :games="state.games"
         :games-to-win="config.gamesToWin"
+        :winner="state.winner"
+        :end-reason="state.endReason"
       />
     </div>
 

@@ -183,8 +183,13 @@
   --server-indicator: #b45309;
   --game-point: #c2410c;
   --match-point: #9a3412;
-  --success: #4d7c0f;
-  --success-soft: rgba(77, 124, 15, 0.14);
+  /* Darker than the obvious lime-700. --success only ever paints text (or a
+     border), and its one heavy use is `text-success on bg-success-soft` — the
+     FINAL badge — where the tint lifts the background enough that #4d7c0f came
+     in at 4.05:1, under AA for 10px bold. #3f6a0a puts that pairing at 5.11:1
+     and every plain text-success on --surface well above it. */
+  --success: #3f6a0a;
+  --success-soft: rgba(63, 106, 10, 0.14);
   --warning: #b45309;
   --warning-soft: rgba(180, 83, 9, 0.14);
   --danger-soft: rgba(168, 32, 26, 0.14);

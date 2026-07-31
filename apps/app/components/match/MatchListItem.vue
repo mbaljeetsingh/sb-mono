@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@sb/layer-ui/components/ui/dropdown-menu';
-import { MoreVertical, Trash2 } from 'lucide-vue-next';
+import { MoreVertical, Trash2, Trophy } from 'lucide-vue-next';
 import { computed } from 'vue';
 import SportGlyph from '~/components/common/SportGlyph.vue';
 import DeleteMatchDialog from '~/components/match/DeleteMatchDialog.vue';
@@ -42,11 +42,26 @@ const formatBadge = computed(() => {
 
 const emit = defineEmits<(e: 'deleted', id: string) => void>();
 
-const label = computed(() => {
-  const a = props.teamNameA?.trim() || 'Team A';
-  const b = props.teamNameB?.trim() || 'Team B';
-  return `${a} vs ${b}`;
-});
+const nameA = computed(() => props.teamNameA?.trim() || 'Team A');
+const nameB = computed(() => props.teamNameB?.trim() || 'Team B');
+// Plain string for the delete dialog's confirmation copy; the row itself
+// renders the two names as separate spans so it can mark the winner.
+const label = computed(() => `${nameA.value} vs ${nameB.value}`);
+
+// Which side won, once the match is final. The summary already resolves this
+// from the engine — the row just never read it, so a finished match showed
+// "FINAL 21–15" and left you to work out which number belonged to whom.
+const winnerSide = computed(() =>
+  props.summary?.status === 'final' ? props.summary.winner : null
+);
+// The winner is emphasised by letting the loser recede — at 15px, medium vs
+// semibold alone is too small a step to read at a glance down a list.
+const sideClass = (side: 'A' | 'B') => {
+  if (!winnerSide.value) return '';
+  return side === winnerSide.value
+    ? 'font-semibold'
+    : 'font-normal text-fg-muted';
+};
 
 // Registry display name ("Badminton 21"), not a de-slugged id — the old
 // `replace(/-/g, ' ')` surfaced internal preset ids to users as "badminton 21".
@@ -97,7 +112,30 @@ const onDeleted = () => emit('deleted', props.id);
         </span>
         <span class="min-w-0 flex-1">
           <span class="flex items-center gap-2">
-            <span class="truncate text-[15px] font-medium">{{ label }}</span>
+            <!-- Wraps on mobile rather than truncating. On a 375px screen the
+                 status chip and scoreline leave so little room that a single
+                 truncated line rendered "Axelsen …" — the opponent gone
+                 entirely, which also threw away the winner emphasis. No
+                 line-clamp either: capping at two lines still cut the opponent
+                 off in doubles-vs-doubles, and a taller row costs less than a
+                 hidden name. Desktop has the width to stay on one line. -->
+            <span class="text-[15px] font-medium md:truncate">
+              <!-- The trophy sits against the winning name rather than in the
+                   status chip, so *which* side won is carried by its position.
+                   Weight alone (semibold vs muted) was too small a step to read
+                   scanning down a list. -->
+              <Trophy
+                v-if="winnerSide === 'A'"
+                class="mr-1 inline size-3.5 -translate-y-px text-success"
+              />
+              <span :class="sideClass('A')">{{ nameA }}</span>
+              <span class="font-normal text-fg-subtle"> vs </span>
+              <Trophy
+                v-if="winnerSide === 'B'"
+                class="mr-1 inline size-3.5 -translate-y-px text-success"
+              />
+              <span :class="sideClass('B')">{{ nameB }}</span>
+            </span>
             <span
               v-if="formatBadge"
               class="shrink-0 rounded-sm bg-brand/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-brand"
