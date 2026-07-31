@@ -31,6 +31,39 @@ describe('match-state events', () => {
     expect(s.gamesWon).toEqual({ a: 0, b: 0 });
   });
 
+  it('ignores a second walkover on an already-decided match', () => {
+    const s = reduce(
+      [
+        start('A'),
+        ev('walkover', { winner: 'B' }),
+        ev('walkover', { winner: 'A' }),
+      ],
+      badminton21
+    );
+    expect(s.winner).toBe('B');
+    expect(s.endReason).toBe('walkover');
+  });
+
+  it('does not let a walkover overturn a match won on court', () => {
+    const s = reduce(
+      [
+        start('A'),
+        ev('score.correct', {
+          games: [
+            { a: 21, b: 19 },
+            { a: 21, b: 17 },
+          ],
+          gamesWon: { a: 2, b: 0 },
+        }),
+        ev('walkover', { winner: 'B' }),
+      ],
+      badminton21
+    );
+    expect(s.matchOver).toBe(true);
+    expect(s.winner).toBe('A');
+    expect(s.endReason).toBe('normal');
+  });
+
   it('retirement awards win to the non-retiring side', () => {
     const seq = [
       start('A'),

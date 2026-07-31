@@ -68,7 +68,7 @@ const apply = () => {
 
 <template>
   <div
-    class="absolute inset-x-4 top-20 bottom-20 z-50 bg-surface text-foreground rounded-2xl p-5 shadow-[0_24px_60px_rgba(0,0,0,0.2)] flex flex-col"
+    class="absolute inset-x-4 top-20 bottom-20 z-50 mx-auto w-auto max-w-lg bg-surface text-foreground rounded-2xl p-5 shadow-[0_24px_60px_rgba(0,0,0,0.2)] flex flex-col"
   >
     <h2 class="text-lg font-semibold">Fix the score</h2>
     <p class="text-[11px] text-fg-subtle mb-3">

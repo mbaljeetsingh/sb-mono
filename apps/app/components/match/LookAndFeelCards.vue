@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button } from '@sb/layer-ui/components/ui/button';
+import { ChevronRight, Palette } from 'lucide-vue-next';
 
 defineProps<{
   overlayThemeName: string;
@@ -16,47 +17,32 @@ defineEmits<(e: 'open-theme') => void>();
     >
       Look &amp; feel
     </div>
-    <div class="grid grid-cols-2 gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        class="h-auto flex-col items-stretch gap-1.5 p-3 text-left whitespace-normal"
-        @click="$emit('open-theme')"
-      >
-        <span class="flex justify-between items-center">
-          <span
-            class="text-[11px] text-fg-subtle tracking-wide uppercase font-semibold"
-          >
-            🎨 Theme
-          </span>
-          <span class="text-fg-subtle">›</span>
+    <!-- Theme is the only thing in here for now. A custom-team-colors card used
+         to sit beside it, permanently disabled behind a "soon" badge — half a
+         row on the create flow advertising something nobody can do. It comes
+         back as a working card when the feature ships; until then Theme takes
+         the full width. -->
+    <Button
+      type="button"
+      variant="outline"
+      class="h-auto w-full items-center gap-3 p-3 text-left whitespace-normal"
+      @click="$emit('open-theme')"
+    >
+      <Palette class="size-4 shrink-0 text-fg-subtle" />
+      <span class="min-w-0 flex-1">
+        <span
+          class="block text-[11px] tracking-wide uppercase font-semibold text-fg-subtle"
+        >
+          Theme
         </span>
-        <span class="block text-sm font-semibold">{{ overlayThemeName }}</span>
-        <span class="block text-[10px] text-fg-subtle font-normal">
+        <span class="block truncate text-sm font-semibold">
+          {{ overlayThemeName }}
+        </span>
+        <span class="block truncate text-[10px] font-normal text-fg-subtle">
           Scoreboard: {{ scoreboardThemeName }}
         </span>
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        disabled
-        class="h-auto flex-col items-stretch gap-1.5 p-3 text-left whitespace-normal"
-        title="Custom team colors land in v1.x"
-      >
-        <span class="flex justify-between items-center">
-          <span
-            class="text-[11px] text-fg-subtle tracking-wide uppercase font-semibold"
-          >
-            🖌 Colors
-          </span>
-          <span class="text-fg-subtle">soon</span>
-        </span>
-        <span class="text-sm font-semibold inline-flex items-center gap-1.5">
-          <span class="size-3.5 rounded-sm bg-team-a" />
-          <span class="size-3.5 rounded-sm bg-team-b" />
-          Red / Blue
-        </span>
-      </Button>
-    </div>
+      </span>
+      <ChevronRight class="size-4 shrink-0 text-fg-subtle" />
+    </Button>
   </div>
 </template>

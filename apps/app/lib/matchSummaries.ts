@@ -53,11 +53,18 @@ const summarize = (
   const cur = state.games[state.games.length - 1] ?? { a: 0, b: 0 };
   const multiGame = config.gamesToWin > 1;
   if (finished) {
+    // A walkover called before the first rally ends the match with every game
+    // still 0–0. Printing that as the scoreline claims a nil-nil result nobody
+    // played, so drop it and let the winner carry the row. (A walkover or
+    // retirement *mid*-match keeps its real partial score and still prints.)
+    const played = state.games.some((g) => g.a > 0 || g.b > 0);
     return {
       status: 'final',
-      scoreline: multiGame
-        ? `${state.gamesWon.a}–${state.gamesWon.b}`
-        : `${cur.a}–${cur.b}`,
+      scoreline: played
+        ? multiGame
+          ? `${state.gamesWon.a}–${state.gamesWon.b}`
+          : `${cur.a}–${cur.b}`
+        : null,
       winner: state.winner,
     };
   }

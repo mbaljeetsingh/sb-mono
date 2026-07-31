@@ -1,16 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
-import { useClipboard } from '@vueuse/core';
-import { Film, QrCode, RefreshCw, Settings } from 'lucide-vue-next';
-import { toast } from 'vue-sonner';
-import type { ThemeSurface } from '@sb/themes';
 import type { MatchMeta } from '@sb/layer-app-base/composables/useMatchMeta';
-import { Button } from '@sb/layer-ui/components/ui/button';
-import MatchHeroCard from '~/components/match/MatchHeroCard.vue';
-import LookAndFeelCards from '~/components/match/LookAndFeelCards.vue';
-import SettingsSheet from '~/components/match/SettingsSheet.vue';
-import ThemePickerDialog from '~/components/match/ThemePickerDialog.vue';
-import QrDialog from '~/components/match/QrDialog.vue';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,8 +10,27 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@sb/layer-ui/components/ui/alert-dialog';
-import { useUserStore } from '~/stores/user';
+import { Button } from '@sb/layer-ui/components/ui/button';
+import type { ThemeSurface } from '@sb/themes';
+import { useClipboard } from '@vueuse/core';
+import {
+  Film,
+  QrCode,
+  Radio,
+  RefreshCw,
+  Settings,
+  Smartphone,
+  Tv,
+} from 'lucide-vue-next';
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { toast } from 'vue-sonner';
+import LookAndFeelCards from '~/components/match/LookAndFeelCards.vue';
+import MatchHeroCard from '~/components/match/MatchHeroCard.vue';
+import QrDialog from '~/components/match/QrDialog.vue';
+import SettingsSheet from '~/components/match/SettingsSheet.vue';
+import ThemePickerDialog from '~/components/match/ThemePickerDialog.vue';
 import { useRolePermissions } from '~/composables/useRolePermissions';
+import { useUserStore } from '~/stores/user';
 
 useSeoMeta({ title: 'Match' });
 
@@ -241,10 +249,17 @@ const onRegenerateToken = async () => {
 </script>
 
 <template>
-  <div class="font-sans pb-8">
-    <div class="flex items-center justify-between px-4 pt-4 pb-2">
-      <span class="text-[13px] font-semibold text-fg-subtle">
-        Match · {{ matchId.slice(0, 8) }}…
+  <!-- Same column width as /matches. Left to the layout's max-w-6xl, the hero
+       card pushed the two team scores ~1100px apart on a laptop — far enough
+       that you cannot read the scoreline in one glance, which is the card's
+       entire job. -->
+  <div class="mx-auto w-full max-w-3xl font-sans pb-8">
+    <div class="flex items-center justify-between gap-3 px-4 pt-4 pb-2">
+      <!-- Teams, not the ULID slice. "Match · 01HXZ…" occupied the most
+           prominent text slot on the page with a value no user can act on,
+           while the identity they recognise sat inside the card below. -->
+      <span class="min-w-0 truncate text-[15px] font-semibold">
+        {{ teamNames.a }} vs {{ teamNames.b }}
       </span>
       <div class="flex items-center gap-1">
         <Button
@@ -282,6 +297,8 @@ const onRegenerateToken = async () => {
         :games-won-b="state.gamesWon.b"
         :games="state.games"
         :games-to-win="config.gamesToWin"
+        :winner="state.winner"
+        :end-reason="state.endReason"
       />
     </div>
 
@@ -289,23 +306,21 @@ const onRegenerateToken = async () => {
       <div
         class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2.5"
       >
-        Get set up
+        This match, anywhere
       </div>
       <div class="flex flex-col gap-2">
         <div
           class="p-3 bg-surface border border-border rounded-md flex gap-3 items-center"
         >
           <span
-            class="size-7 rounded-full bg-surface-2 text-fg-muted inline-flex items-center justify-center text-[13px] font-bold flex-shrink-0"
+            class="size-8 rounded-lg bg-surface-2 text-fg-muted inline-flex items-center justify-center flex-shrink-0"
           >
-            1
+            <Smartphone class="size-4" />
           </span>
           <span class="flex-1 min-w-0">
-            <span class="block text-sm font-semibold">
-              Score from your phone
-            </span>
+            <span class="block text-sm font-semibold"> Score </span>
             <span class="block text-xs text-fg-muted mt-0.5">
-              Open on this device, or scan to score from another
+              This device, or scan to score from another
             </span>
           </span>
           <Button
@@ -344,14 +359,14 @@ const onRegenerateToken = async () => {
           class="p-3 bg-surface border border-border rounded-md flex gap-3 items-center"
         >
           <span
-            class="size-7 rounded-full bg-surface-2 text-fg-muted inline-flex items-center justify-center text-[13px] font-bold flex-shrink-0"
+            class="size-8 rounded-lg bg-surface-2 text-fg-muted inline-flex items-center justify-center flex-shrink-0"
           >
-            2
+            <Radio class="size-4" />
           </span>
           <span class="flex-1 min-w-0">
-            <span class="block text-sm font-semibold">Show overlay in OBS</span>
+            <span class="block text-sm font-semibold">Stream overlay</span>
             <span class="block text-xs text-fg-muted mt-0.5">
-              Paste URL into a Browser source
+              Paste into an OBS browser source
             </span>
           </span>
           <Button
@@ -368,14 +383,14 @@ const onRegenerateToken = async () => {
           class="p-3 bg-surface border border-border rounded-md flex gap-3 items-center"
         >
           <span
-            class="size-7 rounded-full bg-surface-2 text-fg-muted inline-flex items-center justify-center text-[13px] font-bold flex-shrink-0"
+            class="size-8 rounded-lg bg-surface-2 text-fg-muted inline-flex items-center justify-center flex-shrink-0"
           >
-            3
+            <Tv class="size-4" />
           </span>
           <span class="flex-1 min-w-0">
-            <span class="block text-sm font-semibold">Show on venue TV</span>
+            <span class="block text-sm font-semibold">Venue TV</span>
             <span class="block text-xs text-fg-muted mt-0.5">
-              Scan from a TV/tablet, or open here
+              Scan from a TV or tablet, or open here
             </span>
           </span>
           <Button

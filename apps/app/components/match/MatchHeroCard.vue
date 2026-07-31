@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import type { GameScore } from "@sb/engine";
+import type { GameScore, RacquetState, SideId } from '@sb/engine';
+import { Trophy } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 const props = defineProps<{
   matchOver: boolean;
@@ -14,9 +15,52 @@ const props = defineProps<{
   gamesWonB: number;
   games: GameScore[];
   gamesToWin: number;
+  winner: SideId | null;
+  endReason: RacquetState['endReason'];
 }>();
 
 const isSingleGame = computed(() => props.gamesToWin <= 1);
+
+// Who won, and why. The engine already resolves both on state (the reducer sets
+// `winner` for walkover / retirement / default, and the retiring or disqualified
+// side is always the loser), so nothing here needs to re-read the event log.
+const winnerName = computed(() => {
+  if (props.winner === 'A') return props.teamNames.a;
+  if (props.winner === 'B') return props.teamNames.b;
+  return null;
+});
+const loserName = computed(() => {
+  if (props.winner === 'A') return props.teamNames.b;
+  if (props.winner === 'B') return props.teamNames.a;
+  return null;
+});
+
+// Only for the non-normal endings — a match scored to completion needs no
+// explanation beyond the scoreline.
+const endReasonLabel = computed(() => {
+  switch (props.endReason) {
+    case 'walkover':
+      return 'walkover';
+    case 'retirement':
+      return `${loserName.value} retired`;
+    case 'default':
+      return `${loserName.value} disqualified`;
+    default:
+      return null;
+  }
+});
+
+// A walkover called before the first rally leaves every game 0–0, and the old
+// card rendered that as a 40px "0" on both sides with nothing naming the winner
+// — it read as a nil-nil result that was actually never played. Suppress the
+// numbers in that case and let the outcome line carry the result. A walkover or
+// retirement *mid*-match keeps its partial games, which are worth showing.
+const hasScoreline = computed(() =>
+  props.games.some((g) => g.a > 0 || g.b > 0)
+);
+const showHeadlineNumbers = computed(
+  () => !props.matchOver || hasScoreline.value
+);
 
 // BO1: when the match is over, "games won" is 0/1 which conveys nothing —
 // the meaningful number is the final game's point score (e.g. 21–15).
@@ -38,19 +82,27 @@ const headlineB = computed(() => {
 // already the headline live score). Final: all games are complete.
 const completedGames = computed<GameScore[]>(() => {
   if (isSingleGame.value) return [];
-  if (props.matchOver) return props.games;
+  // Suppressed for the same reason as the headline numbers: a pre-rally
+  // walkover in a best-of-N still carries one all-zero game, so this strip
+  // printed "G1 0–0" directly under the dash that exists to avoid claiming a
+  // nil-nil result. `games` is seeded with [{a:0,b:0}] by the engine, so the
+  // length check alone doesn't catch it.
+  if (props.matchOver) return hasScoreline.value ? props.games : [];
   return props.games.slice(0, -1);
 });
 </script>
 
 <template>
+  <!-- The finished card used to invert (bg-foreground / text-background), which
+       made it read as a light card in dark mode and vice versa. Worse, every
+       child kept using tokens computed against the *page* background: the FINAL
+       badge (success on success-soft) landed at 1.63:1 on the inverted card in
+       dark mode and 3.27:1 in light — illegible in both. The card now stays on
+       the normal surface and signals "done" with the badge plus a success-tinted
+       border, so every token inside it means what it says again. -->
   <div
-    class="rounded-lg p-4 border transition-colors"
-    :class="
-      matchOver
-        ? 'bg-neutral-950 text-neutral-50 border-neutral-900'
-        : 'bg-surface text-foreground border-border'
-    "
+    class="rounded-lg p-4 border bg-surface text-foreground transition-colors"
+    :class="matchOver ? 'border-success/40' : 'border-border'"
   >
     <div class="flex justify-between items-center mb-3">
       <span class="inline-flex gap-1.5 items-center">
@@ -60,11 +112,13 @@ const completedGames = computed<GameScore[]>(() => {
         >
           Final
         </span>
+        <!-- LIVE is a status, not a competitor: it used to be painted with
+             team-a, which read as "team A is live" next to team B's score. -->
         <span
           v-else
-          class="inline-flex items-center gap-1 text-[10px] font-bold tracking-[0.1em] uppercase text-team-a"
+          class="inline-flex items-center gap-1 text-[10px] font-bold tracking-[0.1em] uppercase text-live"
         >
-          <span class="size-1.5 rounded-full bg-team-a animate-pulse-soft" />
+          <span class="size-1.5 rounded-full bg-live animate-pulse-soft" />
           LIVE
         </span>
         <span class="text-sm text-fg-muted">{{ displayName }}</span>
@@ -77,12 +131,22 @@ const completedGames = computed<GameScore[]>(() => {
       <div>
         <div
           class="text-sm mb-0.5"
-          :class="matchOver ? 'text-neutral-400' : 'text-fg-muted'"
+          :class="
+            matchOver && winner === 'A'
+              ? 'font-semibold text-foreground'
+              : 'text-fg-muted'
+          "
         >
           {{ teamNames.a }}
         </div>
-        <div class="score text-[40px]">
-          {{ headlineA }}
+        <!-- Keep the score font either way so both halves stay on the same
+             baseline; the dash is just muted, since it marks an absent score
+             rather than a result. -->
+        <div
+          class="score text-[40px]"
+          :class="showHeadlineNumbers ? '' : 'text-fg-subtle'"
+        >
+          {{ showHeadlineNumbers ? headlineA : '—' }}
         </div>
         <div v-if="!isSingleGame" class="flex gap-1 mt-1">
           <span
@@ -102,12 +166,19 @@ const completedGames = computed<GameScore[]>(() => {
       <div class="text-right">
         <div
           class="text-sm mb-0.5"
-          :class="matchOver ? 'text-neutral-400' : 'text-fg-muted'"
+          :class="
+            matchOver && winner === 'B'
+              ? 'font-semibold text-foreground'
+              : 'text-fg-muted'
+          "
         >
           {{ teamNames.b }}
         </div>
-        <div class="score text-[40px]">
-          {{ headlineB }}
+        <div
+          class="score text-[40px]"
+          :class="showHeadlineNumbers ? '' : 'text-fg-subtle'"
+        >
+          {{ showHeadlineNumbers ? headlineB : '—' }}
         </div>
         <div v-if="!isSingleGame" class="flex gap-1 mt-1 justify-end">
           <span
@@ -124,20 +195,29 @@ const completedGames = computed<GameScore[]>(() => {
         </div>
       </div>
     </div>
+    <!-- Names the winner outright. The scoreline alone can't: a walkover has no
+         scoreline at all, and even a normal result leaves the reader to compare
+         two numbers. No verb — the trophy supplies it, which also sidesteps
+         "Kumar wins" vs "Kumar / Rao win" without needing to know the mode. -->
+    <div
+      v-if="matchOver && winnerName"
+      class="mt-3 flex flex-wrap items-center gap-x-1.5 text-sm"
+    >
+      <Trophy class="size-3.5 shrink-0 text-success" />
+      <span class="font-semibold">{{ winnerName }}</span>
+      <span v-if="endReasonLabel" class="text-fg-muted">
+        · {{ endReasonLabel }}
+      </span>
+    </div>
+
     <div
       v-if="completedGames.length > 0"
-      class="mt-3 flex flex-wrap gap-1.5 text-[11px] font-medium tabular-nums"
-      :class="matchOver ? 'text-neutral-400' : 'text-fg-muted'"
+      class="mt-3 flex flex-wrap gap-1.5 text-[11px] font-medium tabular-nums text-fg-muted"
     >
       <span
         v-for="(g, i) in completedGames"
         :key="`g-${i}`"
-        class="px-1.5 py-0.5 rounded border"
-        :class="
-          matchOver
-            ? 'border-neutral-800 bg-neutral-900'
-            : 'border-border bg-surface-2'
-        "
+        class="px-1.5 py-0.5 rounded border border-border bg-surface-2"
       >
         G{{ i + 1 }} {{ g.a }}–{{ g.b }}
       </span>

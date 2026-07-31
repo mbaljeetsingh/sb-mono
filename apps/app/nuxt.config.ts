@@ -18,11 +18,15 @@ export default defineNuxtConfig({
   // Dark-mode handling. Broadcast surfaces (scoreboard / overlay / control)
   // opt out per-page via `definePageMeta({ colorMode: 'light' })` so the
   // user's preference never tints an OBS feed or venue TV.
+  // Dark is the default: operators score in dim halls and evening leagues, and
+  // OBS users composite against dark scenes. `system` still wins when the OS
+  // states a preference; `dark` only decides the no-preference case. Users who
+  // already picked light keep it (stored in sb:theme).
   colorMode: {
     classSuffix: '',
     storageKey: 'sb:theme',
     preference: 'system',
-    fallback: 'light',
+    fallback: 'dark',
   },
   devtools: { enabled: true },
   // Under portless (dev), PORT is injected (random 4xxx) and wins; otherwise the

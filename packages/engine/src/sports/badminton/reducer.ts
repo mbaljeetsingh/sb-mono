@@ -88,6 +88,11 @@ function applyEvent(
       return state;
 
     case 'walkover':
+      // First terminal event wins, like every other ending below. Without this
+      // a stray second walkover could reassign `winner` on an already-decided
+      // match — and because the log is replayed from scratch on every device,
+      // a duplicate that reached Supabase would flip the result everywhere.
+      if (state.matchOver) return state;
       return {
         ...state,
         matchOver: true,

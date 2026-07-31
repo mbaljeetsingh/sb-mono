@@ -19,3 +19,7 @@ coverage
 # Stray shadcn-CLI output — the CLI sometimes resolves the @sb/ alias as a
 # literal directory. Real components live in layers/ui/components/ui/.
 /@sb/
+
+# UI redesign exploration — palette candidates, per-page audit, and the final
+# spec (mockups/FINAL.md). Local working notes, not shipped source.
+mockups/

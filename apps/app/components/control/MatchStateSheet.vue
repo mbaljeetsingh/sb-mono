@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { X } from "lucide-vue-next";
-import type { SideId } from "@sb/engine";
-import { Button } from "@sb/layer-ui/components/ui/button";
+import { ref } from 'vue';
+import { BriefcaseMedical, Flag, Pause, X, XCircle } from 'lucide-vue-next';
+import type { SideId } from '@sb/engine';
+import { Button } from '@sb/layer-ui/components/ui/button';
 
 const props = defineProps<{
   teamNames: { a: string; b: string };
@@ -14,27 +14,27 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "timeout", side: SideId, kind: "standard" | "medical" | "injury"): void;
-  (e: "penalty", side: SideId, card: "yellow" | "red" | "black"): void;
-  (e: "walkover", winner: SideId): void;
-  (e: "retirement", retiring: SideId): void;
-  (e: "open-score-correct"): void;
-  (e: "reset"): void;
-  (e: "reset-game"): void;
-  (e: "close"): void;
+  (e: 'timeout', side: SideId, kind: 'standard' | 'medical' | 'injury'): void;
+  (e: 'penalty', side: SideId, card: 'yellow' | 'red' | 'black'): void;
+  (e: 'walkover', winner: SideId): void;
+  (e: 'retirement', retiring: SideId): void;
+  (e: 'open-score-correct'): void;
+  (e: 'reset'): void;
+  (e: 'reset-game'): void;
+  (e: 'close'): void;
 }>();
 
 const nameOf = (s: SideId) =>
-  s === "A" ? props.teamNames.a : props.teamNames.b;
+  s === 'A' ? props.teamNames.a : props.teamNames.b;
 const otherOf = (s: SideId) =>
-  s === "A" ? props.teamNames.b : props.teamNames.a;
+  s === 'A' ? props.teamNames.b : props.teamNames.a;
 
 // Two-tap confirm for cards that mutate match state. Stays armed until tapped
 // again or the sheet closes.
 const armedCard = ref<string | null>(null);
-const tapPenalty = (side: SideId, card: "yellow" | "red" | "black") => {
-  if (card === "yellow") {
-    emit("penalty", side, card);
+const tapPenalty = (side: SideId, card: 'yellow' | 'red' | 'black') => {
+  if (card === 'yellow') {
+    emit('penalty', side, card);
     return;
   }
   const key = `${side}:${card}`;
@@ -43,7 +43,7 @@ const tapPenalty = (side: SideId, card: "yellow" | "red" | "black") => {
     return;
   }
   armedCard.value = null;
-  emit("penalty", side, card);
+  emit('penalty', side, card);
 };
 
 // Two-tap confirm for the destructive resets. First tap arms it, second fires.
@@ -54,7 +54,7 @@ const onResetTap = () => {
     confirmReset.value = true;
     return;
   }
-  emit("reset");
+  emit('reset');
 };
 const confirmResetGame = ref(false);
 const onResetGameTap = () => {
@@ -62,13 +62,13 @@ const onResetGameTap = () => {
     confirmResetGame.value = true;
     return;
   }
-  emit("reset-game");
+  emit('reset-game');
 };
 </script>
 
 <template>
   <div
-    class="absolute inset-x-0 bottom-0 z-50 bg-surface text-foreground rounded-t-2xl shadow-[0_-12px_40px_rgba(0,0,0,0.18)] flex flex-col max-h-[85vh]"
+    class="absolute inset-x-0 bottom-0 z-50 mx-auto w-full max-w-2xl bg-surface text-foreground rounded-t-2xl shadow-[0_-12px_40px_rgba(0,0,0,0.18)] flex flex-col max-h-[85vh] md:max-h-[68vh]"
   >
     <!-- Sticky header: drag handle + title + close button. Stays put while
          the body scrolls so the operator always has a way out. -->
@@ -108,7 +108,8 @@ const onResetGameTap = () => {
           class="h-auto py-2 whitespace-normal"
           @click="emit('timeout', 'A', 'standard')"
         >
-          ⏸ Timeout · {{ nameOf("A") }}
+          <Pause class="size-3.5" />
+          Timeout · {{ nameOf('A') }}
         </Button>
         <Button
           variant="outline"
@@ -116,7 +117,8 @@ const onResetGameTap = () => {
           class="h-auto py-2 whitespace-normal"
           @click="emit('timeout', 'B', 'standard')"
         >
-          ⏸ Timeout · {{ nameOf("B") }}
+          <Pause class="size-3.5" />
+          Timeout · {{ nameOf('B') }}
         </Button>
       </div>
       <div class="grid grid-cols-2 gap-2 mb-5">
@@ -126,7 +128,8 @@ const onResetGameTap = () => {
           class="h-auto py-2 whitespace-normal"
           @click="emit('timeout', 'A', 'medical')"
         >
-          + Medical · {{ nameOf("A") }}
+          <BriefcaseMedical class="size-3.5" />
+          Medical · {{ nameOf('A') }}
         </Button>
         <Button
           variant="outline"
@@ -134,7 +137,8 @@ const onResetGameTap = () => {
           class="h-auto py-2 whitespace-normal"
           @click="emit('timeout', 'B', 'medical')"
         >
-          + Medical · {{ nameOf("B") }}
+          <BriefcaseMedical class="size-3.5" />
+          Medical · {{ nameOf('B') }}
         </Button>
       </div>
 
@@ -150,7 +154,8 @@ const onResetGameTap = () => {
           class="h-auto py-2 whitespace-normal"
           @click="tapPenalty('A', 'yellow')"
         >
-          🟨 Yellow · {{ nameOf("A") }}
+          <span class="size-3 shrink-0 rounded-[2px] bg-[#eab308]" />
+          Yellow · {{ nameOf('A') }}
         </Button>
         <Button
           variant="outline"
@@ -158,7 +163,8 @@ const onResetGameTap = () => {
           class="h-auto py-2 whitespace-normal"
           @click="tapPenalty('B', 'yellow')"
         >
-          🟨 Yellow · {{ nameOf("B") }}
+          <span class="size-3 shrink-0 rounded-[2px] bg-[#eab308]" />
+          Yellow · {{ nameOf('B') }}
         </Button>
       </div>
       <div class="grid grid-cols-2 gap-2 mb-2">
@@ -168,10 +174,14 @@ const onResetGameTap = () => {
           class="h-auto py-2 whitespace-normal"
           @click="tapPenalty('A', 'red')"
         >
+          <span
+            v-if="armedCard !== 'A:red'"
+            class="size-3 shrink-0 rounded-[2px] bg-[#dc2626]"
+          />
           {{
-            armedCard === "A:red"
-              ? `Tap again — point to ${otherOf("A")}`
-              : `🟥 Red · ${nameOf("A")}`
+            armedCard === 'A:red'
+              ? `Tap again — point to ${otherOf('A')}`
+              : `Red · ${nameOf('A')}`
           }}
         </Button>
         <Button
@@ -180,10 +190,14 @@ const onResetGameTap = () => {
           class="h-auto py-2 whitespace-normal"
           @click="tapPenalty('B', 'red')"
         >
+          <span
+            v-if="armedCard !== 'B:red'"
+            class="size-3 shrink-0 rounded-[2px] bg-[#dc2626]"
+          />
           {{
-            armedCard === "B:red"
-              ? `Tap again — point to ${otherOf("B")}`
-              : `🟥 Red · ${nameOf("B")}`
+            armedCard === 'B:red'
+              ? `Tap again — point to ${otherOf('B')}`
+              : `Red · ${nameOf('B')}`
           }}
         </Button>
       </div>
@@ -194,10 +208,14 @@ const onResetGameTap = () => {
           class="h-auto py-2 whitespace-normal"
           @click="tapPenalty('A', 'black')"
         >
+          <span
+            v-if="armedCard !== 'A:black'"
+            class="size-3 shrink-0 rounded-[2px] bg-foreground"
+          />
           {{
-            armedCard === "A:black"
-              ? `Tap again — DQ ${nameOf("A")}`
-              : `⬛ Black · ${nameOf("A")}`
+            armedCard === 'A:black'
+              ? `Tap again — DQ ${nameOf('A')}`
+              : `Black · ${nameOf('A')}`
           }}
         </Button>
         <Button
@@ -206,10 +224,14 @@ const onResetGameTap = () => {
           class="h-auto py-2 whitespace-normal"
           @click="tapPenalty('B', 'black')"
         >
+          <span
+            v-if="armedCard !== 'B:black'"
+            class="size-3 shrink-0 rounded-[2px] bg-foreground"
+          />
           {{
-            armedCard === "B:black"
-              ? `Tap again — DQ ${nameOf("B")}`
-              : `⬛ Black · ${nameOf("B")}`
+            armedCard === 'B:black'
+              ? `Tap again — DQ ${nameOf('B')}`
+              : `Black · ${nameOf('B')}`
           }}
         </Button>
       </div>
@@ -225,13 +247,13 @@ const onResetGameTap = () => {
           class="h-auto justify-start gap-3 p-3 whitespace-normal"
           @click="emit('walkover', 'A')"
         >
-          <span class="text-team-a text-lg">⚑</span>
+          <Flag class="size-4 text-team-a" />
           <span class="flex-1 text-left">
             <span class="block text-sm font-semibold"
-              >Walkover · {{ nameOf("A") }} wins</span
+              >Walkover · {{ nameOf('A') }} wins</span
             >
             <span class="block text-[11px] text-fg-subtle font-normal"
-              >{{ nameOf("B") }} didn't show</span
+              >{{ nameOf('B') }} didn't show</span
             >
           </span>
           <span>›</span>
@@ -241,13 +263,13 @@ const onResetGameTap = () => {
           class="h-auto justify-start gap-3 p-3 whitespace-normal"
           @click="emit('walkover', 'B')"
         >
-          <span class="text-team-b text-lg">⚑</span>
+          <Flag class="size-4 text-team-b" />
           <span class="flex-1 text-left">
             <span class="block text-sm font-semibold"
-              >Walkover · {{ nameOf("B") }} wins</span
+              >Walkover · {{ nameOf('B') }} wins</span
             >
             <span class="block text-[11px] text-fg-subtle font-normal"
-              >{{ nameOf("A") }} didn't show</span
+              >{{ nameOf('A') }} didn't show</span
             >
           </span>
           <span>›</span>
@@ -257,13 +279,13 @@ const onResetGameTap = () => {
           class="h-auto justify-start gap-3 p-3 whitespace-normal"
           @click="emit('retirement', 'A')"
         >
-          <span class="text-team-a text-lg">✕</span>
+          <XCircle class="size-4 text-team-a" />
           <span class="flex-1 text-left">
             <span class="block text-sm font-semibold"
-              >Retirement · {{ nameOf("A") }}</span
+              >Retirement · {{ nameOf('A') }}</span
             >
             <span class="block text-[11px] text-fg-subtle font-normal"
-              >{{ nameOf("A") }} injured · {{ nameOf("B") }} wins</span
+              >{{ nameOf('A') }} injured · {{ nameOf('B') }} wins</span
             >
           </span>
           <span>›</span>
@@ -273,13 +295,13 @@ const onResetGameTap = () => {
           class="h-auto justify-start gap-3 p-3 whitespace-normal"
           @click="emit('retirement', 'B')"
         >
-          <span class="text-team-b text-lg">✕</span>
+          <XCircle class="size-4 text-team-b" />
           <span class="flex-1 text-left">
             <span class="block text-sm font-semibold"
-              >Retirement · {{ nameOf("B") }}</span
+              >Retirement · {{ nameOf('B') }}</span
             >
             <span class="block text-[11px] text-fg-subtle font-normal"
-              >{{ nameOf("B") }} injured · {{ nameOf("A") }} wins</span
+              >{{ nameOf('B') }} injured · {{ nameOf('A') }} wins</span
             >
           </span>
           <span>›</span>
@@ -311,8 +333,8 @@ const onResetGameTap = () => {
         >
           {{
             confirmResetGame
-              ? "Tap again — current game back to 0–0"
-              : "Reset current game to 0–0"
+              ? 'Tap again — current game back to 0–0'
+              : 'Reset current game to 0–0'
           }}
         </Button>
         <Button
@@ -323,8 +345,8 @@ const onResetGameTap = () => {
         >
           {{
             confirmReset
-              ? "Tap again to confirm — clears all events"
-              : "Reset entire match to 0–0"
+              ? 'Tap again to confirm — clears all events'
+              : 'Reset entire match to 0–0'
           }}
         </Button>
       </div>

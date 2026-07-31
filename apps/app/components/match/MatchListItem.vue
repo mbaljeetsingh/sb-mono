@@ -10,10 +10,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@sb/layer-ui/components/ui/dropdown-menu';
-import { MoreVertical, Trash2 } from 'lucide-vue-next';
+import { MoreVertical, Trash2, Trophy } from 'lucide-vue-next';
 import { computed } from 'vue';
+import SportGlyph from '~/components/common/SportGlyph.vue';
 import DeleteMatchDialog from '~/components/match/DeleteMatchDialog.vue';
 import type { MatchSummary } from '~/lib/matchSummaries';
+import {
+  type SportId,
+  presetDisplayName,
+  sportIdFromPreset,
+} from '~/lib/sports';
 
 const props = defineProps<{
   id: string;
@@ -36,13 +42,41 @@ const formatBadge = computed(() => {
 
 const emit = defineEmits<(e: 'deleted', id: string) => void>();
 
-const label = computed(() => {
-  const a = props.teamNameA?.trim() || 'Team A';
-  const b = props.teamNameB?.trim() || 'Team B';
-  return `${a} vs ${b}`;
-});
+const nameA = computed(() => props.teamNameA?.trim() || 'Team A');
+const nameB = computed(() => props.teamNameB?.trim() || 'Team B');
+// Plain string for the delete dialog's confirmation copy; the row itself
+// renders the two names as separate spans so it can mark the winner.
+const label = computed(() => `${nameA.value} vs ${nameB.value}`);
 
-const sportLabel = computed(() => props.sportPreset.replace(/-/g, ' '));
+// Which side won, once the match is final. The summary already resolves this
+// from the engine — the row just never read it, so a finished match showed
+// "FINAL 21–15" and left you to work out which number belonged to whom.
+const winnerSide = computed(() =>
+  props.summary?.status === 'final' ? props.summary.winner : null
+);
+// The winner is emphasised by letting the loser recede — at 15px, medium vs
+// semibold alone is too small a step to read at a glance down a list.
+const sideClass = (side: 'A' | 'B') => {
+  if (!winnerSide.value) return '';
+  return side === winnerSide.value
+    ? 'font-semibold'
+    : 'font-normal text-fg-muted';
+};
+
+// Registry display name ("Badminton 21"), not a de-slugged id — the old
+// `replace(/-/g, ' ')` surfaced internal preset ids to users as "badminton 21".
+const sportLabel = computed(() => presetDisplayName(props.sportPreset));
+const sportId = computed(() => sportIdFromPreset(props.sportPreset));
+
+// Per-sport accent (not the --court-* surface, which is a dark mat and
+// unreadable as a foreground) so a sport reads the same colour everywhere.
+const sportChip: Record<SportId, string> = {
+  badminton: 'bg-court-badminton-accent/12 text-court-badminton-accent',
+  'table-tennis':
+    'bg-court-tabletennis-accent/12 text-court-tabletennis-accent',
+  tennis: 'bg-court-tennis-accent/12 text-court-tennis-accent',
+  pickleball: 'bg-court-pickleball-accent/12 text-court-pickleball-accent',
+};
 
 const formattedDate = computed(() => {
   const d = new Date(props.updatedAt);
@@ -64,22 +98,60 @@ const onDeleted = () => emit('deleted', props.id);
     class="rounded-lg border border-border bg-surface transition hover:border-border-strong"
   >
     <div class="flex items-center gap-2 pr-2">
-      <NuxtLink :to="`/m/${id}`" class="min-w-0 flex-1 px-4 py-3">
-        <div class="flex items-center gap-2">
-          <span class="truncate text-[15px] font-medium">{{ label }}</span>
-          <span
-            v-if="formatBadge"
-            class="shrink-0 rounded-sm bg-brand/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-brand"
-          >
-            {{ formatBadge }}
+      <NuxtLink
+        :to="`/m/${id}`"
+        class="flex min-w-0 flex-1 items-center gap-3 px-4 py-3"
+      >
+        <!-- Sport glyph on its court tint: twenty text-only rows are
+             unscannable, and the icon makes the preset legible at a glance. -->
+        <span
+          class="flex size-8 shrink-0 items-center justify-center rounded-lg"
+          :class="sportChip[sportId]"
+        >
+          <SportGlyph :sport="sportId" class="size-[18px]" />
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="flex items-center gap-2">
+            <!-- Wraps on mobile rather than truncating. On a 375px screen the
+                 status chip and scoreline leave so little room that a single
+                 truncated line rendered "Axelsen …" — the opponent gone
+                 entirely, which also threw away the winner emphasis. No
+                 line-clamp either: capping at two lines still cut the opponent
+                 off in doubles-vs-doubles, and a taller row costs less than a
+                 hidden name. Desktop has the width to stay on one line. -->
+            <span class="text-[15px] font-medium md:truncate">
+              <!-- The trophy sits against the winning name rather than in the
+                   status chip, so *which* side won is carried by its position.
+                   Weight alone (semibold vs muted) was too small a step to read
+                   scanning down a list. -->
+              <Trophy
+                v-if="winnerSide === 'A'"
+                class="mr-1 inline size-3.5 -translate-y-px text-success"
+              />
+              <span :class="sideClass('A')">{{ nameA }}</span>
+              <span class="font-normal text-fg-subtle"> vs </span>
+              <Trophy
+                v-if="winnerSide === 'B'"
+                class="mr-1 inline size-3.5 -translate-y-px text-success"
+              />
+              <span :class="sideClass('B')">{{ nameB }}</span>
+            </span>
+            <span
+              v-if="formatBadge"
+              class="shrink-0 rounded-sm bg-brand/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-brand"
+            >
+              {{ formatBadge }}
+            </span>
           </span>
-        </div>
-        <div class="mt-0.5 flex items-center gap-2 text-xs text-fg-muted">
-          <span class="capitalize">{{ sportLabel }}</span>
-          <span v-if="eventName">· {{ eventName }}</span>
-          <span v-if="courtLabel">· {{ courtLabel }}</span>
-          <span>· {{ formattedDate }}</span>
-        </div>
+          <span
+            class="mt-0.5 flex items-center gap-2 truncate text-xs text-fg-muted"
+          >
+            <span>{{ sportLabel }}</span>
+            <span v-if="eventName">· {{ eventName }}</span>
+            <span v-if="courtLabel">· {{ courtLabel }}</span>
+            <span>· {{ formattedDate }}</span>
+          </span>
+        </span>
       </NuxtLink>
 
       <!-- Status + scoreline — answers "which match is live and what's the
@@ -90,14 +162,14 @@ const onDeleted = () => emit('deleted', props.id);
       >
         <span
           v-if="summary.status === 'live'"
-          class="flex items-center gap-1.5 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold tracking-wider text-destructive"
+          class="flex items-center gap-1.5 rounded-full bg-live-soft px-2 py-0.5 text-[10px] font-bold tracking-wider text-live"
         >
           <span class="relative flex h-1.5 w-1.5">
             <span
-              class="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-75"
+              class="absolute inline-flex h-full w-full animate-ping rounded-full bg-live opacity-75"
             />
             <span
-              class="relative inline-flex h-1.5 w-1.5 rounded-full bg-destructive"
+              class="relative inline-flex h-1.5 w-1.5 rounded-full bg-live"
             />
           </span>
           LIVE

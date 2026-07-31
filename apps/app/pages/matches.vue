@@ -2,7 +2,7 @@
 import { Button } from '@sb/layer-ui/components/ui/button';
 import { useInfiniteScroll } from '@vueuse/core';
 import { Plus } from 'lucide-vue-next';
-import { computed, onUnmounted, ref, useTemplateRef, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import MatchListItem from '~/components/match/MatchListItem.vue';
 import { collectLocalMatchIds } from '~/lib/localMatches';
 import { type MatchSummary, fetchMatchSummaries } from '~/lib/matchSummaries';
@@ -160,9 +160,10 @@ const reload = () => {
   else loadLocalScoped();
 };
 
-const scroller = useTemplateRef<HTMLElement>('scroller');
+// Watches the window now that the page no longer owns an inner scroller.
+// (`ssr: false` in nuxt.config, so `window` is always defined here.)
 useInfiniteScroll(
-  scroller,
+  window,
   () => {
     if (isAuthed.value) loadRemote();
   },
@@ -184,10 +185,13 @@ const emptyLabel = computed(() =>
 </script>
 
 <template>
-  <div
-    ref="scroller"
-    class="mx-auto h-[calc(100vh-3.5rem)] w-full max-w-3xl overflow-y-auto px-6 py-10"
-  >
+  <!-- Scrolls with the window rather than owning an inner scroller. The old
+       `h-[calc(100vh-3.5rem)] overflow-y-auto` had two problems: 100vh (not
+       dvh) mis-measures against mobile Safari's collapsing toolbar while the
+       header is actually 3.5rem + safe-area, and because the window never
+       scrolled, MobileTabBar's useWindowScroll hide-on-scroll never fired here
+       — the bar behaved differently on this page than on every other one. -->
+  <div class="mx-auto w-full max-w-3xl px-6 py-10">
     <header class="mb-6 flex items-center justify-between gap-4">
       <h1 class="text-3xl font-semibold tracking-tight">Matches</h1>
       <Button as-child size="sm" class="font-semibold">

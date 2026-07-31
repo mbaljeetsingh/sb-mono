@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button } from '@sb/layer-ui/components/ui/button';
+import { LogOut } from 'lucide-vue-next';
 import { Input } from '@sb/layer-ui/components/ui/input';
 import { Label } from '@sb/layer-ui/components/ui/label';
 import { computed, ref, useTemplateRef, watchEffect } from 'vue';
@@ -14,7 +15,17 @@ definePageMeta({ requiresAuth: true });
 useSeoMeta({ title: 'Profile', robots: 'noindex, nofollow' });
 
 const userStore = useUserStore();
-const { updatePassword: doUpdatePassword } = useAuth();
+const { updatePassword: doUpdatePassword, signOut } = useAuth();
+
+const roleLabel = computed(() => {
+  const role = userStore.userRole;
+  if (!role) return 'Account';
+  return `${role} account`;
+});
+
+const handleSignOut = async () => {
+  await signOut();
+};
 
 const displayName = ref('');
 const avatarUrl = ref<string | null>(null);
@@ -98,13 +109,24 @@ const savePassword = async () => {
 
 <template>
   <div class="mx-auto max-w-2xl space-y-8 px-4 py-10">
-    <header>
-      <h1 class="text-2xl font-semibold tracking-tight">
-        {{ displayName || userStore.currentUser?.email }}
-      </h1>
-      <p class="text-sm text-muted-foreground">
-        Role: <span class="font-medium">{{ userStore.userRole ?? '—' }}</span>
-      </p>
+    <header class="flex items-start justify-between gap-4">
+      <div class="min-w-0">
+        <h1 class="truncate text-2xl font-semibold tracking-tight">
+          {{ displayName || userStore.currentUser?.email }}
+        </h1>
+        <!-- Humanised, not the raw enum: userRole is a Postgres app_role value
+             like `free` / `pro` / `admin`. -->
+        <p class="text-sm text-muted-foreground capitalize">
+          {{ roleLabel }}
+        </p>
+      </div>
+      <!-- Sign out was reachable only from NavUser and the tab bar's More
+           sheet, so a signed-in user sitting on their own profile had no
+           visible way out. -->
+      <Button variant="outline" size="sm" @click="handleSignOut">
+        <LogOut class="size-4" />
+        Sign out
+      </Button>
     </header>
 
     <section class="space-y-6 rounded-lg border bg-card p-6 shadow-sm">

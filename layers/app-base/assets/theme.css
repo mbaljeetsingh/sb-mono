@@ -68,6 +68,32 @@
   --color-danger-soft: var(--danger-soft);
   --color-info: var(--info);
 
+  /* Live status — deliberately NOT a team color. LIVE is a match status, not a
+   * competitor: painting it with --team-a made the indicator read as "team A"
+   * on surfaces where both appear. Keep these two uses separate. */
+  --color-live: var(--live);
+  --color-live-soft: var(--live-soft);
+
+  /* Court surfaces — /control renders the real playing surface of the active
+   * sport (green badminton mat, blue TT table, hard court, pickleball green)
+   * with painted lines. Sport identity lives here; team identity lives in
+   * --color-team-*. */
+  --color-court-badminton: var(--court-badminton);
+  --color-court-tabletennis: var(--court-tabletennis);
+  --color-court-tennis: var(--court-tennis);
+  --color-court-pickleball: var(--court-pickleball);
+  --color-court-line: var(--court-line);
+
+  /* Per-sport *foreground* accents — for glyphs, chips and labels. The
+   * --court-* values above are playing surfaces (a dark mat in dark mode), so
+   * they are unreadable as text/icon colors: #1c3327 on #151a16 is 1.30:1.
+   * Use these for anything drawn ON a normal surface, and --court-* only for
+   * the surface itself. */
+  --color-court-badminton-accent: var(--court-badminton-accent);
+  --color-court-tabletennis-accent: var(--court-tabletennis-accent);
+  --color-court-tennis-accent: var(--court-tennis-accent);
+  --color-court-pickleball-accent: var(--court-pickleball-accent);
+
   /* Radius scale (shadcn-vue ladder) */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -77,11 +103,11 @@
 
   /* Fonts */
   --font-sans:
-    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui,
     sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --font-numeric: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --font-accent: "Kalam", cursive;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-numeric: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-accent: 'Kalam', cursive;
 
   /* Numeric (score) sizes — separate from chrome typography
    * Pair with font-numeric for tabular-nums. */
@@ -101,99 +127,177 @@
 }
 
 :root {
-  /* shadcn-vue chrome (light) — warm parchment + deep court green */
-  --background: #f7f5ed;
+  /* shadcn-vue chrome (light) — warm parchment + deep court green.
+   * Light is the fallback mode; dark below is the default (see nuxt.config
+   * colorMode.fallback). */
+  --background: #f6f4ec;
   --foreground: #141413;
-  --card: #faf9f5;
+  --card: #fdfcf8;
   --card-foreground: #141413;
-  --popover: #faf9f5;
+  --popover: #fdfcf8;
   --popover-foreground: #141413;
-  --primary: #3d6b4a;
-  --primary-foreground: #faf9f5;
-  --secondary: #e8e6dc;
+  --primary: #3a6647;
+  --primary-foreground: #fdfcf8;
+  --secondary: #e8e5d9;
   --secondary-foreground: #141413;
-  --muted: #f0eee6;
-  --muted-foreground: #7d7464;
-  --accent: #ece7d9;
+  --muted: #edeae0;
+  --muted-foreground: #56534a;
+  --accent: #e4dfd0;
   --accent-foreground: #141413;
-  --destructive: #b53333;
-  --destructive-foreground: #faf9f5;
-  --border: #ece7d9;
-  --input: #ece7d9;
-  --ring: #3d6b4a;
+  --destructive: #a8201a;
+  --destructive-foreground: #fdfcf8;
+  --border: #e4dfd0;
+  --input: #e4dfd0;
+  --ring: #3a6647;
   --radius: 0.75rem;
 
   /* Brand variants */
-  --brand-hover: #335a3e;
-  --brand-soft: rgba(61, 107, 74, 0.12);
+  --brand-hover: #2f5439;
+  --brand-soft: rgba(58, 102, 71, 0.12);
 
-  /* Surface aliases */
-  --fg-muted: #5a574a;
-  --fg-subtle: #8a8674;
-  --border-strong: #d6cfbb;
+  /* Surface aliases. --fg-subtle carries every 11px uppercase section label in
+   * the app, so it must clear WCAG AA as normal-size text: 5.25:1 on --card.
+   * (The previous #8a8674 was 3.47:1 — a fail.) */
+  --fg-muted: #56534a;
+  --fg-subtle: #6f6a5c;
+  --border-strong: #cbc3ad;
   --overlay: rgba(20, 20, 19, 0.55);
 
-  /* Team colors (color-blind safe defaults) */
-  --team-a: #dc2626;
+  /* Live status (never a team color) */
+  --live: #d92d20;
+  --live-soft: rgba(217, 45, 32, 0.12);
+
+  /* Team colors. Orange/blue rather than red/blue: red collided with both
+   * --live and --destructive, and orange-vs-blue survives deuteranopia and
+   * protanopia at least as well. */
+  --team-a: #ea580c;
   --team-a-foreground: #ffffff;
-  --team-a-soft: rgba(220, 38, 38, 0.12);
-  --team-b: #2563eb;
+  --team-a-soft: rgba(234, 88, 12, 0.12);
+  --team-a-glow: rgba(234, 88, 12, 0.45);
+  --team-b: #1d4ed8;
   --team-b-foreground: #ffffff;
-  --team-b-soft: rgba(37, 99, 235, 0.12);
+  --team-b-soft: rgba(29, 78, 216, 0.12);
+  --team-b-glow: rgba(29, 78, 216, 0.45);
 
   /* Match-state semantics */
-  --server-indicator: #ca8a04;
-  --game-point: #d97706;
-  --match-point: #c2410c;
-  --success: #4d7c0f;
-  --success-soft: rgba(77, 124, 15, 0.14);
+  --server-indicator: #b45309;
+  --game-point: #c2410c;
+  --match-point: #9a3412;
+  /* Darker than the obvious lime-700. --success only ever paints text (or a
+     border), and its one heavy use is `text-success on bg-success-soft` — the
+     FINAL badge — where the tint lifts the background enough that #4d7c0f came
+     in at 4.05:1, under AA for 10px bold. #3f6a0a puts that pairing at 5.11:1
+     and every plain text-success on --surface well above it. */
+  --success: #3f6a0a;
+  --success-soft: rgba(63, 106, 10, 0.14);
   --warning: #b45309;
   --warning-soft: rgba(180, 83, 9, 0.14);
-  --danger-soft: rgba(177, 54, 30, 0.14);
-  --info: #1e40af;
+  --danger-soft: rgba(168, 32, 26, 0.14);
+  --info: #1d4ed8;
+
+  /* Court surfaces — paler washes in light mode so painted lines still read */
+  --court-badminton: #dcebe0;
+  --court-tabletennis: #d8e6f5;
+  --court-tennis: #e4e0d2;
+  --court-pickleball: #dbe8e4;
+  --court-line: rgba(20, 20, 19, 0.28);
+
+  /* Per-sport foregrounds (glyphs / chips), ≥6:1 on --card */
+  --court-badminton-accent: #2f6b45;
+  --court-tabletennis-accent: #1a5f96;
+  --court-tennis-accent: #46617a;
+  --court-pickleball-accent: #2a6b5c;
 }
 
+/* Dark — the default mode. Evening league play, dim halls and OBS operators
+ * are the common case, so dark leads and light is the fallback. */
 .dark,
-[data-theme="dark"] {
-  --background: #0f0e0c;
-  --foreground: #faf9f5;
-  --card: #1a1815;
-  --card-foreground: #faf9f5;
-  --popover: #1a1815;
-  --popover-foreground: #faf9f5;
-  --primary: #52a36a;
-  --primary-foreground: #0f1a13;
-  --secondary: #2a2620;
-  --secondary-foreground: #faf9f5;
-  --muted: #24211c;
-  --muted-foreground: #a8a395;
-  --accent: #2a2620;
-  --accent-foreground: #faf9f5;
-  --destructive: #d44545;
-  --destructive-foreground: #faf9f5;
-  --border: #2a2620;
-  --input: #2a2620;
-  --ring: #52a36a;
+[data-theme='dark'] {
+  --background: #0c0f0d;
+  --foreground: #f2f5f2;
+  --card: #151a16;
+  --card-foreground: #f2f5f2;
+  --popover: #151a16;
+  --popover-foreground: #f2f5f2;
+  --primary: #57b174;
+  --primary-foreground: #0a1a10;
+  --secondary: #1d231e;
+  --secondary-foreground: #f2f5f2;
+  --muted: #1d231e;
+  --muted-foreground: #a6b0a8;
+  --accent: #222a24;
+  --accent-foreground: #f2f5f2;
+  --destructive: #e0655c;
+  --destructive-foreground: #f2f5f2;
+  --border: #222a24;
+  --input: #222a24;
+  --ring: #57b174;
 
-  --brand-hover: #6dbf85;
-  --brand-soft: rgba(82, 163, 106, 0.18);
+  --brand-hover: #72c58c;
+  --brand-soft: rgba(87, 177, 116, 0.16);
 
-  --fg-muted: #a8a395;
-  --fg-subtle: #7a7565;
-  --border-strong: #3a3530;
-  --overlay: rgba(0, 0, 0, 0.72);
+  --fg-muted: #a6b0a8;
+  --fg-subtle: #8a958c; /* ~4.9:1 on --card (was #7a7565 = 3.85:1, a fail) */
+  --border-strong: #35423a;
+  --overlay: rgba(0, 0, 0, 0.74);
 
-  --team-a: #ef4444;
-  --team-b: #3b82f6;
-  --team-a-soft: rgba(239, 68, 68, 0.2);
-  --team-b-soft: rgba(59, 130, 246, 0.2);
+  --live: #ff5347;
+  --live-soft: rgba(255, 83, 71, 0.16);
 
-  --server-indicator: #f59e0b;
-  --game-point: #f59e0b;
-  --match-point: #fb923c;
+  --team-a: #f97316;
+  --team-a-foreground: #241203;
+  --team-a-soft: rgba(249, 115, 22, 0.18);
+  --team-a-glow: rgba(249, 115, 22, 0.5);
+  --team-b: #38bdf8;
+  --team-b-foreground: #04222e;
+  --team-b-soft: rgba(56, 189, 248, 0.18);
+  --team-b-glow: rgba(56, 189, 248, 0.5);
+
+  --server-indicator: #fbbf24;
+  --game-point: #fb923c;
+  --match-point: #fdba74;
 
   --success: #84cc16;
   --success-soft: rgba(132, 204, 22, 0.16);
+  --warning: #eab308;
+  --warning-soft: rgba(234, 179, 8, 0.14);
+  --danger-soft: rgba(224, 101, 92, 0.16);
+  --info: #38bdf8;
+
+  /* Court surfaces — true to life */
+  --court-badminton: #1c3327;
+  --court-tabletennis: #14406e;
+  --court-tennis: #2b4a63;
+  --court-pickleball: #1f4a40;
+  --court-line: rgba(255, 255, 255, 0.3);
+
+  /* Per-sport foregrounds (glyphs / chips), ≥9:1 on --card */
+  --court-badminton-accent: #7ed09b;
+  --court-tabletennis-accent: #7dd3fc;
+  --court-tennis-accent: #a8c8e8;
+  --court-pickleball-accent: #7fd0be;
+}
+
+/* Default border colour.
+ *
+ * Tailwind v4's preflight sets `border: 0 solid` without a colour, so the
+ * initial value stays `currentColor` — meaning any bare `border` / `border-b` /
+ * `border-x` utility tracks the element's TEXT colour rather than the border
+ * token. That rendered the AppHeader rule, dropdown menus and inputs with
+ * near-black outlines in light mode (near-white in dark). shadcn assumes this
+ * base rule exists; the project was missing it.
+ *
+ * Lives here rather than in layers/ui (generated by the shadcn script), and
+ * references --border directly because `@theme inline` inlines its values and
+ * never emits a --color-border custom property to point at. */
+@layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--border, currentColor);
+  }
 }
 
 /* Filmable scoreboard route — full-bleed dark, no app chrome */
@@ -223,22 +327,26 @@
     transform: scale(0.85);
   }
 }
+/* Driven by --team-*-glow rather than literals: these used to hardcode the old
+ * red/blue team colors, so a palette change left the glow pulsing a color no
+ * team used. The fade-out target is transparent, which needs its own keyword
+ * (an rgba token can't be interpolated to alpha 0 inside a keyframe). */
 @keyframes glow-a {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.45);
+    box-shadow: 0 0 0 0 var(--team-a-glow);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(220, 38, 38, 0);
+    box-shadow: 0 0 0 8px transparent;
   }
 }
 @keyframes glow-b {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45);
+    box-shadow: 0 0 0 0 var(--team-b-glow);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+    box-shadow: 0 0 0 8px transparent;
   }
 }
 
@@ -247,7 +355,7 @@
 .score {
   font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+  font-feature-settings: 'tnum';
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 0.85;

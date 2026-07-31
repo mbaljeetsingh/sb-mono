@@ -13,6 +13,8 @@ import {
   ArrowUpDown,
   Columns3,
   MoreHorizontal,
+  PencilLine,
+  Repeat,
   Rows3,
   Undo2,
 } from 'lucide-vue-next';
@@ -27,6 +29,7 @@ import MatchStateSheet from '~/components/control/MatchStateSheet.vue';
 import ScoreCorrectSheet from '~/components/control/ScoreCorrectSheet.vue';
 import TeamRow from '~/components/control/TeamRow.vue';
 import TossSheet from '~/components/control/TossSheet.vue';
+import { sportIdFromPreset } from '~/lib/sports';
 
 definePageMeta({ layout: false });
 
@@ -100,6 +103,38 @@ const teamMeta = computed(() => ({
 const state = computed(() => reduceRacquet(events.value, config.value));
 const { cellsA, cellsB, cellIsServer, displayNameA, displayNameB } =
   useCourtCells(state, teamMeta);
+
+// Which playing surface to draw. TeamRow renders the real court for the sport
+// (green badminton mat, blue TT table, ...), so the active preset is legible
+// without reading the format chip.
+const sport = computed(() => sportIdFromPreset(preset.value));
+
+// Interval countdown. BWF allows 60s at the mid-game interval (first side to
+// 11) and 120s between games, and umpires actually run to those clocks — a
+// static "INTERVAL" badge doesn't help. Display only: nothing is blocked when
+// it reaches zero, it just stops counting.
+const INTERVAL_MS = 60_000;
+const nowMs = ref(Date.now());
+let nowTimer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  nowTimer = setInterval(() => {
+    nowMs.value = Date.now();
+  }, 1000);
+});
+onUnmounted(() => clearInterval(nowTimer));
+
+const intervalClock = computed(() => {
+  if (!state.value.atInterval) return null;
+  // Anchor to the last *point* — the event that actually reached the interval.
+  // The reducer keeps atInterval true across timeout/penalty events appended
+  // during the break, so anchoring to "whatever event is last" would silently
+  // restart the countdown every time the umpire logs one.
+  const anchor = events.value.findLast((e) => e.type === 'point');
+  if (!anchor?.ts) return null;
+  const left = Math.ceil((anchor.ts + INTERVAL_MS - nowMs.value) / 1000);
+  if (left <= 0) return null;
+  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+});
 
 // Sync matches.ended_at to the engine's view of "match is finished". Going
 // true → stamps the timestamp so the token RPCs auto-revoke co-scorer
@@ -261,6 +296,15 @@ const guardActive = (): boolean => {
   return false;
 };
 
+// Mis-tap guard. Each team's tap target is now the full half rather than a
+// half-width cell — better for a gloved thumb mid-rally, but a bigger surface
+// for a pocket brush or a bounced tap to land on. Two taps on the SAME team
+// inside 300ms are treated as one point; alternating taps are never swallowed,
+// because a genuine rally can't change hands that fast either.
+const TAP_DEBOUNCE_MS = 300;
+let lastTapSide: SideId | null = null;
+let lastTapAt = 0;
+
 const onTap = (side: SideId) => {
   if (state.value.matchOver) return;
   // Active timeout or suspension pauses play — score taps no-op until the
@@ -270,6 +314,10 @@ const onTap = (side: SideId) => {
   if (state.value.timeout || state.value.suspended) return;
   if (state.value.betweenGames) return;
   if (!guardActive()) return;
+  const now = performance.now();
+  if (side === lastTapSide && now - lastTapAt < TAP_DEBOUNCE_MS) return;
+  lastTapSide = side;
+  lastTapAt = now;
   vibrate(10);
   append({ type: 'point', side } as Omit<RacquetEvent, 'id' | 'ts'>);
 };
@@ -483,6 +531,26 @@ const canSwapPlayersA = computed(
 );
 const canSwapPlayersB = canSwapPlayersA;
 
+// Pre-match setup lives in the footer bar rather than as pills floating over
+// the court: the pills were live targets sitting inside the score button, and
+// four of them at once (ends, two partner swaps, first server) buried the
+// surface. The bar is free at this moment anyway — with nothing scored, Undo
+// has nothing to undo and Correct nothing to correct.
+//
+// Gated on canSwapInitial only (not canSwapAtGameStart), so Undo is never taken
+// away at the start of a later game, where undoing the previous game.end is a
+// real thing to want. Partner swap is rendered outside this branch precisely
+// because it stays legal in that second window.
+const showSetupBar = computed(
+  () => canSwapInitial.value && !state.value.matchOver
+);
+
+// swapServerOnly flips which SIDE serves first, so name the team that would
+// take over rather than the current server.
+const serveFirstLabel = computed(() =>
+  state.value.servingSide === 'A' ? displayNameB.value : displayNameA.value
+);
+
 // Glow the team(s) actually at game/match point — under rally scoring the
 // receiver can be at game point, so this must not follow servingSide. Both
 // can glow at once (e.g. 29–29 under the BWF cap).
@@ -642,6 +710,23 @@ const orientationB = computed<Orientation>(() => {
     return sidesSwapped.value ? 'left' : 'right';
   return sidesSwapped.value ? 'top' : 'bottom';
 });
+
+// The bar names people where the pills used to point at them. `cells` is
+// always [left court, right court], but TeamRow renders the top/right team's
+// zones reversed (BWF top-down view from that end), so the label has to follow
+// the same flip or it reads back-to-front against the court above it.
+const swapLabel = (cells: { label: string }[], reversed: boolean) => {
+  const names = cells.map((c) => c.label).filter(Boolean);
+  if (names.length !== 2) return 'Swap partners';
+  return (reversed ? [...names].reverse() : names).join(' ⇄ ');
+};
+const isZoneFlowReversed = (o: string) => o === 'top' || o === 'right';
+const swapLabelA = computed(() =>
+  swapLabel(cellsA.value, isZoneFlowReversed(orientationA.value))
+);
+const swapLabelB = computed(() =>
+  swapLabel(cellsB.value, isZoneFlowReversed(orientationB.value))
+);
 </script>
 
 <template>
@@ -738,11 +823,14 @@ const orientationB = computed<Orientation>(() => {
           </template>
         </span>
         <div class="flex items-center gap-2">
+          <!-- Counts down the BWF 60s interval rather than showing a static
+               badge — umpires run to that clock. Falls back to the plain badge
+               once it expires (or if the event has no timestamp). -->
           <span
             v-if="state.atInterval"
-            class="text-[10px] font-bold tracking-wider uppercase text-warning bg-warning-soft px-2 py-0.5 rounded-sm"
+            class="text-[11px] font-bold tracking-wider uppercase text-warning bg-warning-soft px-2 py-0.5 rounded-sm tabular-nums"
           >
-            INTERVAL
+            Interval{{ intervalClock ? ` · ${intervalClock}` : '' }}
           </span>
           <Button
             v-if="canEditMeta"
@@ -780,13 +868,16 @@ const orientationB = computed<Orientation>(() => {
         </div>
       </div>
 
-      <!-- Court frame. Two team rows separated by a 1px line over the dark
-           wrapper bg. Each row owns its own outer-ring highlight. Render
-           order follows `sidesSwapped` so the swap is a real DOM reorder,
-           not just a CSS reverse — TeamRow's orientation prop then anchors
-           each team's header to the correct screen edge. -->
+      <!-- Court frame. Two team halves separated by the net — a 1px line of
+           the wrapper background showing through `gap-px` (--border-strong,
+           not foreground/30: foreground is near-white in dark mode, which lit
+           the frame up). No border of its own: each half paints its own court
+           boundary, so anything here would stack a third line around them.
+           Render order follows `sidesSwapped` so the swap is a real DOM
+           reorder, not just a CSS reverse — TeamRow's orientation prop then
+           puts the net on each half's correct inner edge. -->
       <div
-        class="relative m-2 flex flex-1 gap-px overflow-hidden rounded-lg bg-foreground/30 ring-1 ring-foreground/30"
+        class="relative m-2 flex flex-1 gap-px overflow-hidden rounded-lg bg-border-strong"
         :class="layout === 'sideBySide' ? 'flex-row' : 'flex-col'"
       >
         <template
@@ -796,6 +887,7 @@ const orientationB = computed<Orientation>(() => {
           <TeamRow
             v-if="team === 'A'"
             team="A"
+            :sport="sport"
             :orientation="orientationA"
             :score="score('A')"
             :games-won="gamesWon.a"
@@ -807,19 +899,16 @@ const orientationB = computed<Orientation>(() => {
             :is-glowing="isGlowingA"
             :last-winner="lastPointWinner === 'A'"
             :cell-is-server="(court) => cellIsServer('A', court)"
-            :can-swap-players="canSwapPlayersA"
-            :can-change-server="canSwapInitial && state.servingSide !== 'A'"
             :server-court="state.serverCourt"
             :cards="state.cards.a"
             :is-doubles="teamMeta.isDoubles"
             :display-name="displayNameA"
             @tap="onTap('A')"
-            @swap-players="swapPlayers('A')"
-            @change-server="swapServerOnly"
           />
           <TeamRow
             v-else
             team="B"
+            :sport="sport"
             :orientation="orientationB"
             :score="score('B')"
             :games-won="gamesWon.b"
@@ -831,15 +920,11 @@ const orientationB = computed<Orientation>(() => {
             :is-glowing="isGlowingB"
             :last-winner="lastPointWinner === 'B'"
             :cell-is-server="(court) => cellIsServer('B', court)"
-            :can-swap-players="canSwapPlayersB"
-            :can-change-server="canSwapInitial && state.servingSide !== 'B'"
             :server-court="state.serverCourt"
             :cards="state.cards.b"
             :is-doubles="teamMeta.isDoubles"
             :display-name="displayNameB"
             @tap="onTap('B')"
-            @swap-players="swapPlayers('B')"
-            @change-server="swapServerOnly"
           />
         </template>
 
@@ -852,27 +937,6 @@ const orientationB = computed<Orientation>(() => {
                 match.start serverSide WITHOUT touching visual ends.
                 Single-tap correction for "I tapped the wrong team during
                 the toss" without forcing an ends flip too. -->
-        <div
-          v-if="canSwapSidesVisible"
-          class="pointer-events-none absolute left-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5"
-          :class="
-            layout === 'sideBySide'
-              ? 'top-[calc(0.625rem+clamp(16px,3vh,26px))]'
-              : 'top-1/2'
-          "
-        >
-          <ControlPill
-            ariaLabel="Swap sides (put the other team on the other court)"
-            class="pointer-events-auto"
-            @click="swapSides"
-          >
-            <component
-              :is="layout === 'sideBySide' ? ArrowLeftRight : ArrowUpDown"
-            />
-            Sides
-          </ControlPill>
-        </div>
-
         <!-- Take-over overlay. Sits above the court, dims it slightly, and
              intercepts taps with a "Score from this device" reclaim button.
              Pointer-events on the cells underneath are blocked by this
@@ -901,19 +965,98 @@ const orientationB = computed<Orientation>(() => {
         </div>
       </div>
 
-      <!-- Bottom action bar. Single button — short tap undoes last point,
-           long-press escalates to score correction. Wider audit / multi-step
-           recovery lives in the 3-dot menu (match-state sheet). -->
+      <!-- Bottom action bar, mode-aware.
+           Pre-match it holds the setup actions that used to float over the
+           court as pills; they wrap onto a second row on a phone and sit in
+           one row from `sm` up. In play it is Undo + Correct — Undo takes the
+           width it deserves (second-most-used control after scoring, formerly
+           a `size="sm"` button in an otherwise empty bar) and Correct is
+           visible rather than long-press-only, though the long-press still
+           works. `Ends` reappears here at the deciding-game interval, the one
+           mid-match moment it is legal. Wider audit / multi-step recovery
+           stays in the 3-dot menu (match-state sheet). -->
       <footer
-        class="h-14 flex-shrink-0 px-3 flex items-center justify-between border-t border-border"
+        class="min-h-14 flex-shrink-0 px-3 py-2 flex flex-wrap items-center gap-2 border-t border-border"
       >
-        <Button ref="undoBtn" variant="outline" size="sm" class="select-none">
-          <Undo2 class="size-4" />
-          Undo
-        </Button>
-        <span class="text-[11px] text-fg-subtle"
-          >long-press to correct score</span
+        <template v-if="showSetupBar">
+          <Button
+            variant="outline"
+            class="flex-1 min-w-[7rem]"
+            title="Put the other team on the other court"
+            @click="swapSides"
+          >
+            <component
+              :is="layout === 'sideBySide' ? ArrowLeftRight : ArrowUpDown"
+              class="size-4"
+            />
+            Ends
+          </Button>
+          <Button
+            variant="outline"
+            class="flex-1 min-w-[7rem]"
+            :title="`Change which side serves first — hand the serve to ${serveFirstLabel}`"
+            @click="swapServerOnly"
+          >
+            <Repeat class="size-4" />
+            Switch server
+          </Button>
+        </template>
+        <template v-else>
+          <Button
+            ref="undoBtn"
+            variant="outline"
+            class="flex-1 select-none"
+            title="Undo the last point — long-press to correct the score"
+          >
+            <Undo2 class="size-4" />
+            Undo
+          </Button>
+          <Button
+            v-if="canSwapSidesVisible"
+            variant="ghost"
+            class="flex-shrink-0"
+            title="Change ends"
+            @click="swapSides"
+          >
+            <component
+              :is="layout === 'sideBySide' ? ArrowLeftRight : ArrowUpDown"
+              class="size-4"
+            />
+            Ends
+          </Button>
+          <Button
+            variant="ghost"
+            class="flex-shrink-0"
+            @click="openSheet = 'scoreCorrect'"
+          >
+            <PencilLine class="size-4" />
+            Correct
+          </Button>
+        </template>
+        <!-- Partner swap sits outside both branches: it is legal pre-match
+             AND at the start of any later game (score back to 0-0), and that
+             second window is in-play, where the bar is showing Undo. Scoping it
+             to the setup branch made it unreachable exactly there. -->
+        <Button
+          v-if="canSwapPlayersA"
+          variant="outline"
+          class="flex-1 min-w-[9rem]"
+          title="Swap which partner starts in the right service court"
+          @click="swapPlayers('A')"
         >
+          <ArrowLeftRight class="size-4 text-team-a" />
+          <span class="truncate">{{ swapLabelA }}</span>
+        </Button>
+        <Button
+          v-if="canSwapPlayersB"
+          variant="outline"
+          class="flex-1 min-w-[9rem]"
+          title="Swap which partner starts in the right service court"
+          @click="swapPlayers('B')"
+        >
+          <ArrowLeftRight class="size-4 text-team-b" />
+          <span class="truncate">{{ swapLabelB }}</span>
+        </Button>
       </footer>
 
       <MatchOverModal
