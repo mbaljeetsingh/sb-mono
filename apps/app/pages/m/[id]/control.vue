@@ -13,6 +13,7 @@ import {
   ArrowUpDown,
   Columns3,
   MoreHorizontal,
+  PencilLine,
   Rows3,
   Undo2,
 } from 'lucide-vue-next';
@@ -27,6 +28,7 @@ import MatchStateSheet from '~/components/control/MatchStateSheet.vue';
 import ScoreCorrectSheet from '~/components/control/ScoreCorrectSheet.vue';
 import TeamRow from '~/components/control/TeamRow.vue';
 import TossSheet from '~/components/control/TossSheet.vue';
+import { sportIdFromPreset } from '~/lib/sports';
 
 definePageMeta({ layout: false });
 
@@ -100,6 +102,38 @@ const teamMeta = computed(() => ({
 const state = computed(() => reduceRacquet(events.value, config.value));
 const { cellsA, cellsB, cellIsServer, displayNameA, displayNameB } =
   useCourtCells(state, teamMeta);
+
+// Which playing surface to draw. TeamRow renders the real court for the sport
+// (green badminton mat, blue TT table, ...), so the active preset is legible
+// without reading the format chip.
+const sport = computed(() => sportIdFromPreset(preset.value));
+
+// Interval countdown. BWF allows 60s at the mid-game interval (first side to
+// 11) and 120s between games, and umpires actually run to those clocks — a
+// static "INTERVAL" badge doesn't help. Display only: nothing is blocked when
+// it reaches zero, it just stops counting.
+const INTERVAL_MS = 60_000;
+const nowMs = ref(Date.now());
+let nowTimer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  nowTimer = setInterval(() => {
+    nowMs.value = Date.now();
+  }, 1000);
+});
+onUnmounted(() => clearInterval(nowTimer));
+
+const intervalClock = computed(() => {
+  if (!state.value.atInterval) return null;
+  // Anchor to the last *point* — the event that actually reached the interval.
+  // The reducer keeps atInterval true across timeout/penalty events appended
+  // during the break, so anchoring to "whatever event is last" would silently
+  // restart the countdown every time the umpire logs one.
+  const anchor = events.value.findLast((e) => e.type === 'point');
+  if (!anchor?.ts) return null;
+  const left = Math.ceil((anchor.ts + INTERVAL_MS - nowMs.value) / 1000);
+  if (left <= 0) return null;
+  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+});
 
 // Sync matches.ended_at to the engine's view of "match is finished". Going
 // true → stamps the timestamp so the token RPCs auto-revoke co-scorer
@@ -261,6 +295,15 @@ const guardActive = (): boolean => {
   return false;
 };
 
+// Mis-tap guard. Each team's tap target is now the full half rather than a
+// half-width cell — better for a gloved thumb mid-rally, but a bigger surface
+// for a pocket brush or a bounced tap to land on. Two taps on the SAME team
+// inside 300ms are treated as one point; alternating taps are never swallowed,
+// because a genuine rally can't change hands that fast either.
+const TAP_DEBOUNCE_MS = 300;
+let lastTapSide: SideId | null = null;
+let lastTapAt = 0;
+
 const onTap = (side: SideId) => {
   if (state.value.matchOver) return;
   // Active timeout or suspension pauses play — score taps no-op until the
@@ -270,6 +313,10 @@ const onTap = (side: SideId) => {
   if (state.value.timeout || state.value.suspended) return;
   if (state.value.betweenGames) return;
   if (!guardActive()) return;
+  const now = performance.now();
+  if (side === lastTapSide && now - lastTapAt < TAP_DEBOUNCE_MS) return;
+  lastTapSide = side;
+  lastTapAt = now;
   vibrate(10);
   append({ type: 'point', side } as Omit<RacquetEvent, 'id' | 'ts'>);
 };
@@ -738,11 +785,14 @@ const orientationB = computed<Orientation>(() => {
           </template>
         </span>
         <div class="flex items-center gap-2">
+          <!-- Counts down the BWF 60s interval rather than showing a static
+               badge — umpires run to that clock. Falls back to the plain badge
+               once it expires (or if the event has no timestamp). -->
           <span
             v-if="state.atInterval"
-            class="text-[10px] font-bold tracking-wider uppercase text-warning bg-warning-soft px-2 py-0.5 rounded-sm"
+            class="text-[11px] font-bold tracking-wider uppercase text-warning bg-warning-soft px-2 py-0.5 rounded-sm tabular-nums"
           >
-            INTERVAL
+            Interval{{ intervalClock ? ` · ${intervalClock}` : '' }}
           </span>
           <Button
             v-if="canEditMeta"
@@ -780,13 +830,16 @@ const orientationB = computed<Orientation>(() => {
         </div>
       </div>
 
-      <!-- Court frame. Two team rows separated by a 1px line over the dark
-           wrapper bg. Each row owns its own outer-ring highlight. Render
-           order follows `sidesSwapped` so the swap is a real DOM reorder,
-           not just a CSS reverse — TeamRow's orientation prop then anchors
-           each team's header to the correct screen edge. -->
+      <!-- Court frame. Two team halves separated by the net — a 1px line of
+           the wrapper background showing through `gap-px` (--border-strong,
+           not foreground/30: foreground is near-white in dark mode, which lit
+           the frame up). No border of its own: each half paints its own court
+           boundary, so anything here would stack a third line around them.
+           Render order follows `sidesSwapped` so the swap is a real DOM
+           reorder, not just a CSS reverse — TeamRow's orientation prop then
+           puts the net on each half's correct inner edge. -->
       <div
-        class="relative m-2 flex flex-1 gap-px overflow-hidden rounded-lg bg-foreground/30 ring-1 ring-foreground/30"
+        class="relative m-2 flex flex-1 gap-px overflow-hidden rounded-lg bg-border-strong"
         :class="layout === 'sideBySide' ? 'flex-row' : 'flex-col'"
       >
         <template
@@ -796,6 +849,7 @@ const orientationB = computed<Orientation>(() => {
           <TeamRow
             v-if="team === 'A'"
             team="A"
+            :sport="sport"
             :orientation="orientationA"
             :score="score('A')"
             :games-won="gamesWon.a"
@@ -820,6 +874,7 @@ const orientationB = computed<Orientation>(() => {
           <TeamRow
             v-else
             team="B"
+            :sport="sport"
             :orientation="orientationB"
             :score="score('B')"
             :games-won="gamesWon.b"
@@ -901,19 +956,33 @@ const orientationB = computed<Orientation>(() => {
         </div>
       </div>
 
-      <!-- Bottom action bar. Single button — short tap undoes last point,
-           long-press escalates to score correction. Wider audit / multi-step
-           recovery lives in the 3-dot menu (match-state sheet). -->
+      <!-- Bottom action bar. Undo takes the width it deserves — it is the
+           second-most-used control after scoring, and it was a `size="sm"`
+           button in an otherwise empty 56px bar. Correct now has its own
+           visible button: it used to be reachable only by long-pressing Undo,
+           advertised in 11px text that failed contrast. The long-press still
+           works as a shortcut. Wider audit / multi-step recovery stays in the
+           3-dot menu (match-state sheet). -->
       <footer
-        class="h-14 flex-shrink-0 px-3 flex items-center justify-between border-t border-border"
+        class="h-14 flex-shrink-0 px-3 flex items-center gap-2 border-t border-border"
       >
-        <Button ref="undoBtn" variant="outline" size="sm" class="select-none">
+        <Button
+          ref="undoBtn"
+          variant="outline"
+          class="flex-1 select-none"
+          title="Undo the last point — long-press to correct the score"
+        >
           <Undo2 class="size-4" />
           Undo
         </Button>
-        <span class="text-[11px] text-fg-subtle"
-          >long-press to correct score</span
+        <Button
+          variant="ghost"
+          class="flex-shrink-0"
+          @click="openSheet = 'scoreCorrect'"
         >
+          <PencilLine class="size-4" />
+          Correct
+        </Button>
       </footer>
 
       <MatchOverModal

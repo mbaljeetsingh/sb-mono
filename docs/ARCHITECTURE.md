@@ -122,7 +122,7 @@ matches(
   sport_preset text,                   -- 'badminton-21', 'badminton-15', ...
   config jsonb,                        -- RacquetConfig or family-specific
   theme_id text,
-  colors jsonb,                        -- { a: '#dc2626', b: '#2563eb' }
+  colors jsonb,                        -- { a: '#ea580c', b: '#1d4ed8' }
   started_at bigint?,                  -- ms since epoch
   tournament_id text?,                 -- forward-compat for grouping
   court_label text?, round text?, category text?, scheduled_at bigint?, venue text?

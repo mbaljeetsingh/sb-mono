@@ -448,7 +448,7 @@ Vertical-SaaS competitors attribute a meaningful share of growth to share-previe
 Target: **WCAG 2.1 AA** across all surfaces.
 
 - **Color contrast 4.5:1** for text, 3:1 for UI elements
-- **Color-blind safe defaults:** the default team colors use red + blue (distinguishable for protanopia/deuteranopia/tritanopia); themes that pair red+green must include a colorblind alternative
+- **Color-blind safe defaults:** the default team colors use orange + blue (distinguishable for protanopia/deuteranopia/tritanopia; moved off red so the LIVE/destructive status colors can never be mistaken for a team); themes that pair red+green must include a colorblind alternative
 - **Keyboard navigation** for all dashboard / config / result-entry forms with visible focus indicators (`:focus-visible`)
 - **Screen reader labels** on the control surface ("Team A score, 5 points, tap to add point")
 - **Reduced-motion** preference honored — score-change animations switch to instant transitions

@@ -1,29 +1,30 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
-import { ChevronDown, Loader2, Minus, Play, Plus } from "lucide-vue-next";
-import { ulid } from "ulid";
 import {
   type SportPresetId,
   defaultPresetBySport,
   sportPresets,
-} from "@sb/engine";
-import { themes as themeRegistry } from "@sb/themes";
-import { Button } from "@sb/layer-ui/components/ui/button";
-import { Input } from "@sb/layer-ui/components/ui/input";
-import { Label } from "@sb/layer-ui/components/ui/label";
+} from '@sb/engine';
+import { Button } from '@sb/layer-ui/components/ui/button';
+import { Input } from '@sb/layer-ui/components/ui/input';
+import { Label } from '@sb/layer-ui/components/ui/label';
 import {
   ToggleGroup,
   ToggleGroupItem,
-} from "@sb/layer-ui/components/ui/toggle-group";
-import SportPicker, { type SportId } from "~/components/match/SportPicker.vue";
-import LookAndFeelCards from "~/components/match/LookAndFeelCards.vue";
-import ThemePickerDialog from "~/components/match/ThemePickerDialog.vue";
-import { useUserStore } from "~/stores/user";
-import { toast } from "vue-sonner";
+} from '@sb/layer-ui/components/ui/toggle-group';
+import { themes as themeRegistry } from '@sb/themes';
+import { ChevronDown, Loader2, Minus, Play, Plus } from 'lucide-vue-next';
+import { ulid } from 'ulid';
+import { computed, nextTick, ref, watch } from 'vue';
+import { toast } from 'vue-sonner';
+import LookAndFeelCards from '~/components/match/LookAndFeelCards.vue';
+import SportPicker from '~/components/match/SportPicker.vue';
+import ThemePickerDialog from '~/components/match/ThemePickerDialog.vue';
+import { SPORTS, type SportId } from '~/lib/sports';
+import { useUserStore } from '~/stores/user';
 
-useSeoMeta({ title: "New match" });
+useSeoMeta({ title: 'New match' });
 
-type MatchLength = "single" | "best-of";
+type MatchLength = 'single' | 'best-of';
 
 // Pre-generate the match id on form mount. Form fields bind to local refs;
 // nothing persists until `createMatch()` upserts a single matches row to
@@ -31,16 +32,16 @@ type MatchLength = "single" | "best-of";
 // no orphan data anywhere.
 const matchId = ref(ulid());
 
-const sport = ref<SportId>("badminton");
+const sport = ref<SportId>('badminton');
 const isDoubles = ref(false);
-const formatPreset = ref<SportPresetId>("badminton-21");
-const matchLength = ref<MatchLength>("single");
+const formatPreset = ref<SportPresetId>('badminton-21');
+const matchLength = ref<MatchLength>('single');
 const bestOfN = ref<number>(3);
-const teamA = ref({ p1: "", p2: "" });
-const teamB = ref({ p1: "", p2: "" });
-const eventName = ref("");
-const round = ref("");
-const courtLabel = ref("");
+const teamA = ref({ p1: '', p2: '' });
+const teamB = ref({ p1: '', p2: '' });
+const eventName = ref('');
+const round = ref('');
+const courtLabel = ref('');
 // Tournament details are aspirational for most casual users — hide them
 // behind a disclosure so the form leads with the essentials. Auto-open if
 // a rematch prefill brought any of the three fields back populated.
@@ -48,7 +49,7 @@ const showTournamentDetails = ref(false);
 
 // TT doubles uses a 4-player rotation that the shared (BWF) reducer doesn't
 // implement. Force singles for TT until a TT-specific reducer ships.
-const supportsDoubles = computed(() => sport.value !== "table-tennis");
+const supportsDoubles = computed(() => sport.value !== 'table-tennis');
 watch(supportsDoubles, (ok) => {
   if (!ok) isDoubles.value = false;
 });
@@ -56,24 +57,24 @@ watch(supportsDoubles, (ok) => {
 // When sport changes, snap preset + match length to that sport's natural
 // defaults (table tennis → BO5, badminton → Single, etc.).
 watch(sport, (s) => {
-  formatPreset.value = defaultPresetBySport[s] ?? "badminton-21";
+  formatPreset.value = defaultPresetBySport[s] ?? 'badminton-21';
   const natural = sportPresets[formatPreset.value]!.config.gamesToWin;
   if (natural === 1) {
-    matchLength.value = "single";
+    matchLength.value = 'single';
   } else {
-    matchLength.value = "best-of";
+    matchLength.value = 'best-of';
     bestOfN.value = natural * 2 - 1;
   }
 });
 
 const gamesToWin = computed(() =>
-  matchLength.value === "single" ? 1 : Math.ceil(bestOfN.value / 2),
+  matchLength.value === 'single' ? 1 : Math.ceil(bestOfN.value / 2)
 );
 
 // Presets within the active sport — sub-toggle when there's a real choice
 // (badminton 21/15, pickleball classic/rally).
 const presetsInSport = computed(() =>
-  Object.values(sportPresets).filter((p) => p.sport === sport.value),
+  Object.values(sportPresets).filter((p) => p.sport === sport.value)
 );
 
 // /new uses local refs for theme choice rather than `useThemeChoice` —
@@ -83,13 +84,13 @@ const presetsInSport = computed(() =>
 // hasn't unmounted yet, so supabase returns the same already-subscribed
 // channel and `.on()` errors. The selected values are persisted via the
 // `createMatch()` upsert below.
-const overlayTheme = ref<string>("broadcast-classic");
-const scoreboardTheme = ref<string>("filmable");
+const overlayTheme = ref<string>('broadcast-classic');
+const scoreboardTheme = ref<string>('filmable');
 const overlayName = computed(
-  () => themeRegistry[overlayTheme.value]?.manifest.name ?? "—",
+  () => themeRegistry[overlayTheme.value]?.manifest.name ?? '—'
 );
 const scoreboardName = computed(
-  () => themeRegistry[scoreboardTheme.value]?.manifest.name ?? "—",
+  () => themeRegistry[scoreboardTheme.value]?.manifest.name ?? '—'
 );
 const themeDialogOpen = ref(false);
 
@@ -101,24 +102,24 @@ const supabase = useSupabaseClient();
 
 const rematchSourceId = computed(() => {
   const raw = route.query.rematch;
-  return typeof raw === "string" && raw.length > 0 ? raw : null;
+  return typeof raw === 'string' && raw.length > 0 ? raw : null;
 });
 
 const splitPlayers = (joined: string | null | undefined): [string, string] => {
-  if (!joined) return ["", ""];
+  if (!joined) return ['', ''];
   const parts = joined.split(/\s*\/\s*/);
-  return [parts[0] ?? "", parts[1] ?? ""];
+  return [parts[0] ?? '', parts[1] ?? ''];
 };
 
 onMounted(async () => {
   const src = rematchSourceId.value;
   if (!src) return;
   const { data, error } = await supabase
-    .from("matches")
+    .from('matches')
     .select(
-      "sport_preset, config, is_doubles, players, team_name_a, team_name_b, overlay_theme_id, scoreboard_theme_id, event_name, round, court_label",
+      'sport_preset, config, is_doubles, players, team_name_a, team_name_b, overlay_theme_id, scoreboard_theme_id, event_name, round, court_label'
     )
-    .eq("id", src)
+    .eq('id', src)
     .maybeSingle();
   if (error || !data) return;
 
@@ -134,9 +135,9 @@ onMounted(async () => {
   }
   const gw = Number((data.config as { gamesToWin?: number })?.gamesToWin ?? 1);
   if (gw <= 1) {
-    matchLength.value = "single";
+    matchLength.value = 'single';
   } else {
-    matchLength.value = "best-of";
+    matchLength.value = 'best-of';
     bestOfN.value = gw * 2 - 1;
   }
   isDoubles.value = !!data.is_doubles;
@@ -147,19 +148,19 @@ onMounted(async () => {
     b2?: string;
   };
   if (data.is_doubles) {
-    teamA.value = { p1: players.a1 ?? "", p2: players.a2 ?? "" };
-    teamB.value = { p1: players.b1 ?? "", p2: players.b2 ?? "" };
+    teamA.value = { p1: players.a1 ?? '', p2: players.a2 ?? '' };
+    teamB.value = { p1: players.b1 ?? '', p2: players.b2 ?? '' };
   } else {
     const [a1] = splitPlayers(data.team_name_a);
     const [b1] = splitPlayers(data.team_name_b);
-    teamA.value = { p1: a1 || players.a1 || "", p2: "" };
-    teamB.value = { p1: b1 || players.b1 || "", p2: "" };
+    teamA.value = { p1: a1 || players.a1 || '', p2: '' };
+    teamB.value = { p1: b1 || players.b1 || '', p2: '' };
   }
-  overlayTheme.value = data.overlay_theme_id ?? "broadcast-classic";
-  scoreboardTheme.value = data.scoreboard_theme_id ?? "filmable";
-  eventName.value = data.event_name ?? "";
-  round.value = data.round ?? "";
-  courtLabel.value = data.court_label ?? "";
+  overlayTheme.value = data.overlay_theme_id ?? 'broadcast-classic';
+  scoreboardTheme.value = data.scoreboard_theme_id ?? 'filmable';
+  eventName.value = data.event_name ?? '';
+  round.value = data.round ?? '';
+  courtLabel.value = data.court_label ?? '';
   if (eventName.value || round.value || courtLabel.value) {
     showTournamentDetails.value = true;
   }
@@ -167,6 +168,28 @@ onMounted(async () => {
 
 const formatNames = (t: { p1: string; p2: string }) =>
   isDoubles.value && t.p2 ? `${t.p1} / ${t.p2}` : t.p1;
+
+// Format is collapsed behind a summary by default. Every field in it has a
+// sensible default (sport → badminton-21 → single game), while the player names
+// are the only required input — so the form now leads with the names and keeps
+// format one tap away instead of making the user scroll past four toggle groups
+// to reach the fields that actually gate the submit button.
+const showFormat = ref(false);
+
+const formatSummary = computed(() => {
+  const sportLabel = SPORTS.find((s) => s.id === sport.value)?.label ?? '';
+  const points = sportPresets[formatPreset.value]?.config.pointsPerGame;
+  const length =
+    matchLength.value === 'single' ? 'single game' : `best of ${bestOfN.value}`;
+  return [
+    sportLabel,
+    points ? `${points} pt` : null,
+    isDoubles.value ? 'doubles' : 'singles',
+    length,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+});
 
 // Use the user store (hydrated by the global auth middleware) rather than
 // useSupabaseUser() — the latter can lag on first paint and result in
@@ -193,11 +216,11 @@ const isCreating = ref(false);
 const createMatch = async () => {
   if (!canCreate.value || isCreating.value) return;
   isCreating.value = true;
-  const { error } = await supabase.from("matches").upsert(
+  const { error } = await supabase.from('matches').upsert(
     {
       id: matchId.value,
       owner_id: userStore.currentUser?.id ?? null,
-      sport_family: "racquet",
+      sport_family: 'racquet',
       sport_preset: formatPreset.value,
       config: { gamesToWin: gamesToWin.value },
       overlay_theme_id: overlayTheme.value,
@@ -215,10 +238,10 @@ const createMatch = async () => {
       round: round.value.trim() || null,
       court_label: courtLabel.value.trim() || null,
     },
-    { onConflict: "id" },
+    { onConflict: 'id' }
   );
   if (error) {
-    console.warn("[/new] match upsert failed", error);
+    console.warn('[/new] match upsert failed', error);
     // /new is the only writer of `matches` rows, so a failure here would
     // leave the user on a control page that can't sync any scoring (no
     // matching row in Supabase, no lazy-create fallback). Bail out and let
@@ -235,135 +258,13 @@ const createMatch = async () => {
   <div class="flex flex-col font-sans">
     <h1 class="px-4 pt-6 pb-3 text-xl font-semibold">New match</h1>
 
-    <main class="flex-1 px-4 pb-32 pt-2 space-y-6">
-      <section>
-        <div
-          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
-        >
-          Sport
-        </div>
-        <SportPicker v-model="sport" />
-      </section>
-
-      <section v-if="supportsDoubles">
-        <Label
-          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
-        >
-          Type
-        </Label>
-        <ToggleGroup
-          type="single"
-          :model-value="isDoubles ? 'doubles' : 'singles'"
-          variant="outline"
-          class="w-full"
-          @update:model-value="(v) => v && (isDoubles = v === 'doubles')"
-        >
-          <ToggleGroupItem value="singles" class="flex-1">
-            Singles
-          </ToggleGroupItem>
-          <ToggleGroupItem value="doubles" class="flex-1">
-            Doubles
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </section>
-
-      <section v-if="presetsInSport.length > 1">
-        <Label
-          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
-        >
-          Points per game
-        </Label>
-        <ToggleGroup
-          type="single"
-          :model-value="formatPreset"
-          variant="outline"
-          class="w-full"
-          @update:model-value="(v) => v && (formatPreset = v as SportPresetId)"
-        >
-          <ToggleGroupItem
-            v-for="p in presetsInSport"
-            :key="p.id"
-            :value="p.id"
-            class="flex-1"
-          >
-            {{ p.config.pointsPerGame }}
-            <span class="opacity-60 ml-0.5">
-              {{
-                p.id === "badminton-15"
-                  ? "(2027)"
-                  : p.id === "badminton-21"
-                    ? "BWF"
-                    : p.id === "pickleball-rally"
-                      ? "rally"
-                      : "classic"
-              }}
-            </span>
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </section>
-
-      <section>
-        <Label
-          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
-        >
-          Match length
-        </Label>
-        <ToggleGroup
-          type="single"
-          :model-value="matchLength"
-          variant="outline"
-          class="w-full mb-2"
-          @update:model-value="(v) => v && (matchLength = v as MatchLength)"
-        >
-          <ToggleGroupItem value="single" class="flex-1">
-            Single match
-          </ToggleGroupItem>
-          <ToggleGroupItem value="best-of" class="flex-1">
-            Best of N
-          </ToggleGroupItem>
-        </ToggleGroup>
-        <div
-          v-if="matchLength === 'best-of'"
-          class="flex items-center gap-3 px-1"
-        >
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label="Decrease best-of"
-            :disabled="bestOfN <= 3"
-            @click="bestOfN = Math.max(3, bestOfN - 2)"
-          >
-            <Minus class="size-4" />
-          </Button>
-          <div class="flex-1 text-center">
-            <span class="text-base font-semibold text-foreground">
-              Best of {{ bestOfN }}
-            </span>
-            <span class="block text-[11px] text-fg-subtle mt-0.5">
-              first to {{ gamesToWin }}
-              {{ gamesToWin === 1 ? "game" : "games" }}
-            </span>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label="Increase best-of"
-            :disabled="bestOfN >= 11"
-            @click="bestOfN = Math.min(11, bestOfN + 2)"
-          >
-            <Plus class="size-4" />
-          </Button>
-        </div>
-      </section>
-
+    <main class="flex-1 px-4 pb-48 pt-2 space-y-6">
       <section>
         <Label
           for="team-a-p1"
           class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
         >
-          {{ isDoubles ? "Team A" : "Player 1" }}
+          {{ isDoubles ? 'Team A' : 'Player 1' }}
         </Label>
         <Input
           id="team-a-p1"
@@ -386,7 +287,7 @@ const createMatch = async () => {
           for="team-b-p1"
           class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
         >
-          {{ isDoubles ? "Team B" : "Player 2" }}
+          {{ isDoubles ? 'Team B' : 'Player 2' }}
         </Label>
         <Input
           id="team-b-p1"
@@ -402,6 +303,160 @@ const createMatch = async () => {
           placeholder="Player 2"
           class="h-11 mt-2"
         />
+      </section>
+
+      <!-- Format sits behind a summary: every field in here has a good default
+           (badminton, 21 BWF, singles, single game) while the names above are
+           the only required input. Leading with four toggle groups pushed the
+           fields that actually gate the submit button below the fold. -->
+      <section>
+        <button
+          type="button"
+          class="flex w-full items-center justify-between gap-3 rounded-md py-1 text-left"
+          :aria-expanded="showFormat"
+          aria-controls="match-format"
+          @click="showFormat = !showFormat"
+        >
+          <span class="min-w-0">
+            <span
+              class="block text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle"
+            >
+              Format
+            </span>
+            <span class="mt-0.5 block truncate text-sm font-medium">
+              {{ formatSummary }}
+            </span>
+          </span>
+          <ChevronDown
+            class="size-4 shrink-0 text-fg-subtle transition-transform"
+            :class="showFormat ? 'rotate-180' : ''"
+          />
+        </button>
+        <div v-if="showFormat" id="match-format" class="mt-3 space-y-6">
+          <section>
+            <div
+              class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
+            >
+              Sport
+            </div>
+            <SportPicker v-model="sport" />
+          </section>
+
+          <section v-if="supportsDoubles">
+            <Label
+              class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
+            >
+              Type
+            </Label>
+            <ToggleGroup
+              type="single"
+              :model-value="isDoubles ? 'doubles' : 'singles'"
+              variant="outline"
+              class="w-full"
+              @update:model-value="(v) => v && (isDoubles = v === 'doubles')"
+            >
+              <ToggleGroupItem value="singles" class="flex-1">
+                Singles
+              </ToggleGroupItem>
+              <ToggleGroupItem value="doubles" class="flex-1">
+                Doubles
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </section>
+
+          <section v-if="presetsInSport.length > 1">
+            <Label
+              class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
+            >
+              Points per game
+            </Label>
+            <ToggleGroup
+              type="single"
+              :model-value="formatPreset"
+              variant="outline"
+              class="w-full"
+              @update:model-value="
+                (v) => v && (formatPreset = v as SportPresetId)
+              "
+            >
+              <ToggleGroupItem
+                v-for="p in presetsInSport"
+                :key="p.id"
+                :value="p.id"
+                class="flex-1"
+              >
+                {{ p.config.pointsPerGame }}
+                <span class="opacity-60 ml-0.5">
+                  {{
+                    p.id === 'badminton-15'
+                      ? '(2027)'
+                      : p.id === 'badminton-21'
+                        ? 'BWF'
+                        : p.id === 'pickleball-rally'
+                          ? 'rally'
+                          : 'classic'
+                  }}
+                </span>
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </section>
+
+          <section>
+            <Label
+              class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
+            >
+              Match length
+            </Label>
+            <ToggleGroup
+              type="single"
+              :model-value="matchLength"
+              variant="outline"
+              class="w-full mb-2"
+              @update:model-value="(v) => v && (matchLength = v as MatchLength)"
+            >
+              <ToggleGroupItem value="single" class="flex-1">
+                Single match
+              </ToggleGroupItem>
+              <ToggleGroupItem value="best-of" class="flex-1">
+                Best of N
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <div
+              v-if="matchLength === 'best-of'"
+              class="flex items-center gap-3 px-1"
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="Decrease best-of"
+                :disabled="bestOfN <= 3"
+                @click="bestOfN = Math.max(3, bestOfN - 2)"
+              >
+                <Minus class="size-4" />
+              </Button>
+              <div class="flex-1 text-center">
+                <span class="text-base font-semibold text-foreground">
+                  Best of {{ bestOfN }}
+                </span>
+                <span class="block text-[11px] text-fg-subtle mt-0.5">
+                  first to {{ gamesToWin }}
+                  {{ gamesToWin === 1 ? 'game' : 'games' }}
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="Increase best-of"
+                :disabled="bestOfN >= 11"
+                @click="bestOfN = Math.min(11, bestOfN + 2)"
+              >
+                <Plus class="size-4" />
+              </Button>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section>
@@ -459,8 +514,14 @@ const createMatch = async () => {
       "
     />
 
+    <!-- Anchored to the bottom edge and padded to clear the tab bar, rather
+         than floated 3.5rem up. MobileTabBar is a detached pill that hides on
+         scroll-down (MobileTabBar.vue:152); with the old offset this footer
+         kept its gap and left a strip of scrolling page content visible below
+         it, and it overlapped the bar's top edge while the bar was shown.
+         Padding = 0.75rem bar gap + 3.5rem bar height + breathing room. -->
     <footer
-      class="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] px-4 py-4 bg-background border-t border-border md:bottom-0 md:pb-[max(1rem,env(safe-area-inset-bottom))]"
+      class="fixed inset-x-0 bottom-0 px-4 pt-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] bg-background border-t border-border md:pb-[max(1rem,env(safe-area-inset-bottom))]"
     >
       <Button
         type="button"
@@ -473,12 +534,12 @@ const createMatch = async () => {
         <Play v-else class="size-4" />
         {{
           isCreating
-            ? "Creating…"
+            ? 'Creating…'
             : canCreate
-              ? "Create match"
+              ? 'Create match'
               : isDoubles
-                ? "Enter team names to continue"
-                : "Enter player names to continue"
+                ? 'Enter team names to continue'
+                : 'Enter player names to continue'
         }}
       </Button>
     </footer>

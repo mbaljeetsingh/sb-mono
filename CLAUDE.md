@@ -56,7 +56,7 @@ When you do update, do it in the same commit as the code, and keep the entry con
 - **No shadcn `Ui` prefix.** Components are in `layers/ui/components/ui/<name>/index.ts` and imported explicitly: `import { Button } from "@sb/layer-ui/components/ui/button"`.
 - **Use shadcn primitives over raw HTML.** If a `Button`, `Input`, `Label`, `ToggleGroup`, `Dialog`, etc. exists in `layers/ui`, prefer it over a styled `<button>`/`<input>`. Exceptions: full-area tap zones with custom geometry (the score cells in `control.vue`) and decorative elements with no semantic role (slide-indicator dots).
 - **Use shadcn defaults.** Don't override `variant`/`size` with custom Tailwind classes for selected states; use the component's built-in active state. The only exception is when the component lacks a "selected" variant and we explicitly need one — prefer `ToggleGroup` over hand-rolled toggle pairs.
-- **Icons from `lucide-vue-next`** — no inline SVGs, no emoji-as-icon. Imported explicitly per-file.
+- **Icons from `lucide-vue-next`** — no inline SVGs, no emoji-as-icon. Imported explicitly per-file. One sanctioned exception: `apps/app/components/common/SportGlyph.vue` holds hand-drawn per-sport glyphs (lucide ships no racquet-sport icons); all custom SVG paths live in that single component and nowhere else.
 
 ### Imports & state
 

@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { useClipboard, useStorage } from "@vueuse/core";
-import { ArrowLeft } from "lucide-vue-next";
-import { toast } from "vue-sonner";
-import { Button } from "@sb/layer-ui/components/ui/button";
-import { useUserStore } from "~/stores/user";
-import { collectLocalMatchIds } from "~/lib/localMatches";
+import { Button } from '@sb/layer-ui/components/ui/button';
+import { useClipboard, useStorage } from '@vueuse/core';
+import { ArrowLeft } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
+import { collectLocalMatchIds } from '~/lib/localMatches';
+import { useUserStore } from '~/stores/user';
 
 definePageMeta({ layout: false });
 
 const route = useRoute();
-const dynamicId = computed(() => String(route.params.id ?? ""));
+const dynamicId = computed(() => String(route.params.id ?? ''));
 
 // v1: dynamic URL bindings live in localStorage. v1.x will move to a
 // dynamic_urls table in Supabase per ARCHITECTURE.md §6.
@@ -17,16 +17,16 @@ const dynamicId = computed(() => String(route.params.id ?? ""));
 // source on the laptop swaps automatically.
 const boundMatchId = useStorage<string | null>(
   computed(() => `sb:dynamic:${dynamicId.value}`),
-  null,
+  null
 );
 
 const dynamicUrl = computed(() => {
-  if (typeof window === "undefined") return "";
+  if (typeof window === 'undefined') return '';
   return `${window.location.origin}/d/${dynamicId.value}`;
 });
 
 const overlayUrl = computed(() => {
-  if (typeof window === "undefined") return "";
+  if (typeof window === 'undefined') return '';
   return `${window.location.origin}/d/${dynamicId.value}/overlay`;
 });
 
@@ -42,13 +42,13 @@ const recent = ref<RecentMatch[]>([]);
 
 const refreshRecent = async () => {
   let query = supabase
-    .from("matches")
-    .select("id, team_name_a, team_name_b")
-    .order("updated_at", { ascending: false })
+    .from('matches')
+    .select('id, team_name_a, team_name_b')
+    .order('updated_at', { ascending: false })
     .limit(10);
 
   if (userStore.isAuthenticated && userStore.currentUser?.id) {
-    query = query.eq("owner_id", userStore.currentUser.id);
+    query = query.eq('owner_id', userStore.currentUser.id);
   } else {
     const ids = await collectLocalMatchIds();
     if (ids.length === 0) {
@@ -57,18 +57,18 @@ const refreshRecent = async () => {
     }
     // Anon recents: only show matches this device scored that are still
     // anon-owned. Excludes wt co-scorer sessions and view-only surfaces.
-    query = query.in("id", ids).is("owner_id", null);
+    query = query.in('id', ids).is('owner_id', null);
   }
 
   const { data, error } = await query;
   if (error) {
-    console.warn("[d/index] recent fetch failed", error);
+    console.warn('[d/index] recent fetch failed', error);
     return;
   }
   recent.value = (data ?? []).map((r) => ({
     id: r.id,
-    teamA: r.team_name_a ?? "",
-    teamB: r.team_name_b ?? "",
+    teamA: r.team_name_a ?? '',
+    teamB: r.team_name_b ?? '',
   }));
 };
 
@@ -88,14 +88,14 @@ const unbind = () => {
 // Reactive meta of the bound match — useMatchMeta swaps which storage entry
 // it reads when the bound id changes, so the "Now showing" pane updates
 // without manual JSON.parse boilerplate.
-const boundMatchIdRef = computed(() => boundMatchId.value ?? "");
+const boundMatchIdRef = computed(() => boundMatchId.value ?? '');
 const { meta: boundMeta } = useMatchMeta(boundMatchIdRef as Ref<string>);
 const boundTeamNames = computed(() =>
-  boundMatchId.value ? (boundMeta.value.teamNames ?? null) : null,
+  boundMatchId.value ? (boundMeta.value.teamNames ?? null) : null
 );
 
 const { copy: clipboardCopy } = useClipboard({ legacy: true });
-const copy = async (text: string, label = "URL") => {
+const copy = async (text: string, label = 'URL') => {
   await clipboardCopy(text);
   toast.success(`${label} copied`);
 };
@@ -161,7 +161,7 @@ const copy = async (text: string, label = "URL") => {
         <div class="flex justify-between items-baseline">
           <div>
             <span
-              class="px-1.5 py-0.5 rounded-sm bg-team-a-soft text-team-a text-[9px] font-bold tracking-wider uppercase"
+              class="px-1.5 py-0.5 rounded-sm bg-live-soft text-live text-[10px] font-bold tracking-wider uppercase"
               >LIVE</span
             >
             <div class="text-[13px] font-semibold mt-1">
@@ -218,7 +218,7 @@ const copy = async (text: string, label = "URL") => {
             "
             @click="bind(m.id)"
           >
-            {{ boundMatchId === m.id ? "Bound" : "Bind" }}
+            {{ boundMatchId === m.id ? 'Bound' : 'Bind' }}
           </Button>
         </div>
         <div

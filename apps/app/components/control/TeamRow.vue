@@ -2,31 +2,38 @@
 import type { Cell } from '@sb/layer-app-base/composables/useCourtCells';
 import PenaltyCards from '@sb/themes/penalty-cards';
 import { ArrowLeftRight, Repeat } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
+import type { SportId } from '~/lib/sports';
 
-// One team's half of the court — header strip (label + score + pips +
-// MATCH/GAME PT) and two service-court cells. Used twice in control.vue
-// (Team A and Team B).
+// One team's half of the court, drawn as the real playing surface for the
+// active sport (green badminton mat, blue TT table, hard court, pickleball
+// green) with painted markings. Used twice in control.vue (Team A and Team B).
 //
-// `team` drives color (always tied to identity). `orientation` drives
-// geometry — which screen edge this team occupies, derived in the parent
-// from layout + sidesSwapped:
-//  - "top"    — portrait layout, this team at screen-top. Header anchored
-//               top, cells flow flex-row-reverse so the right service court
-//               reads as screen-left (BWF top-down view from this end).
-//  - "bottom" — portrait layout, this team at screen-bottom. Header anchored
-//               bottom (flex-col-reverse on the wrapper); cells flow
-//               flex-row, so the right service court reads as screen-right
-//               (mirroring the top team).
-//  - "left"   — landscape layout, this team at screen-left. Header on top,
-//               cells stack flex-col so the right service court reads as
-//               screen-bottom (top-down view rotated CCW).
-//  - "right"  — landscape layout, this team at screen-right. Header on top,
-//               cells stack flex-col-reverse so the right service court
-//               reads as screen-top (mirror of the left team across the net).
+// Two deliberate departures from the previous version:
+//
+//  1. The half is ONE tap target, not two cells. Both cells used to emit the
+//     identical `tap` event, so splitting them halved each target's width and
+//     bought no function — they only ever *displayed* court geometry. The
+//     service courts are now non-interactive zones drawn on the surface.
+//  2. The surface is not tinted by team. It belongs to the sport; team identity
+//     is carried by the game pips, the chip colours, and the court boundary,
+//     which lights up in the serving team's colour.
+//
+// `team` drives colour (always tied to identity). `orientation` drives geometry
+// — which screen edge this team occupies, derived in the parent from layout +
+// sidesSwapped. The net is always the *inner* edge:
+//  - "top"    — portrait, screen-top. Net at the bottom, so the service line
+//               sits near the bottom and zones flow row-reverse (the right
+//               service court reads as screen-left: BWF top-down view from
+//               this end).
+//  - "bottom" — portrait, screen-bottom. Net at the top; natural flow, so the
+//               right court reads as screen-right (mirrors the top team).
+//  - "left"   — landscape, screen-left. Net at the right edge.
+//  - "right"  — landscape, screen-right. Net at the left edge.
 
 const props = defineProps<{
   team: 'A' | 'B';
+  sport: SportId;
   orientation: 'top' | 'bottom' | 'left' | 'right';
   score: number;
   gamesWon: number;
@@ -44,12 +51,18 @@ const props = defineProps<{
   canChangeServer?: boolean;
   serverCourt?: 'left' | 'right';
   cards?: { yellow: number; red: number; black: number };
-  // Singles: cells show the player name only on the active service court (it
-  // shifts as service moves), so the header carries the team identity. In
-  // doubles each cell labels its own player so the header falls back to
-  // "Team A" / "Team B" to avoid duplicating one player's name there.
+  // Feed headerLabel, which is only spoken, not shown: it becomes the tap
+  // button's aria-label ("Score a point for <name>"). Singles uses the player
+  // name; doubles falls back to "Team A" / "Team B" since naming one partner
+  // would misattribute the action. On-screen names come from `cells`.
   isDoubles?: boolean;
   displayName?: string;
+}>();
+
+const emit = defineEmits<{
+  (e: 'tap'): void;
+  (e: 'swap-players'): void;
+  (e: 'change-server'): void;
 }>();
 
 const headerLabel = computed(() => {
@@ -57,196 +70,381 @@ const headerLabel = computed(() => {
   return `Team ${props.team}`;
 });
 
-defineEmits<{
-  (e: 'tap'): void;
-  (e: 'swap-players'): void;
-  (e: 'change-server'): void;
-}>();
+// Derived, not passed: if either service court holds the server, this team is
+// serving. (The old `isServingTeam` prop existed only to gate the game-point
+// chip, which the engine now attributes per side.)
+const isServing = computed(
+  () => props.cellIsServer('left') || props.cellIsServer('right')
+);
 
-const isStacked = (o: typeof props.orientation) =>
-  o === 'top' || o === 'bottom';
+// BWF service law: the only legal receiver is diagonally opposite the server.
+//
+// Doubles only, deliberately. With two opponents on court the diagonal-only
+// rule is non-obvious and receiving out of turn is a fault, so naming the
+// receiving court is worth the ink. In singles there is exactly one opponent —
+// "Serves" on one side already tells you who receives, and labelling it is
+// redundant noise.
+const isReceiverZone = (court: 'left' | 'right') =>
+  !!props.isDoubles &&
+  !isServing.value &&
+  !props.matchOver &&
+  court === props.serverCourt;
 
-// Centerline border sits on the visually-SECOND cell. Top/right orientations
-// use a reversed flow (right court rendered first), so the second visual
-// cell is array index 0; bottom/left use natural flow, so index 1.
-const isSecondVisualCell = (idx: number) =>
-  props.orientation === 'top' || props.orientation === 'right'
-    ? idx === 0
-    : idx > 0;
+const isStacked = computed(
+  () => props.orientation === 'top' || props.orientation === 'bottom'
+);
+
+/** Screen edge the net sits on for this team. */
+const netEdge = computed(() => {
+  switch (props.orientation) {
+    case 'top':
+      return 'bottom';
+    case 'bottom':
+      return 'top';
+    case 'left':
+      return 'right';
+    default:
+      return 'left';
+  }
+});
+
+/** Opposite (outer) edge — the baseline / end line. */
+const outerEdge = computed(() => {
+  switch (netEdge.value) {
+    case 'bottom':
+      return 'top';
+    case 'top':
+      return 'bottom';
+    case 'right':
+      return 'left';
+    default:
+      return 'right';
+  }
+});
+
+// Zones flow so the right service court lands on the correct screen edge.
+const zoneFlow = computed(() => {
+  switch (props.orientation) {
+    case 'top':
+      return 'flex-row-reverse';
+    case 'bottom':
+      return 'flex-row';
+    case 'left':
+      return 'flex-col';
+    default:
+      return 'flex-col-reverse';
+  }
+});
+
+// Painted markings. Table tennis has a centre line only — no service boxes.
+const hasServiceLine = computed(() => props.sport !== 'table-tennis');
+
+const SERVICE_INSET = '30%';
+
+/** Short-service / kitchen line: parallel to the net, inset from it. */
+const serviceLineStyle = computed(() =>
+  isStacked.value
+    ? {
+        left: '6px',
+        right: '6px',
+        height: '1.5px',
+        [netEdge.value]: SERVICE_INSET,
+      }
+    : {
+        top: '6px',
+        bottom: '6px',
+        width: '1.5px',
+        [netEdge.value]: SERVICE_INSET,
+      }
+);
+
+/** Centre line: perpendicular to the net, from the outer edge to the service
+ *  line (or the whole half for table tennis, which has no service line). */
+const centreLineStyle = computed(() => {
+  const stop = hasServiceLine.value ? SERVICE_INSET : '6px';
+  return isStacked.value
+    ? {
+        left: '50%',
+        width: '1.5px',
+        [outerEdge.value]: '6px',
+        [netEdge.value]: stop,
+      }
+    : {
+        top: '50%',
+        height: '1.5px',
+        [outerEdge.value]: '6px',
+        [netEdge.value]: stop,
+      };
+});
+
+/** All content lives in the back box (outer edge → short-service line), in two
+ *  registers: the score upper-centre, the players on a lower line near the
+ *  service line — each name in its court column. The front court (service line
+ *  → net) stays empty, like a real court between rallies. Two registers rather
+ *  than one so a long name can never collide with the score, and content near
+ *  the net stopped reading as "floating on the net". Inline styles so they can
+ *  override the `inset-0` utility on the overlays. Table tennis has no service
+ *  line, so it gets a synthetic split. */
+const scoreBandStyle = computed(() => ({
+  [netEdge.value]: hasServiceLine.value ? '55%' : '60%',
+}));
+
+const zonesBandStyle = computed(() => ({
+  [outerEdge.value]: hasServiceLine.value ? '42%' : '36%',
+  [netEdge.value]: hasServiceLine.value ? SERVICE_INSET : '45%',
+}));
+
+const courtSurface: Record<SportId, string> = {
+  badminton: 'bg-court-badminton',
+  'table-tennis': 'bg-court-tabletennis',
+  tennis: 'bg-court-tennis',
+  pickleball: 'bg-court-pickleball',
+};
+
+// Score tick — a brief scale-pop when a point lands. The score is now the
+// primary confirmation that a tap registered: `active:brightness-95` on a cell
+// was a 5% shift for an action that costs a real point, and `useVibrate` is
+// silently unavailable on iOS Safari. Transition-driven, so the global
+// prefers-reduced-motion rule in theme.css zeroes it automatically.
+const ticking = ref(false);
+let tickTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => props.score,
+  (next, prev) => {
+    if (next <= (prev ?? 0)) return;
+    ticking.value = true;
+    clearTimeout(tickTimer);
+    tickTimer = setTimeout(() => {
+      ticking.value = false;
+    }, 150);
+  }
+);
 </script>
 
 <template>
   <div
-    class="relative flex flex-1 transition-shadow duration-200"
+    class="relative flex flex-1 overflow-hidden transition-shadow duration-200"
     :class="[
-      team === 'A' ? 'bg-team-a-soft' : 'bg-team-b-soft',
-      orientation === 'bottom' ? 'flex-col-reverse' : 'flex-col',
+      courtSurface[sport],
       isGlowing
         ? team === 'A'
           ? 'shadow-[inset_0_0_0_3px_var(--color-team-a)] animate-glow-a'
           : 'shadow-[inset_0_0_0_3px_var(--color-team-b)] animate-glow-b'
-        : lastWinner && !matchOver
+        : // Only when it adds information. Under rally scoring the rally winner
+          // always serves next, so in badminton this ring was permanently
+          // duplicating the serving boundary tint — same colour, same half, two
+          // borders. It still earns its place in table tennis, where serve
+          // alternates every two points and the last winner may not be serving.
+          lastWinner && !isServing && !matchOver
           ? team === 'A'
             ? 'shadow-[inset_0_0_0_2px_var(--color-team-a)]'
             : 'shadow-[inset_0_0_0_2px_var(--color-team-b)]'
           : '',
     ]"
   >
-    <!-- Header strip — team label, score, pips, MATCH/GAME PT chip. -->
-    <div
-      class="flex items-center justify-center gap-3 px-3 py-2.5"
-      :class="[
-        orientation === 'bottom'
-          ? team === 'A'
-            ? 'border-t border-team-a/20'
-            : 'border-t border-team-b/20'
-          : team === 'A'
-            ? 'border-b border-team-a/20'
-            : 'border-b border-team-b/20',
-      ]"
-    >
-      <span
-        class="max-w-[40%] truncate text-[10px] font-bold uppercase tracking-[0.08em]"
-        :class="team === 'A' ? 'text-team-a' : 'text-team-b'"
-      >
-        {{ headerLabel }}
-      </span>
-      <!-- Persistent penalty cards. Same component as the broadcast themes
-           so the visual language stays consistent across control + overlay
-           + scoreboard surfaces. -->
-      <PenaltyCards v-if="cards" :cards="cards" size="xs" />
-      <span
-        class="score text-[clamp(32px,6vh,52px)] font-bold leading-none tabular-nums text-foreground"
-      >
-        {{ score }}
-      </span>
-      <div class="flex gap-1">
-        <span
-          v-for="i in totalSlots"
-          :key="i"
-          class="size-[7px] rounded-full"
-          :class="
-            i <= gamesWon
-              ? team === 'A'
-                ? 'bg-team-a'
-                : 'bg-team-b'
-              : 'bg-border-strong'
-          "
-        />
-      </div>
-      <span
-        v-if="isMatchPoint || isGamePoint"
-        class="rounded-sm px-1.5 py-0.5 text-[10px] font-bold tracking-wider"
-        :class="
-          team === 'A'
-            ? 'bg-team-a text-team-a-foreground'
-            : 'bg-team-b text-team-b-foreground'
-        "
-      >
-        {{ isMatchPoint ? 'MATCH PT' : 'GAME PT' }}
-      </span>
-    </div>
+    <!-- Tap layer: the entire half, one target per team. Sits beneath the
+         read-only overlays (pointer-events-none) and the setup pills (which
+         opt back in), so it stays a real button rather than wrapping one. -->
+    <button
+      type="button"
+      :disabled="matchOver"
+      :aria-label="`Score a point for ${headerLabel}`"
+      class="absolute inset-0 z-0 transition-colors duration-150 active:bg-foreground/10 disabled:cursor-not-allowed disabled:opacity-65"
+      @click="emit('tap')"
+    />
 
-    <!-- Cells. Direction flips with orientation so the right service court
-         reads correctly in BWF top-down geometry. -->
-    <div
-      class="relative flex flex-1"
+    <!-- Court markings: boundary, service line, centre line. The boundary
+         itself carries the serving signal — it lights up in the serving team's
+         colour. This replaced a full-bleed 4px edge bar, whose square ends were
+         sliced by the court frame's rounded corners (the frame is
+         `rounded-lg overflow-hidden`), so the accent read as a clipped strip. -->
+    <span
+      class="pointer-events-none absolute inset-[6px] z-[1] rounded-[2px] transition-colors"
       :class="[
-        orientation === 'top'
-          ? 'flex-row-reverse'
-          : orientation === 'bottom'
-            ? 'flex-row'
-            : orientation === 'left'
-              ? 'flex-col'
-              : 'flex-col-reverse',
+        'border-[1.5px]',
+        isServing
+          ? team === 'A'
+            ? 'border-team-a'
+            : 'border-team-b'
+          : 'border-court-line',
+      ]"
+    />
+    <span
+      v-if="hasServiceLine"
+      class="pointer-events-none absolute z-[1] bg-court-line"
+      :style="serviceLineStyle"
+    />
+    <span
+      class="pointer-events-none absolute z-[1] bg-court-line"
+      :style="centreLineStyle"
+    />
+
+    <!-- Read-only content, laid out along the court's own axis so the score
+         takes the backcourt and names sit in their service courts. -->
+    <div
+      class="pointer-events-none relative z-10 flex flex-1"
+      :class="[
+        isStacked
+          ? orientation === 'bottom'
+            ? 'flex-col-reverse'
+            : 'flex-col'
+          : orientation === 'right'
+            ? 'flex-row-reverse'
+            : 'flex-row',
       ]"
     >
+      <!-- Status strip along the outer edge. Pure match state — cards +
+           game-point chip in one slot, game pips in the other, with
+           justify-between spreading them along the edge. Fixed slots, so
+           nothing shifts when the chip or cards appear mid-rally. The strip
+           follows the court's orientation: a row across the top edge when
+           stacked, a column down the outer side in landscape — without the
+           direction flip, a row inside the landscape flex-row parent collapses
+           to content width and justify-between has nothing to distribute. -->
       <div
-        v-for="(cell, idx) in cells"
-        :key="cell.key"
-        class="relative flex flex-1"
+        class="flex flex-shrink-0 justify-between gap-2 px-3 py-2"
+        :class="isStacked ? 'items-start' : 'flex-col items-center'"
       >
-        <button
-          type="button"
-          :disabled="matchOver"
-          :aria-label="`Tap to score for ${cell.label || `team ${team}`}`"
-          class="flex size-full flex-col items-center justify-center gap-2 px-4 py-4 transition-[background-color] duration-150 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-65"
-          :class="[
-            isSecondVisualCell(idx)
-              ? isStacked(orientation)
-                ? team === 'A'
-                  ? 'border-l border-team-a/20'
-                  : 'border-l border-team-b/20'
-                : team === 'A'
-                  ? 'border-t border-team-a/20'
-                  : 'border-t border-team-b/20'
-              : '',
-          ]"
-          @click="$emit('tap')"
-        >
+        <span class="flex min-w-0 items-center gap-1.5">
+          <!-- Same component as the broadcast themes, so penalty state reads
+               identically across control / overlay / scoreboard. -->
+          <PenaltyCards v-if="cards" :cards="cards" size="xs" />
           <span
-            v-if="cell.label"
-            class="max-w-full truncate text-[15px] font-semibold leading-tight text-foreground"
+            v-if="isMatchPoint || isGamePoint"
+            class="rounded-sm px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+            :class="
+              team === 'A'
+                ? 'bg-team-a text-team-a-foreground'
+                : 'bg-team-b text-team-b-foreground'
+            "
           >
-            {{ cell.label }}
+            {{ isMatchPoint ? 'MATCH PT' : 'GAME PT' }}
           </span>
-          <!-- Service-over cue: when the pill moves between cells (partner
-               swap on serve) or jumps teams (receiver won the rally), a fade
-               + slight slide draws the operator's eye. Without this the pill
-               teleports and is easy to miss in fast rallies. -->
-          <Transition
-            enter-active-class="transition duration-200 ease-out"
-            enter-from-class="opacity-0 scale-90"
-            enter-to-class="opacity-100 scale-100"
-            leave-active-class="transition duration-150 ease-in"
-            leave-from-class="opacity-100"
-            leave-to-class="opacity-0"
-          >
-            <div
-              v-if="cellIsServer(cell.court)"
-              class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-              :class="
-                team === 'A'
-                  ? 'bg-team-a text-team-a-foreground'
-                  : 'bg-team-b text-team-b-foreground'
-              "
+        </span>
+        <span class="flex flex-shrink-0 gap-1 pt-0.5">
+          <span
+            v-for="i in totalSlots"
+            :key="i"
+            class="size-[7px] rounded-full"
+            :class="
+              i <= gamesWon
+                ? team === 'A'
+                  ? 'bg-team-a'
+                  : 'bg-team-b'
+                : 'bg-foreground/25'
+            "
+          />
+        </span>
+      </div>
+
+      <!-- The score, centred in the service-court band (outer edge → short-
+           service line). The strip between that line and the net is where
+           nobody serves from, so centring across the full half sat everything
+           ~15% too close to the net. -->
+      <div
+        class="pointer-events-none absolute inset-0 flex items-center justify-center px-3"
+        :style="scoreBandStyle"
+      >
+        <span
+          class="score text-[clamp(40px,8.5vh,80px)] leading-none tabular-nums text-foreground transition-transform duration-150 ease-out"
+          :class="ticking ? 'scale-[1.08]' : 'scale-100'"
+        >
+          {{ score }}
+        </span>
+      </div>
+
+      <!-- The players' strip (service line → net), identical in singles and
+           doubles. Names sit centred in the court column they currently occupy
+           under badminton's serving rules — the server by their score's parity,
+           the receiver diagonally opposite — and hop courts as that changes.
+           useCourtCells derives this for both modes, so the layout has one
+           rule, not two. Non-interactive: the whole half is the tap target. -->
+      <div
+        class="pointer-events-none absolute inset-0 flex"
+        :class="zoneFlow"
+        :style="zonesBandStyle"
+      >
+        <!-- Fixed two-row grid in every court: a name row on a constant
+             baseline and a reserved pill row beneath it. The rows exist even
+             when empty, so a pill appearing/leaving (serve hand-off, receives,
+             pre-match actions) never displaces a name, and all four courts'
+             names share one baseline. -->
+        <div
+          v-for="cell in cells"
+          :key="cell.key"
+          class="relative flex flex-1 flex-col items-center justify-center px-2"
+        >
+          <span class="flex h-6 max-w-full items-center">
+            <span
+              v-if="cell.label"
+              class="truncate text-[15px] font-semibold leading-tight text-foreground"
+            >
+              {{ cell.label }}
+            </span>
+          </span>
+          <span class="flex h-7 items-center">
+            <!-- Service-over cue: when the pill moves between courts (partner
+                 swap on serve) or jumps teams (receiver won the rally), the
+                 fade draws the operator's eye; without it the pill teleports. -->
+            <Transition
+              enter-active-class="transition duration-200 ease-out"
+              enter-from-class="opacity-0 scale-90"
+              enter-to-class="opacity-100 scale-100"
+              leave-active-class="transition duration-150 ease-in"
+              leave-from-class="opacity-100"
+              leave-to-class="opacity-0"
             >
               <span
-                class="size-[5px] rounded-full bg-white animate-pulse-soft"
-              />
-              Serves
-            </div>
-          </Transition>
-        </button>
+                v-if="cellIsServer(cell.court)"
+                class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                :class="
+                  team === 'A'
+                    ? 'bg-team-a text-team-a-foreground'
+                    : 'bg-team-b text-team-b-foreground'
+                "
+              >
+                <span class="size-[5px] rounded-full bg-current opacity-70" />
+                Serves
+              </span>
+            </Transition>
+            <!-- Under the diagonal receiver's name, one slot, one occupant:
+                 pre-match it's the Serve-first action; once play starts
+                 (doubles only) it's the Receives label — with two opponents on
+                 court the diagonal-only rule is non-obvious and receiving out
+                 of turn is a fault. Singles needs no label: one opponent, so
+                 "Serves" opposite already says who receives. -->
+            <ControlPill
+              v-if="canChangeServer && cell.court === serverCourt"
+              ariaLabel="Make this player serve first"
+              class="pointer-events-auto"
+              @click.stop="emit('change-server')"
+            >
+              <Repeat />
+              Serve first
+            </ControlPill>
+            <span
+              v-else-if="isReceiverZone(cell.court)"
+              class="inline-flex items-center gap-1 rounded-full border border-foreground/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-fg-muted"
+            >
+              Receives
+            </span>
+          </span>
+        </div>
 
-        <!-- Pre-match only, non-serving team, diagonal cell: tap to put the
-             serve on this player instead. Diagonal of the current server is
-             the only legal receiver in BWF, so this is the only cell on the
-             non-serving team that could become the server. -->
+        <!-- Doubles pre-match: swap which partner starts on the right (server)
+             court. Dead centre of the players' strip = on the centre line,
+             between the two names it exchanges, so the arrows point at the
+             players being swapped. -->
         <ControlPill
-          v-if="canChangeServer && cell.court === serverCourt"
-          ariaLabel="Make this player serve first"
-          class="absolute left-1/2 top-[62%] z-10 -translate-x-1/2"
-          @click.stop="$emit('change-server')"
+          v-if="canSwapPlayers"
+          ariaLabel="Swap players on this side"
+          class="pointer-events-auto absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
+          @click.stop="emit('swap-players')"
         >
-          <Repeat />
-          Serve first
+          <ArrowLeftRight :class="isStacked ? '' : 'rotate-90'" />
+          Swap
         </ControlPill>
       </div>
-
-      <!-- Doubles-only: swap of which partner starts on the right (server)
-           court. Sits on the centerline between the two cells. Distinct
-           icon (Users) so it's visually disambiguated from the sides-swap
-           button on the row centerline. -->
-      <ControlPill
-        v-if="canSwapPlayers"
-        ariaLabel="Swap players on this side"
-        class="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
-        @click.stop="$emit('swap-players')"
-      >
-        <ArrowLeftRight :class="isStacked(orientation) ? '' : 'rotate-90'" />
-        Swap
-      </ControlPill>
     </div>
   </div>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import type { GameScore } from "@sb/engine";
+import type { GameScore } from '@sb/engine';
+import { computed } from 'vue';
 
 const props = defineProps<{
   matchOver: boolean;
@@ -48,7 +48,7 @@ const completedGames = computed<GameScore[]>(() => {
     class="rounded-lg p-4 border transition-colors"
     :class="
       matchOver
-        ? 'bg-neutral-950 text-neutral-50 border-neutral-900'
+        ? 'bg-foreground text-background border-foreground'
         : 'bg-surface text-foreground border-border'
     "
   >
@@ -60,11 +60,13 @@ const completedGames = computed<GameScore[]>(() => {
         >
           Final
         </span>
+        <!-- LIVE is a status, not a competitor: it used to be painted with
+             team-a, which read as "team A is live" next to team B's score. -->
         <span
           v-else
-          class="inline-flex items-center gap-1 text-[10px] font-bold tracking-[0.1em] uppercase text-team-a"
+          class="inline-flex items-center gap-1 text-[10px] font-bold tracking-[0.1em] uppercase text-live"
         >
-          <span class="size-1.5 rounded-full bg-team-a animate-pulse-soft" />
+          <span class="size-1.5 rounded-full bg-live animate-pulse-soft" />
           LIVE
         </span>
         <span class="text-sm text-fg-muted">{{ displayName }}</span>
@@ -77,7 +79,7 @@ const completedGames = computed<GameScore[]>(() => {
       <div>
         <div
           class="text-sm mb-0.5"
-          :class="matchOver ? 'text-neutral-400' : 'text-fg-muted'"
+          :class="matchOver ? 'text-background/70' : 'text-fg-muted'"
         >
           {{ teamNames.a }}
         </div>
@@ -102,7 +104,7 @@ const completedGames = computed<GameScore[]>(() => {
       <div class="text-right">
         <div
           class="text-sm mb-0.5"
-          :class="matchOver ? 'text-neutral-400' : 'text-fg-muted'"
+          :class="matchOver ? 'text-background/70' : 'text-fg-muted'"
         >
           {{ teamNames.b }}
         </div>
@@ -127,7 +129,7 @@ const completedGames = computed<GameScore[]>(() => {
     <div
       v-if="completedGames.length > 0"
       class="mt-3 flex flex-wrap gap-1.5 text-[11px] font-medium tabular-nums"
-      :class="matchOver ? 'text-neutral-400' : 'text-fg-muted'"
+      :class="matchOver ? 'text-background/70' : 'text-fg-muted'"
     >
       <span
         v-for="(g, i) in completedGames"
@@ -135,7 +137,7 @@ const completedGames = computed<GameScore[]>(() => {
         class="px-1.5 py-0.5 rounded border"
         :class="
           matchOver
-            ? 'border-neutral-800 bg-neutral-900'
+            ? 'border-background/20 bg-background/10'
             : 'border-border bg-surface-2'
         "
       >

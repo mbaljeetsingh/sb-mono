@@ -80,7 +80,11 @@ onMounted(async () => {
     class="mx-auto flex min-h-[calc(100dvh-3.5rem-3.5rem)] max-w-3xl flex-col items-center justify-center px-6 text-center md:min-h-[calc(100dvh-3.5rem)]"
   >
     <p class="mb-3 text-sm text-muted-foreground">{{ greeting }}</p>
-    <h1 class="mb-3 text-[44px] font-semibold leading-[1.05] tracking-tight">
+    <!-- Fluid rather than a fixed 44px: at 320px the fixed size wrapped this
+         to four tight lines. -->
+    <h1
+      class="mb-3 text-[clamp(30px,8vw,46px)] font-semibold leading-[1.08] tracking-tight text-balance"
+    >
       A live scorecard for racquet sports.
     </h1>
     <p class="mb-8 text-[17px] leading-relaxed text-muted-foreground">
@@ -110,9 +114,9 @@ onMounted(async () => {
           <span class="truncate text-sm font-medium">{{ recentLabel }}</span>
           <span
             v-if="recentSummary?.status === 'live'"
-            class="flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-destructive"
+            class="flex shrink-0 items-center gap-1 rounded-full bg-live-soft px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-live"
           >
-            <span class="h-1 w-1 rounded-full bg-destructive" />
+            <span class="h-1 w-1 rounded-full bg-live" />
             LIVE
           </span>
           <span

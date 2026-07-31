@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button } from '@sb/layer-ui/components/ui/button';
+import { Brush, ChevronRight, Palette } from 'lucide-vue-next';
 
 defineProps<{
   overlayThemeName: string;
@@ -25,11 +26,12 @@ defineEmits<(e: 'open-theme') => void>();
       >
         <span class="flex justify-between items-center">
           <span
-            class="text-[11px] text-fg-subtle tracking-wide uppercase font-semibold"
+            class="inline-flex items-center gap-1.5 text-[11px] text-fg-subtle tracking-wide uppercase font-semibold"
           >
-            🎨 Theme
+            <Palette class="size-3.5" />
+            Theme
           </span>
-          <span class="text-fg-subtle">›</span>
+          <ChevronRight class="size-3.5 text-fg-subtle" />
         </span>
         <span class="block text-sm font-semibold">{{ overlayThemeName }}</span>
         <span class="block text-[10px] text-fg-subtle font-normal">
@@ -45,16 +47,20 @@ defineEmits<(e: 'open-theme') => void>();
       >
         <span class="flex justify-between items-center">
           <span
-            class="text-[11px] text-fg-subtle tracking-wide uppercase font-semibold"
+            class="inline-flex items-center gap-1.5 text-[11px] text-fg-subtle tracking-wide uppercase font-semibold"
           >
-            🖌 Colors
+            <Brush class="size-3.5" />
+            Colors
           </span>
           <span class="text-fg-subtle">soon</span>
         </span>
+        <!-- "Default" rather than naming the hues: the swatches already show
+             them, and the previous hardcoded "Red / Blue" went stale the moment
+             team A moved off red. -->
         <span class="text-sm font-semibold inline-flex items-center gap-1.5">
           <span class="size-3.5 rounded-sm bg-team-a" />
           <span class="size-3.5 rounded-sm bg-team-b" />
-          Red / Blue
+          Default
         </span>
       </Button>
     </div>

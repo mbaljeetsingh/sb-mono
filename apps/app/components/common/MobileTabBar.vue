@@ -189,7 +189,7 @@ const handleSignOut = async () => {
           @click="showMore = true"
         >
           <component :is="slot.icon" class="h-5 w-5" />
-          <span class="text-[10px] font-medium">{{ slot.label }}</span>
+          <span class="text-[11px] font-medium">{{ slot.label }}</span>
         </button>
         <NuxtLink
           v-else
@@ -198,7 +198,7 @@ const handleSignOut = async () => {
           :class="isActive(slot.route!) && 'text-primary'"
         >
           <component :is="slot.icon" class="h-5 w-5" />
-          <span class="text-[10px] font-medium">{{ slot.label }}</span>
+          <span class="text-[11px] font-medium">{{ slot.label }}</span>
         </NuxtLink>
       </template>
     </div>
