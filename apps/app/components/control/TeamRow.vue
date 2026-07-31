@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { Cell } from '@sb/layer-app-base/composables/useCourtCells';
 import PenaltyCards from '@sb/themes/penalty-cards';
-import { ArrowLeftRight, Repeat } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import type { SportId } from '~/lib/sports';
 
@@ -18,6 +17,11 @@ import type { SportId } from '~/lib/sports';
 //  2. The surface is not tinted by team. It belongs to the sport; team identity
 //     is carried by the game pips, the chip colours, and the court boundary,
 //     which lights up in the serving team's colour.
+//
+// Purely presentational apart from the tap target: the pre-match setup actions
+// (ends, partner swap, first server) live in control.vue's footer bar, not as
+// pills floating over this surface — they used to be live targets sitting
+// inside the score button, and they scaled badly to desktop.
 //
 // `team` drives colour (always tied to identity). `orientation` drives geometry
 // — which screen edge this team occupies, derived in the parent from layout +
@@ -47,8 +51,6 @@ const props = defineProps<{
   isGlowing: boolean;
   lastWinner: boolean;
   cellIsServer: (court: 'left' | 'right') => boolean;
-  canSwapPlayers?: boolean;
-  canChangeServer?: boolean;
   serverCourt?: 'left' | 'right';
   cards?: { yellow: number; red: number; black: number };
   // Feed headerLabel, which is only spoken, not shown: it becomes the tap
@@ -59,11 +61,7 @@ const props = defineProps<{
   displayName?: string;
 }>();
 
-const emit = defineEmits<{
-  (e: 'tap'): void;
-  (e: 'swap-players'): void;
-  (e: 'change-server'): void;
-}>();
+const emit = defineEmits<(e: 'tap') => void>();
 
 const headerLabel = computed(() => {
   if (!props.isDoubles && props.displayName) return props.displayName;
@@ -407,43 +405,18 @@ watch(
                 Serves
               </span>
             </Transition>
-            <!-- Under the diagonal receiver's name, one slot, one occupant:
-                 pre-match it's the Serve-first action; once play starts
-                 (doubles only) it's the Receives label — with two opponents on
-                 court the diagonal-only rule is non-obvious and receiving out
-                 of turn is a fault. Singles needs no label: one opponent, so
-                 "Serves" opposite already says who receives. -->
-            <ControlPill
-              v-if="canChangeServer && cell.court === serverCourt"
-              ariaLabel="Make this player serve first"
-              class="pointer-events-auto"
-              @click.stop="emit('change-server')"
-            >
-              <Repeat />
-              Serve first
-            </ControlPill>
+            <!-- Doubles only: with two opponents on court the diagonal-only
+                 receiving rule is non-obvious and receiving out of turn is a
+                 fault. Singles needs no label — one opponent, so "Serves"
+                 opposite already says who receives. -->
             <span
-              v-else-if="isReceiverZone(cell.court)"
+              v-if="isReceiverZone(cell.court)"
               class="inline-flex items-center gap-1 rounded-full border border-foreground/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-fg-muted"
             >
               Receives
             </span>
           </span>
         </div>
-
-        <!-- Doubles pre-match: swap which partner starts on the right (server)
-             court. Dead centre of the players' strip = on the centre line,
-             between the two names it exchanges, so the arrows point at the
-             players being swapped. -->
-        <ControlPill
-          v-if="canSwapPlayers"
-          ariaLabel="Swap players on this side"
-          class="pointer-events-auto absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
-          @click.stop="emit('swap-players')"
-        >
-          <ArrowLeftRight :class="isStacked ? '' : 'rotate-90'" />
-          Swap
-        </ControlPill>
       </div>
     </div>
   </div>
