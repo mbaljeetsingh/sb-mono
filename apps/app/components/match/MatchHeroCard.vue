@@ -82,7 +82,12 @@ const headlineB = computed(() => {
 // already the headline live score). Final: all games are complete.
 const completedGames = computed<GameScore[]>(() => {
   if (isSingleGame.value) return [];
-  if (props.matchOver) return props.games;
+  // Suppressed for the same reason as the headline numbers: a pre-rally
+  // walkover in a best-of-N still carries one all-zero game, so this strip
+  // printed "G1 0–0" directly under the dash that exists to avoid claiming a
+  // nil-nil result. `games` is seeded with [{a:0,b:0}] by the engine, so the
+  // length check alone doesn't catch it.
+  if (props.matchOver) return hasScoreline.value ? props.games : [];
   return props.games.slice(0, -1);
 });
 </script>

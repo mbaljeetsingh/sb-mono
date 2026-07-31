@@ -39,24 +39,37 @@ const matchId = ref(ulid());
 // names are. Only viable because the format summary now sits at the very top of
 // the form: the restored format is the first line you read, and doubles visibly
 // turns two name fields into four. Names are deliberately never remembered.
-const lastFormat = useStorage<{
+type StoredFormat = {
   sport: SportId;
   isDoubles: boolean;
   formatPreset: SportPresetId;
   matchLength: MatchLength;
   bestOfN: number;
-}>('sb:last-format', {
+};
+
+const FORMAT_DEFAULTS: StoredFormat = {
   sport: 'badminton',
   isDoubles: false,
   formatPreset: 'badminton-21',
   matchLength: 'single',
   bestOfN: 3,
+};
+
+// Spread so the shared default object can't be captured and mutated by the
+// composable.
+const lastFormat = useStorage<StoredFormat>('sb:last-format', {
+  ...FORMAT_DEFAULTS,
 });
 
 // Stored values go stale across releases — a sport gets disabled, a preset id
 // is renamed. Validate each one back against the registry rather than seeding
 // the form with a format the engine can't score.
-const stored = lastFormat.value;
+//
+// The `??` is load-bearing despite the non-null type: useStorage only falls
+// back to its default when the key is absent or the JSON fails to parse. A
+// stored literal `null` parses cleanly to `null`, so without this the first
+// property read below would throw during <script setup> and blank the page.
+const stored = lastFormat.value ?? FORMAT_DEFAULTS;
 const seedSport: SportId = SPORTS.some(
   (s) => s.id === stored.sport && s.enabled
 )
@@ -75,8 +88,13 @@ const seedBestOf =
     : 3;
 
 const sport = ref<SportId>(seedSport);
-// TT can't do doubles yet (see supportsDoubles below); don't restore into a
-// state the sport watcher would immediately have to undo.
+// TT can't do doubles yet (see supportsDoubles below). This guard is NOT
+// redundant with that watcher: `watch` isn't `immediate`, so a restored
+// TT-plus-doubles state never transitions and never fires it — and the Type
+// toggle is hidden for TT, so the user would be left with four required name
+// fields and no control to get back to singles. Unreachable while TT is
+// disabled (seedSport only accepts enabled sports), but it has to hold the
+// day TT ships.
 const isDoubles = ref(
   seedSport === 'table-tennis' ? false : !!stored.isDoubles
 );
