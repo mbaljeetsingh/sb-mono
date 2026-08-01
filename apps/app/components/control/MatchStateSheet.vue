@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { BriefcaseMedical, Flag, Pause, X, XCircle } from 'lucide-vue-next';
 import type { SideId } from '@sb/engine';
 import { Button } from '@sb/layer-ui/components/ui/button';
+import { BriefcaseMedical, Flag, Pause, X, XCircle } from 'lucide-vue-next';
+import { ref } from 'vue';
 
 const props = defineProps<{
   teamNames: { a: string; b: string };
@@ -95,7 +95,12 @@ const onResetGameTap = () => {
     </div>
 
     <!-- Scrollable body. -->
-    <div class="flex-1 overflow-y-auto px-4 py-4 pb-8">
+    <!-- pb clears the home indicator: the sheet is `bottom-0` against the
+         page's padding box, so the control page's own safe-area inset doesn't
+         apply here. Without it the last row sits in the gesture strip. -->
+    <div
+      class="flex-1 overflow-y-auto px-4 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]"
+    >
       <div
         class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
       >

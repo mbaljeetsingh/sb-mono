@@ -8,16 +8,16 @@
 // Sizing is fluid (clamp + vmin/vh/vw) and the layout reflows to stacked rows
 // in portrait so the same theme reads well on phone, tablet, TV, and stream.
 
-import { computed, toRef } from "vue";
-import type { ThemeProps } from "../index";
-import PenaltyCards from "../penalty-cards.vue";
-import SportIcon from "../sport-icon.vue";
+import { computed, toRef } from 'vue';
+import type { ThemeProps } from '../index';
+import PenaltyCards from '../penalty-cards.vue';
+import SportIcon from '../sport-icon.vue';
 import {
   endReasonLabel,
   teamColor,
   useStatusPill,
   useThemeState,
-} from "../use-theme-state";
+} from '../use-theme-state';
 
 const props = defineProps<ThemeProps>();
 
@@ -29,18 +29,22 @@ const {
   isLastGameWinner,
   isMatchWinner,
   cards,
-} = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
-const status = useStatusPill(toRef(props, "state"));
+} = useThemeState(
+  toRef(props, 'state'),
+  toRef(props, 'teamNames'),
+  toRef(props, 'players')
+);
+const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
 
-const playersOf = (side: "a" | "b") =>
-  side === "a" ? playersA.value : playersB.value;
+const playersOf = (side: 'a' | 'b') =>
+  side === 'a' ? playersA.value : playersB.value;
 
 // Singles = each side has exactly one player. In that case the "TEAM A" /
 // "TEAM B" badge is just noise — the player's name (which is also the team
 // name) is right next to it. Hide the badge unless we're in doubles.
 const isDoubles = computed(
-  () => playersA.value.length > 1 || playersB.value.length > 1,
+  () => playersA.value.length > 1 || playersB.value.length > 1
 );
 
 const topMeta = computed(() => {
@@ -52,7 +56,7 @@ const topMeta = computed(() => {
     m.round,
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join(' · ');
 });
 
 // Filmable's bottom history shows ALL completed games; while in-progress, the
@@ -65,7 +69,7 @@ const previousGames = computed(() => {
 const formatLine = computed(() => {
   const c = props.config;
   const heading =
-    c.gamesToWin === 1 ? "Single game" : `Best of ${c.gamesToWin * 2 - 1}`;
+    c.gamesToWin === 1 ? 'Single game' : `Best of ${c.gamesToWin * 2 - 1}`;
   return `${heading} · first to ${c.pointsPerGame}`;
 });
 </script>
@@ -147,7 +151,7 @@ const formatLine = computed(() => {
             v-if="isDoubles"
             class="px-2 py-0.5 rounded text-white text-[clamp(8px,1.1vmin,10px)] font-bold tracking-[0.1em]"
             :style="{ background: teamColor(side) }"
-            >{{ side === "a" ? "TEAM A" : "TEAM B" }}</span
+            >{{ side === 'a' ? 'TEAM A' : 'TEAM B' }}</span
           >
           <span
             v-if="isMatchWinner(side)"
@@ -237,9 +241,7 @@ const formatLine = computed(() => {
             : { background: '#27272a' }
       "
     >
-      {{
-        status.tone === "accent" ? "⚡" : status.tone === "warn" ? "⏸" : "·"
-      }}
+      {{ status.tone === 'accent' ? '⚡' : status.tone === 'warn' ? '⏸' : '·' }}
       {{ status.label }}
       <span v-if="status.side">· TEAM {{ status.side }}</span>
     </div>

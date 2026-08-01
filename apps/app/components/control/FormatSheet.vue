@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Minus, Plus } from 'lucide-vue-next';
 import type { SportPresetId } from '@sb/engine';
 import { Button } from '@sb/layer-ui/components/ui/button';
 import { Label } from '@sb/layer-ui/components/ui/label';
@@ -7,6 +6,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from '@sb/layer-ui/components/ui/toggle-group';
+import { Minus, Plus } from 'lucide-vue-next';
 
 const props = defineProps<{
   preset: SportPresetId;
@@ -36,7 +36,7 @@ const matchLength = (v: 'single' | 'best-of') =>
 
 <template>
   <div
-    class="absolute inset-x-0 bottom-0 z-50 mx-auto w-full max-w-2xl bg-surface text-foreground rounded-t-2xl px-4 pt-3 pb-6 shadow-[0_-12px_40px_rgba(0,0,0,0.18)]"
+    class="absolute inset-x-0 bottom-0 z-50 mx-auto w-full max-w-2xl bg-surface text-foreground rounded-t-2xl px-4 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-[0_-12px_40px_rgba(0,0,0,0.18)]"
   >
     <div class="size-1 w-10 bg-border-strong rounded-full mx-auto mb-3" />
     <h2 class="text-lg font-semibold">Match format</h2>

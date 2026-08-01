@@ -1,21 +1,21 @@
 <script setup lang="ts">
-import { getTheme } from "@sb/themes";
+import { getTheme } from '@sb/themes';
 
-definePageMeta({ layout: false, colorMode: "light" });
+definePageMeta({ layout: false, colorMode: 'light' });
 
 const route = useRoute();
-const matchId = computed(() => String(route.params.id ?? ""));
+const matchId = computed(() => String(route.params.id ?? ''));
 
 // Same resolution order as the overlay surface — query string wins, the
 // Supabase-backed useThemeChoice next, hardcoded fallback last. Live syncs
 // when the operator changes themes on another device.
 const { scoreboard: scoreboardTheme } = useThemeChoice(matchId);
 const themeId = computed(
-  () => String(route.query.theme ?? "") || scoreboardTheme.value || "filmable",
+  () => String(route.query.theme ?? '') || scoreboardTheme.value || 'filmable'
 );
 
 const { state, config } = useMatchState(matchId);
-const { teamNames, meta: matchMeta } = useMatchMeta(matchId);
+const { teamNames, players, meta: matchMeta } = useMatchMeta(matchId);
 const meta = computed(() => ({
   sportLabel: matchMeta.value.eventName?.trim().toUpperCase() || undefined,
   courtLabel: matchMeta.value.courtLabel?.trim() || null,
@@ -25,7 +25,7 @@ const meta = computed(() => ({
   sponsorName: null as string | null,
 }));
 
-const themeEntry = computed(() => getTheme(themeId.value, "scoreboard"));
+const themeEntry = computed(() => getTheme(themeId.value, 'scoreboard'));
 </script>
 
 <template>
@@ -37,6 +37,7 @@ const themeEntry = computed(() => getTheme(themeId.value, "scoreboard"));
       :state="state"
       :config="config"
       :team-names="teamNames"
+      :players="players"
       :meta="meta"
     />
   </div>

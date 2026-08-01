@@ -3,17 +3,17 @@
 // in the middle, team blocks left/right. Brand-neutral (no amber/yellow); the
 // only chrome is a single subtle bottom border.
 
-import { computed, toRef } from "vue";
-import type { ThemeProps } from "../index";
-import PenaltyCards from "../penalty-cards.vue";
-import SportIcon from "../sport-icon.vue";
+import { computed, toRef } from 'vue';
+import type { ThemeProps } from '../index';
+import PenaltyCards from '../penalty-cards.vue';
+import SportIcon from '../sport-icon.vue';
 import {
   endReasonLabel,
   teamColor,
   useMetaLine,
   useStatusPill,
   useThemeState,
-} from "../use-theme-state";
+} from '../use-theme-state';
 
 const props = defineProps<ThemeProps>();
 const {
@@ -25,14 +25,18 @@ const {
   isServingSide,
   isLastGameWinner,
   isMatchWinner,
-} = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
-const meta = useMetaLine(toRef(props, "meta"), toRef(props, "config"));
+} = useThemeState(
+  toRef(props, 'state'),
+  toRef(props, 'teamNames'),
+  toRef(props, 'players')
+);
+const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const isLive = computed(() => props.meta?.isLive !== false);
-const status = useStatusPill(toRef(props, "state"));
+const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
 
-const playersOf = (side: "a" | "b") =>
-  side === "a" ? playersA.value : playersB.value;
+const playersOf = (side: 'a' | 'b') =>
+  side === 'a' ? playersA.value : playersB.value;
 </script>
 
 <template>
@@ -128,7 +132,7 @@ const playersOf = (side: "a" | "b") =>
   >
     <span class="inline-flex items-center gap-2 min-w-0 flex-1">
       <SportIcon :sport="config.sport" class="text-[12px] shrink-0" />
-      <span class="truncate">{{ meta || "&nbsp;" }}</span>
+      <span class="truncate">{{ meta || '&nbsp;' }}</span>
     </span>
     <span
       v-if="state.matchOver"

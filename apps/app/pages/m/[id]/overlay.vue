@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { getTheme } from "@sb/themes";
+import { getTheme } from '@sb/themes';
 
-definePageMeta({ layout: false, colorMode: "light" });
+definePageMeta({ layout: false, colorMode: 'light' });
 
 const route = useRoute();
-const matchId = computed(() => String(route.params.id ?? ""));
+const matchId = computed(() => String(route.params.id ?? ''));
 
 // Theme resolution order: ?theme= query param (per-link override) → the
 // matches row in Supabase (useThemeChoice — operator's choice + live sync)
@@ -14,13 +14,11 @@ const matchId = computed(() => String(route.params.id ?? ""));
 const { overlay: overlayTheme } = useThemeChoice(matchId);
 const themeId = computed(
   () =>
-    String(route.query.theme ?? "") ||
-    overlayTheme.value ||
-    "broadcast-classic",
+    String(route.query.theme ?? '') || overlayTheme.value || 'broadcast-classic'
 );
 
 const { state, config } = useMatchState(matchId);
-const { teamNames, meta: matchMeta } = useMatchMeta(matchId);
+const { teamNames, players, meta: matchMeta } = useMatchMeta(matchId);
 const meta = computed(() => ({
   sportLabel: matchMeta.value.eventName?.trim().toUpperCase() || undefined,
   courtLabel: matchMeta.value.courtLabel?.trim() || null,
@@ -30,11 +28,11 @@ const meta = computed(() => ({
   sponsorName: null as string | null,
 }));
 
-const themeEntry = computed(() => getTheme(themeId.value, "overlay"));
+const themeEntry = computed(() => getTheme(themeId.value, 'overlay'));
 
 useHead({
-  bodyAttrs: { class: "bg-transparent" },
-  htmlAttrs: { class: "bg-transparent" },
+  bodyAttrs: { class: 'bg-transparent' },
+  htmlAttrs: { class: 'bg-transparent' },
 });
 </script>
 
@@ -47,6 +45,7 @@ useHead({
       :state="state"
       :config="config"
       :team-names="teamNames"
+      :players="players"
       :meta="meta"
     />
   </div>

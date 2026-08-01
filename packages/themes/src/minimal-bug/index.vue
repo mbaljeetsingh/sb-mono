@@ -3,33 +3,40 @@
 // want their video covered. No team names by default — just initials, current
 // game score, and the game number. Sport icon for context.
 
-import { computed, toRef } from "vue";
-import type { ThemeProps } from "../index";
-import PenaltyCards from "../penalty-cards.vue";
-import SportIcon from "../sport-icon.vue";
+import { computed, toRef } from 'vue';
+import type { ThemeProps } from '../index';
+import PenaltyCards from '../penalty-cards.vue';
+import SportIcon from '../sport-icon.vue';
 import {
   endReasonLabel,
   teamColor,
   useStatusPill,
   useThemeState,
-} from "../use-theme-state";
+} from '../use-theme-state';
 
 const props = defineProps<ThemeProps>();
-const { cards, currentGame, isServingSide, isWinningSide } = useThemeState(
-  toRef(props, "state"),
-  toRef(props, "teamNames"),
-);
-const status = useStatusPill(toRef(props, "state"));
+const { cards, currentGame, isServingSide, isWinningSide, playersA, playersB } =
+  useThemeState(
+    toRef(props, 'state'),
+    toRef(props, 'teamNames'),
+    toRef(props, 'players')
+  );
+const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
 
 // Initial of first non-empty word, or "?" if empty. "Alice / Aiden" → "A",
 // "Bob Chen" → "B". Lowercase team names get capitalized.
 const initial = (full: string) =>
-  (full.split(/[\s/]+/).find(Boolean) ?? "?")[0]!.toUpperCase();
+  (full.split(/[\s/]+/).find(Boolean) ?? '?')[0]!.toUpperCase();
 
+// Taken from the resolved partner list, not the raw joined team name. On a
+// doubles match saved before the partner-swap fix, `team_name_a` can still
+// list the pair in the pre-swap order, so splitting it here would badge the
+// wrong player — the same staleness `useThemeState` already resolves for the
+// SERVE highlight.
 const initials = computed(() => ({
-  a: initial(props.teamNames.a),
-  b: initial(props.teamNames.b),
+  a: initial(playersA.value[0]?.name || props.teamNames.a),
+  b: initial(playersB.value[0]?.name || props.teamNames.b),
 }));
 </script>
 
@@ -78,15 +85,15 @@ const initials = computed(() => ({
       class="text-[9px] tracking-[0.14em] font-bold text-white/80 ml-1"
       :title="endReason ?? undefined"
     >
-      FINAL · {{ isWinningSide("a") ? initials.a : initials.b }}
+      FINAL · {{ isWinningSide('a') ? initials.a : initials.b }}
       <span v-if="endReason" class="text-white/50">
         ·
         {{
-          props.state.endReason === "walkover"
-            ? "WO"
-            : props.state.endReason === "retirement"
-              ? "RET"
-              : "DEF"
+          props.state.endReason === 'walkover'
+            ? 'WO'
+            : props.state.endReason === 'retirement'
+              ? 'RET'
+              : 'DEF'
         }}
       </span>
     </span>
@@ -100,9 +107,7 @@ const initials = computed(() => ({
         class="size-1.5 rounded-full bg-current animate-pulse-soft"
         aria-hidden="true"
       />
-      {{
-        status.tone === "warn" ? "⏸" : status.tone === "accent" ? "⚡" : "·"
-      }}
+      {{ status.tone === 'warn' ? '⏸' : status.tone === 'accent' ? '⚡' : '·' }}
     </span>
     <span
       v-else

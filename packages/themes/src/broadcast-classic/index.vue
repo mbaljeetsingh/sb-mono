@@ -6,17 +6,17 @@
 // prior-game scores, current game in big numerals, serve dot, penalty card
 // glyphs, and a context status pill (GP / MP / timeout / interval / suspension).
 
-import { computed, toRef } from "vue";
-import type { ThemeProps } from "../index";
-import PenaltyCards from "../penalty-cards.vue";
-import SportIcon from "../sport-icon.vue";
+import { computed, toRef } from 'vue';
+import type { ThemeProps } from '../index';
+import PenaltyCards from '../penalty-cards.vue';
+import SportIcon from '../sport-icon.vue';
 import {
   endReasonLabel,
   teamColor,
   useMetaLine,
   useStatusPill,
   useThemeState,
-} from "../use-theme-state";
+} from '../use-theme-state';
 
 const props = defineProps<ThemeProps>();
 const endReason = computed(() => endReasonLabel(props.state.endReason));
@@ -30,13 +30,17 @@ const {
   isServingSide,
   isLastGameWinner,
   isMatchWinner,
-} = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
-const status = useStatusPill(toRef(props, "state"));
-const meta = useMetaLine(toRef(props, "meta"), toRef(props, "config"));
+} = useThemeState(
+  toRef(props, 'state'),
+  toRef(props, 'teamNames'),
+  toRef(props, 'players')
+);
+const status = useStatusPill(toRef(props, 'state'));
+const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const isLive = computed(() => props.meta?.isLive !== false);
 
-const playersOf = (side: "a" | "b") =>
-  side === "a" ? playersA.value : playersB.value;
+const playersOf = (side: 'a' | 'b') =>
+  side === 'a' ? playersA.value : playersB.value;
 </script>
 
 <template>
@@ -51,13 +55,13 @@ const playersOf = (side: "a" | "b") =>
         class="inline-flex items-center gap-2 text-[10px] font-semibold tracking-[0.14em] uppercase text-neutral-400 min-w-0 flex-1"
       >
         <SportIcon :sport="config.sport" class="text-[14px] shrink-0" />
-        <span class="truncate">{{ meta || "&nbsp;" }}</span>
+        <span class="truncate">{{ meta || '&nbsp;' }}</span>
       </span>
       <span
         v-if="state.matchOver"
         class="text-[10px] font-bold tracking-[0.14em] text-white/90 shrink-0 ml-2"
       >
-        {{ config.gamesToWin > 1 ? "FINAL" : "GAME" }}
+        {{ config.gamesToWin > 1 ? 'FINAL' : 'GAME' }}
       </span>
       <span
         v-else-if="isLive"
@@ -199,7 +203,7 @@ const playersOf = (side: "a" | "b") =>
         v-if="status.side"
         class="text-[10px] font-semibold tracking-[0.14em] text-white/75"
       >
-        · {{ status.side === "A" ? teamNames.a : teamNames.b }}
+        · {{ status.side === 'A' ? teamNames.a : teamNames.b }}
       </span>
     </div>
   </div>

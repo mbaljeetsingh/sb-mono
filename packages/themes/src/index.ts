@@ -5,22 +5,29 @@
 // attributes, so contributors don't need to know Vue. For now, Vue SFCs
 // are the canonical authoring format.
 
-import type { Component } from "vue";
-import type { RacquetConfig, RacquetState } from "@sb/engine";
-import BroadcastClassic from "./broadcast-classic/index.vue";
-import Filmable from "./filmable/index.vue";
-import MinimalBug from "./minimal-bug/index.vue";
-import MinimalTypographic from "./minimal-typographic/index.vue";
-import Scorecard from "./scorecard/index.vue";
-import TopRibbon from "./top-ribbon/index.vue";
-import VerticalStack from "./vertical-stack/index.vue";
+import type { RacquetConfig, RacquetState } from '@sb/engine';
+import type { Component } from 'vue';
+import BroadcastClassic from './broadcast-classic/index.vue';
+import Filmable from './filmable/index.vue';
+import MinimalBug from './minimal-bug/index.vue';
+import MinimalTypographic from './minimal-typographic/index.vue';
+import Scorecard from './scorecard/index.vue';
+import TopRibbon from './top-ribbon/index.vue';
+import VerticalStack from './vertical-stack/index.vue';
 
-export type ThemeSurface = "overlay" | "scoreboard";
+export type ThemeSurface = 'overlay' | 'scoreboard';
 
 export type ThemeProps = {
   state: RacquetState;
   config: RacquetConfig;
   teamNames: { a: string; b: string };
+  /**
+   * Doubles partner names per engine slot. Preferred over splitting
+   * `teamNames` on " / " — that split depends on the joined string staying in
+   * lockstep with the `players` column, which older matches don't. Optional so
+   * singles callers and previews can omit it.
+   */
+  players?: { a1: string; a2: string; b1: string; b2: string };
   meta?: {
     sport?: string;
     sportLabel?: string;
@@ -54,112 +61,112 @@ type ThemeEntry = {
 };
 
 export const themes: Record<string, ThemeEntry> = {
-  "broadcast-classic": {
+  'broadcast-classic': {
     component: BroadcastClassic,
     manifest: {
-      id: "broadcast-classic",
-      name: "Broadcast Classic",
-      description: "ESPN-style lower-third for OBS overlay.",
-      author: "Scoreboard core team",
-      license: "MIT",
-      version: "1.0.0",
-      supports: ["overlay"],
-      supportedSports: ["badminton", "tennis", "pickleball", "table-tennis"],
+      id: 'broadcast-classic',
+      name: 'Broadcast Classic',
+      description: 'ESPN-style lower-third for OBS overlay.',
+      author: 'Scoreboard core team',
+      license: 'MIT',
+      version: '1.0.0',
+      supports: ['overlay'],
+      supportedSports: ['badminton', 'tennis', 'pickleball', 'table-tennis'],
       bundleSizeBytes: 0,
     },
   },
-  "minimal-bug": {
+  'minimal-bug': {
     component: MinimalBug,
     manifest: {
-      id: "minimal-bug",
-      name: "Minimal Bug",
-      description: "Tiny corner overlay for understated streams.",
-      author: "Scoreboard core team",
-      license: "MIT",
-      version: "1.0.0",
-      supports: ["overlay"],
-      supportedSports: ["badminton", "tennis", "pickleball", "table-tennis"],
+      id: 'minimal-bug',
+      name: 'Minimal Bug',
+      description: 'Tiny corner overlay for understated streams.',
+      author: 'Scoreboard core team',
+      license: 'MIT',
+      version: '1.0.0',
+      supports: ['overlay'],
+      supportedSports: ['badminton', 'tennis', 'pickleball', 'table-tennis'],
       bundleSizeBytes: 0,
     },
   },
-  "top-ribbon": {
+  'top-ribbon': {
     component: TopRibbon,
     manifest: {
-      id: "top-ribbon",
-      name: "Top Ribbon",
-      description: "Center-stage scoreboard banner pinned to the top.",
-      author: "Scoreboard core team",
-      license: "MIT",
-      version: "1.0.0",
-      supports: ["overlay"],
-      supportedSports: ["badminton", "tennis", "pickleball", "table-tennis"],
+      id: 'top-ribbon',
+      name: 'Top Ribbon',
+      description: 'Center-stage scoreboard banner pinned to the top.',
+      author: 'Scoreboard core team',
+      license: 'MIT',
+      version: '1.0.0',
+      supports: ['overlay'],
+      supportedSports: ['badminton', 'tennis', 'pickleball', 'table-tennis'],
       bundleSizeBytes: 0,
     },
   },
   filmable: {
     component: Filmable,
     manifest: {
-      id: "filmable",
-      name: "Filmable",
+      id: 'filmable',
+      name: 'Filmable',
       description:
-        "High-contrast scoreboard for tablets/TVs filmed by a camera.",
-      author: "Scoreboard core team",
-      license: "MIT",
-      version: "1.0.0",
-      supports: ["scoreboard"],
-      supportedSports: ["badminton", "tennis", "pickleball", "table-tennis"],
+        'High-contrast scoreboard for tablets/TVs filmed by a camera.',
+      author: 'Scoreboard core team',
+      license: 'MIT',
+      version: '1.0.0',
+      supports: ['scoreboard'],
+      supportedSports: ['badminton', 'tennis', 'pickleball', 'table-tennis'],
       bundleSizeBytes: 0,
     },
   },
-  "minimal-typographic": {
+  'minimal-typographic': {
     component: MinimalTypographic,
     manifest: {
-      id: "minimal-typographic",
-      name: "Minimal Typographic",
-      description: "Light, editorial, big-number scoreboard.",
-      author: "Scoreboard core team",
-      license: "MIT",
-      version: "1.0.0",
-      supports: ["scoreboard"],
-      supportedSports: ["badminton", "tennis", "pickleball", "table-tennis"],
+      id: 'minimal-typographic',
+      name: 'Minimal Typographic',
+      description: 'Light, editorial, big-number scoreboard.',
+      author: 'Scoreboard core team',
+      license: 'MIT',
+      version: '1.0.0',
+      supports: ['scoreboard'],
+      supportedSports: ['badminton', 'tennis', 'pickleball', 'table-tennis'],
       bundleSizeBytes: 0,
     },
   },
-  "vertical-stack": {
+  'vertical-stack': {
     component: VerticalStack,
     manifest: {
-      id: "vertical-stack",
-      name: "Vertical Stack",
+      id: 'vertical-stack',
+      name: 'Vertical Stack',
       description:
-        "Bottom-center stacked overlay sized for portrait streams (TikTok / Reels / IG Live).",
-      author: "Scoreboard core team",
-      license: "MIT",
-      version: "1.0.0",
-      supports: ["overlay"],
-      supportedSports: ["badminton", "tennis", "pickleball", "table-tennis"],
+        'Bottom-center stacked overlay sized for portrait streams (TikTok / Reels / IG Live).',
+      author: 'Scoreboard core team',
+      license: 'MIT',
+      version: '1.0.0',
+      supports: ['overlay'],
+      supportedSports: ['badminton', 'tennis', 'pickleball', 'table-tennis'],
       bundleSizeBytes: 0,
     },
   },
   scorecard: {
     component: Scorecard,
     manifest: {
-      id: "scorecard",
-      name: "Scorecard",
+      id: 'scorecard',
+      name: 'Scorecard',
       description:
-        "Tournament-program-style scoreboard with a column per game and per-team rows.",
-      author: "Scoreboard core team",
-      license: "MIT",
-      version: "1.0.0",
-      supports: ["scoreboard"],
-      supportedSports: ["badminton", "tennis", "pickleball", "table-tennis"],
+        'Tournament-program-style scoreboard with a column per game and per-team rows.',
+      author: 'Scoreboard core team',
+      license: 'MIT',
+      version: '1.0.0',
+      supports: ['scoreboard'],
+      supportedSports: ['badminton', 'tennis', 'pickleball', 'table-tennis'],
       bundleSizeBytes: 0,
     },
   },
 };
 
 export const defaultThemes = {
-  overlay: "broadcast-classic",
-  scoreboard: "filmable",
+  overlay: 'broadcast-classic',
+  scoreboard: 'filmable',
 } as const;
 
 export const getTheme = (id: string | undefined, surface: ThemeSurface) => {

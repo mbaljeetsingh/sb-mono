@@ -9,17 +9,17 @@
 // Sizing is fluid (clamp + vmin/vh/vw) and the layout reflows to stacked rows
 // in portrait so the same theme reads well on phone, tablet, TV, and stream.
 
-import { computed, toRef } from "vue";
-import type { ThemeProps } from "../index";
-import PenaltyCards from "../penalty-cards.vue";
-import SportIcon from "../sport-icon.vue";
+import { computed, toRef } from 'vue';
+import type { ThemeProps } from '../index';
+import PenaltyCards from '../penalty-cards.vue';
+import SportIcon from '../sport-icon.vue';
 import {
   endReasonLabel,
   teamColor,
   useMetaLine,
   useStatusPill,
   useThemeState,
-} from "../use-theme-state";
+} from '../use-theme-state';
 
 const props = defineProps<ThemeProps>();
 const {
@@ -30,18 +30,22 @@ const {
   isServingSide,
   isLastGameWinner,
   isMatchWinner,
-} = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
-const meta = useMetaLine(toRef(props, "meta"), toRef(props, "config"));
-const status = useStatusPill(toRef(props, "state"));
+} = useThemeState(
+  toRef(props, 'state'),
+  toRef(props, 'teamNames'),
+  toRef(props, 'players')
+);
+const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
+const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
 
-const playersOf = (side: "a" | "b") =>
-  side === "a" ? playersA.value : playersB.value;
+const playersOf = (side: 'a' | 'b') =>
+  side === 'a' ? playersA.value : playersB.value;
 
 const formatLine = computed(() => {
   const c = props.config;
   const heading =
-    c.gamesToWin === 1 ? "Single game" : `Best of ${c.gamesToWin * 2 - 1}`;
+    c.gamesToWin === 1 ? 'Single game' : `Best of ${c.gamesToWin * 2 - 1}`;
   return `${heading} · first to ${c.pointsPerGame}`;
 });
 
@@ -53,13 +57,13 @@ const allGamesLine = computed(() => {
   const finished = s.games.length - (s.matchOver ? 0 : 1);
   const completed = s.games.slice(0, Math.max(finished, 0));
   if (!completed.length) return formatLine.value;
-  return completed.map((g) => `${g.a}–${g.b}`).join("  ");
+  return completed.map((g) => `${g.a}–${g.b}`).join('  ');
 });
 
-const sideLabel = (side: "a" | "b") => {
-  if (isMatchWinner(side)) return "WINNER";
-  if (isLastGameWinner(side)) return "GAME WON";
-  if (isServingSide(side)) return "SERVING";
+const sideLabel = (side: 'a' | 'b') => {
+  if (isMatchWinner(side)) return 'WINNER';
+  if (isLastGameWinner(side)) return 'GAME WON';
+  if (isServingSide(side)) return 'SERVING';
   return null;
 };
 </script>
@@ -188,7 +192,7 @@ const sideLabel = (side: "a" | "b") => {
       <div
         class="flex justify-between items-end gap-3 text-[clamp(9px,1.2vmin,12px)] text-neutral-500 tracking-[0.1em] font-semibold uppercase shrink-0"
       >
-        <span class="truncate">{{ allGamesLine || "&nbsp;" }}</span>
+        <span class="truncate">{{ allGamesLine || '&nbsp;' }}</span>
         <span class="shrink-0">SCOREBOARD APP</span>
       </div>
     </div>
