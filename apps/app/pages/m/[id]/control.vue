@@ -612,23 +612,38 @@ const closeSheet = () => {
 
 // Long-press on Undo escalates to score correction — the natural next step
 // when single-tap undo isn't enough. Short tap undoes the last point.
-// VueUse `onLongPress` handles the timer + pointer cancel/move edge cases
-// (small finger drift no longer fires the action). Threshold haptic fires
-// when the long-press triggers so the operator feels the cross.
+//
+// The short tap MUST come from a native `click`, not from onLongPress's
+// `onMouseUp` option. That option is delivered from a `pointerup` listener that
+// bails out whenever the internal state was cleared — and `onLongPress` clears
+// it as soon as the pointer drifts 10px (its `distanceThreshold`) or leaves the
+// element. On a phone, a thumb tap on a full-width button at the bottom of the
+// screen drifts past 10px constantly, so the undo was being silently swallowed
+// mid-match. A real `click` keeps the browser's own tap-slop tolerance and
+// makes the button reachable by keyboard (Enter/Space fire click, never
+// pointerup). Threshold haptic fires when the long-press triggers so the
+// operator feels the cross.
 const undoBtn = ref<HTMLElement | null>(null);
+// iOS still delivers a click after the long-press fires; swallow that one so
+// the sheet doesn't open on top of an undo. Reset on every new press so a
+// long-press that ends off the button (no click) can't poison the next tap.
+const undoLongPressed = ref(false);
 onLongPress(
   undoBtn,
   () => {
     vibrate(15);
+    undoLongPressed.value = true;
     openSheet.value = 'scoreCorrect';
   },
-  {
-    delay: 400,
-    onMouseUp: (_duration, _distance, isLongPress) => {
-      if (!isLongPress) onUndo();
-    },
-  }
+  { delay: 400 }
 );
+const onUndoClick = () => {
+  if (undoLongPressed.value) {
+    undoLongPressed.value = false;
+    return;
+  }
+  onUndo();
+};
 
 // Match-state actions
 const onWalkover = (winner: SideId) => {
@@ -731,7 +746,7 @@ const swapLabelB = computed(() =>
 
 <template>
   <div
-    class="fixed inset-0 bg-muted/40 sm:bg-muted pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
+    class="fixed inset-0 bg-muted/40 sm:bg-muted pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
   >
     <div
       class="mx-auto flex h-full max-w-2xl flex-col bg-background text-foreground font-sans sm:border-x sm:border-border sm:shadow-2xl"
@@ -975,8 +990,15 @@ const swapLabelB = computed(() =>
            works. `Ends` reappears here at the deciding-game interval, the one
            mid-match moment it is legal. Wider audit / multi-step recovery
            stays in the 3-dot menu (match-state sheet). -->
+      <!-- The bottom inset lives here rather than on the fixed root: as root
+           padding it left a strip of `bg-muted` under the card, and it did
+           nothing for the sheets below (absolutely positioned boxes resolve
+           `bottom-0` against the padding box, so they ignore it and need their
+           own inset). Floored so the buttons keep clearance from the physical
+           screen edge where `env()` reports 0 — Android edge-to-edge, desktop
+           PWA, and installed-Chrome. -->
       <footer
-        class="min-h-14 flex-shrink-0 px-3 py-2 flex flex-wrap items-center gap-2 border-t border-border"
+        class="min-h-14 flex-shrink-0 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex flex-wrap items-center gap-2 border-t border-border"
       >
         <template v-if="showSetupBar">
           <Button
@@ -1007,6 +1029,8 @@ const swapLabelB = computed(() =>
             variant="outline"
             class="flex-1 select-none"
             title="Undo the last point — long-press to correct the score"
+            @pointerdown="undoLongPressed = false"
+            @click="onUndoClick"
           >
             <Undo2 class="size-4" />
             Undo
