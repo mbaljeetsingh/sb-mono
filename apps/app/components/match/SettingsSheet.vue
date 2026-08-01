@@ -16,6 +16,7 @@ import { Input } from '@sb/layer-ui/components/ui/input';
 import { Label } from '@sb/layer-ui/components/ui/label';
 import { Trash2, X } from 'lucide-vue-next';
 import DeleteMatchDialog from '~/components/match/DeleteMatchDialog.vue';
+import { joinNames } from '~/lib/partner-swap';
 
 const props = defineProps<{ matchId: string; meta: MatchMeta }>();
 
@@ -41,13 +42,11 @@ const matchLabel = computed(() => {
 const onDeleted = () => emit('deleted');
 
 // In doubles, the player fields are the source of truth, but everything
-// downstream that reads `teamNames` (hero card, themes) needs the joined
-// "Alice / Bob" string kept in sync. Rewrite both on every player edit.
-const join = (p1: string, p2: string) =>
-  [p1, p2]
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .join(' / ');
+// downstream that reads `teamNames` (hero card, match list, the GAME POINT
+// pill) needs the joined "Alice / Bob" string kept in sync. Rewrite both on
+// every player edit. `joinNames` is shared with /new and /control's partner
+// swap so the four writers can't encode the separator differently.
+const join = joinNames;
 
 const updatePlayer = (slot: 'a1' | 'a2' | 'b1' | 'b2', value: string) => {
   const current = draft.value.players ?? { a1: '', a2: '', b1: '', b2: '' };

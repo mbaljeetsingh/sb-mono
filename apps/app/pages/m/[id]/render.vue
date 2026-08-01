@@ -21,6 +21,7 @@ import {
   type OverlaySnapshot,
   useVideoRenderWebCodecs,
 } from '~/composables/useVideoRenderWebCodecs';
+import { type Anchor, buildSnapshotPlan } from '~/lib/snapshot-plan';
 
 definePageMeta({ layout: false });
 useSeoMeta({ title: 'Render · Scoreboard' });
@@ -63,7 +64,6 @@ const onTimeUpdate = () => {
 // and game N+1 in the events log (5+ minutes of real time) won't match the
 // gap in the video (zero). Each game gets its own anchor; the active one
 // is whichever anchor's videoMs is most recently <= current playhead.
-type Anchor = { videoMs: number; eventTs: number };
 const anchors = ref<Record<number, Anchor | null>>({});
 
 // First `point` event of each game in the match. Game 0 = events before any
@@ -150,43 +150,13 @@ const clearAnchor = (gameIndex: number) => {
 // reactive state forward) so snapshotting is dramatically faster.
 const { render, progress, outputUrl } = useVideoRenderWebCodecs();
 
-// Map an event's ts to its position in the video using the anchor for the
-// game it belongs to. Events in games without anchors return null and are
-// skipped from the render — at least one game must be synced.
-const eventToVideoTimeSec = (
-  ev: { ts: number },
-  gameIndex: number
-): number | null => {
-  const a = anchors.value[gameIndex];
-  if (!a) return null;
-  return (a.videoMs + (ev.ts - a.eventTs)) / 1000;
-};
-
 // Snapshot plan: each entry pairs the video-time the overlay should appear
 // with the engine-time required to compute that overlay state. We snapshot
 // by writing the engine-time into `replayTimeMs` directly — no video seek.
-type SnapshotPlan = { videoTimeSec: number; replayTimeMs: number };
-
-const snapshotPlan = computed<SnapshotPlan[]>(() => {
-  const plan: SnapshotPlan[] = [];
-  let currentGame = 0;
-  for (const ev of events.value) {
-    if (ev.type === 'game.end') {
-      currentGame += 1;
-      continue;
-    }
-    if (ev.type !== 'point' && ev.type !== 'match.start') continue;
-    const t = eventToVideoTimeSec(ev, currentGame);
-    if (t === null) continue;
-    // Clamp pre-anchor events (typically `match.start`, which fires a few
-    // seconds before the first rally ends) to t=0 so the initial 0–0
-    // state has a snapshot at the video's start — otherwise the overlay's
-    // first-frame draw is whatever the first POSITIVE-time snapshot
-    // captured (usually 1-0 after the first point lands).
-    plan.push({ videoTimeSec: Math.max(0, t), replayTimeMs: ev.ts });
-  }
-  return plan;
-});
+// Logic lives in lib/snapshot-plan.ts so it can be tested without the page.
+const snapshotPlan = computed(() =>
+  buildSnapshotPlan(events.value, anchors.value)
+);
 
 const canRender = computed(
   () => !!videoFile.value && snapshotPlan.value.length > 0
@@ -262,7 +232,7 @@ const formatTime = (ms: number) => {
 
 // Theme — reuse the overlay theme the operator chose for this match.
 const { overlay: overlayTheme } = useThemeChoice(matchId);
-const { teamNames, meta: matchMeta } = useMatchMeta(matchId);
+const { teamNames, players, meta: matchMeta } = useMatchMeta(matchId);
 const themeEntry = computed(() =>
   getTheme(overlayTheme.value || 'broadcast-classic', 'overlay')
 );
@@ -362,6 +332,7 @@ const meta = computed(() => ({
               :state="state"
               :config="config"
               :team-names="teamNames"
+              :players="players"
               :meta="meta"
             />
           </div>

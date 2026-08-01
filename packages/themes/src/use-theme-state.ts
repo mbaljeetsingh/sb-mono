@@ -8,6 +8,9 @@ import { type Ref, computed } from 'vue';
 
 export type SideKey = 'a' | 'b';
 
+/** Per-slot player names. Slot 1 / slot 2 of each team, in engine slot order. */
+export type Players = { a1: string; a2: string; b1: string; b2: string };
+
 export type Player = {
   name: string;
   /** True when this player is the active server right now. */
@@ -30,14 +33,40 @@ const EMPTY_CARDS = { yellow: 0, red: 0, black: 0 } as const;
  */
 export function useThemeState(
   stateRef: Ref<RacquetState>,
-  teamNamesRef: Ref<{ a: string; b: string }>
+  teamNamesRef: Ref<{ a: string; b: string }>,
+  playersRef?: Ref<Players | undefined>
 ) {
-  const playersOf = (side: SideKey): Player[] => {
-    const state = stateRef.value;
-    const parts = teamNamesRef.value[side]
+  // Partner order comes from `players` when the caller supplies it, and only
+  // falls back to splitting the joined team name otherwise.
+  //
+  // The split used to be the only source, which made the display depend on
+  // `team_name_a` staying in lockstep with `players`. It didn't: /control's
+  // partner swap rewrote `players` alone, so every theme placed the SERVE
+  // highlight on the wrong partner for the rest of the match — and matches
+  // scored before that was fixed still carry the stale name. Reading
+  // `players` first makes those render correctly with no data repair.
+  const partnersOf = (side: SideKey): string[] => {
+    const split = teamNamesRef.value[side]
       .split(' / ')
       .map((s) => s.trim())
       .filter(Boolean);
+
+    // Only take over when the stored name is itself a joined pair (or blank).
+    // A team the operator deliberately named — "Indonesia" — must keep showing
+    // that, not get expanded into its two players. So `players` decides the
+    // ORDER of a pair, it doesn't change what gets displayed.
+    if (split.length > 1 || split.length === 0) {
+      const p = playersRef?.value;
+      const pair = side === 'a' ? [p?.a1, p?.a2] : [p?.b1, p?.b2];
+      const explicit = pair.map((s) => s?.trim() ?? '').filter(Boolean);
+      if (explicit.length === 2) return explicit;
+    }
+    return split;
+  };
+
+  const playersOf = (side: SideKey): Player[] => {
+    const state = stateRef.value;
+    const parts = partnersOf(side);
     if (parts.length < 2) {
       return [{ name: parts[0] ?? '', isServer: false, isPartner: false }];
     }

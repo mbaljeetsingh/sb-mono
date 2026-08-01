@@ -220,11 +220,22 @@ export function useMatchMeta(matchId: Ref<string>) {
     b: titleCase(meta.value.teamNames?.b?.trim() ?? ''),
   }));
 
+  // Per-slot player names, title-cased the same way as `teamNames`. Themes
+  // take this to place the doubles SERVE highlight, instead of splitting the
+  // joined team name — the two can disagree on older matches (see
+  // apps/app/lib/partner-swap.ts). Raw values stay on `meta` for editing.
+  const players = computed(() => ({
+    a1: titleCase(meta.value.players?.a1?.trim() ?? ''),
+    a2: titleCase(meta.value.players?.a2?.trim() ?? ''),
+    b1: titleCase(meta.value.players?.b1?.trim() ?? ''),
+    b2: titleCase(meta.value.players?.b2?.trim() ?? ''),
+  }));
+
   // Force an immediate update, bypassing the 500ms debounce. Used when the
   // user closes the settings sheet and we want the matches list (or any
   // other reader) to see the change on the very next fetch — without this
   // flush, fast nav (sheet close → /matches) races the debounce.
   const flush = () => updateRemote();
 
-  return { meta, teamNames, flush };
+  return { meta, teamNames, players, flush };
 }

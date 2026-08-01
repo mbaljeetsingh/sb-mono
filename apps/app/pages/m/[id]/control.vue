@@ -29,6 +29,7 @@ import MatchStateSheet from '~/components/control/MatchStateSheet.vue';
 import ScoreCorrectSheet from '~/components/control/ScoreCorrectSheet.vue';
 import TeamRow from '~/components/control/TeamRow.vue';
 import TossSheet from '~/components/control/TossSheet.vue';
+import { swapTeamPlayers } from '~/lib/partner-swap';
 import { sportIdFromPreset } from '~/lib/sports';
 
 definePageMeta({ layout: false });
@@ -499,24 +500,19 @@ const canSwapSidesVisible = computed(
 // on the right (server) court is now on the left and vice versa. Service
 // still begins from the right court; this just picks which partner stands
 // there.
+// `players` and the joined `teamNames` string are two views of the same fact
+// and must move together — see lib/partner-swap.ts for why.
 const swapPlayers = (side: SideId) => {
   if (!canSwapInitial.value && !canSwapAtGameStart.value) return;
   const isDoubles = matchMeta.value.isDoubles ?? false;
   if (!isDoubles) return;
   vibrate(10);
-  const current = matchMeta.value.players ?? {
-    a1: '',
-    a2: '',
-    b1: '',
-    b2: '',
-  };
-  matchMeta.value = {
-    ...matchMeta.value,
-    players:
-      side === 'A'
-        ? { ...current, a1: current.a2, a2: current.a1 }
-        : { ...current, b1: current.b2, b2: current.b1 },
-  };
+  const { players, teamNames } = swapTeamPlayers(
+    matchMeta.value.players ?? { a1: '', a2: '', b1: '', b2: '' },
+    matchMeta.value.teamNames ?? { a: '', b: '' },
+    side
+  );
+  matchMeta.value = { ...matchMeta.value, players, teamNames };
 };
 
 // Player swap writes to matches.players via useMatchMeta → only the owner

@@ -43,7 +43,7 @@ const { isAdmin } = useRolePermissions();
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ''));
 const { state, config, events } = useMatchState(matchId);
-const { meta, teamNames, flush: flushMeta } = useMatchMeta(matchId);
+const { meta, teamNames, players, flush: flushMeta } = useMatchMeta(matchId);
 
 // Explicit handler — relying on `v-model:meta="meta"` to auto-translate
 // `meta = $event` to `meta.value = $event` is unreliable in template event
@@ -290,6 +290,7 @@ const onRegenerateToken = async () => {
         :display-name="displayName"
         :status-label="statusLabel"
         :team-names="teamNames"
+        :players="players"
         :total-slots="config.gamesToWin + 1"
         :score-a="score('a')"
         :score-b="score('b')"

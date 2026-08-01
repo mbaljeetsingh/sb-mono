@@ -20,6 +20,7 @@ import { toast } from 'vue-sonner';
 import LookAndFeelCards from '~/components/match/LookAndFeelCards.vue';
 import SportPicker from '~/components/match/SportPicker.vue';
 import ThemePickerDialog from '~/components/match/ThemePickerDialog.vue';
+import { joinNames } from '~/lib/partner-swap';
 import { SPORTS, type SportId } from '~/lib/sports';
 import { useUserStore } from '~/stores/user';
 
@@ -245,8 +246,13 @@ onMounted(async () => {
   }
 });
 
+// Seeds `team_name_a/b` alongside the `players` column. Both must encode the
+// same order — themes fall back to splitting this string when `players` is
+// absent, so a mismatch shows the wrong partner as server. Shared helper
+// rather than a local template literal, so /new, SettingsSheet and /control's
+// partner swap can't drift apart on the separator.
 const formatNames = (t: { p1: string; p2: string }) =>
-  isDoubles.value && t.p2 ? `${t.p1} / ${t.p2}` : t.p1;
+  isDoubles.value ? joinNames(t.p1, t.p2) : t.p1.trim();
 
 // Format is collapsed behind a summary by default. Every field in it has a
 // sensible default (sport → badminton-21 → single game), while the player names

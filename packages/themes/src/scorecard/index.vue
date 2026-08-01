@@ -9,17 +9,17 @@
 // Sizing is fluid (clamp + vmin/vw/vh) so the table fits any viewport from a
 // portrait phone to a wall TV without horizontal scroll.
 
-import { computed, toRef } from "vue";
-import type { ThemeProps } from "../index";
-import PenaltyCards from "../penalty-cards.vue";
-import SportIcon from "../sport-icon.vue";
+import { computed, toRef } from 'vue';
+import type { ThemeProps } from '../index';
+import PenaltyCards from '../penalty-cards.vue';
+import SportIcon from '../sport-icon.vue';
 import {
   endReasonLabel,
   teamColor,
   useMetaLine,
   useStatusPill,
   useThemeState,
-} from "../use-theme-state";
+} from '../use-theme-state';
 
 const props = defineProps<ThemeProps>();
 const {
@@ -30,23 +30,27 @@ const {
   isServingSide,
   isLastGameWinner,
   isMatchWinner,
-} = useThemeState(toRef(props, "state"), toRef(props, "teamNames"));
-const meta = useMetaLine(toRef(props, "meta"), toRef(props, "config"));
+} = useThemeState(
+  toRef(props, 'state'),
+  toRef(props, 'teamNames'),
+  toRef(props, 'players')
+);
+const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const isLive = computed(() => props.meta?.isLive !== false);
-const status = useStatusPill(toRef(props, "state"));
+const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
 
-const playersOf = (side: "a" | "b") =>
-  side === "a" ? playersA.value : playersB.value;
+const playersOf = (side: 'a' | 'b') =>
+  side === 'a' ? playersA.value : playersB.value;
 
 // One column per game actually played (or in progress). No empty placeholders
 // — the layout grows as games roll in instead of pre-allocating empty G3 slots.
 const gameColumns = computed(() => games.value);
 
-const sideStatus = (side: "a" | "b") => {
-  if (isMatchWinner(side)) return "WINNER";
-  if (isLastGameWinner(side)) return "GAME WON";
-  if (isServingSide(side)) return "SERVING";
+const sideStatus = (side: 'a' | 'b') => {
+  if (isMatchWinner(side)) return 'WINNER';
+  if (isLastGameWinner(side)) return 'GAME WON';
+  if (isServingSide(side)) return 'SERVING';
   return null;
 };
 
@@ -58,7 +62,7 @@ const isCurrentGameCol = (idx: number) =>
 // Score columns are fluid: shrink to ~52px on a phone, grow to 90px on a TV.
 const gridTemplate = computed(
   () =>
-    `minmax(0,1fr) repeat(${gameColumns.value.length}, clamp(52px,10vw,90px))`,
+    `minmax(0,1fr) repeat(${gameColumns.value.length}, clamp(52px,10vw,90px))`
 );
 </script>
 
@@ -193,7 +197,7 @@ const gridTemplate = computed(
         <span class="truncate">
           {{
             config.gamesToWin === 1
-              ? "Single game"
+              ? 'Single game'
               : `Best of ${config.gamesToWin * 2 - 1}`
           }}
           · first to {{ config.pointsPerGame }}
