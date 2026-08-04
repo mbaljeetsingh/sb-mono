@@ -1,12 +1,17 @@
 <script setup lang="ts">
-// Minimal Bug — tiny corner overlay (~190px wide). For streamers who don't
-// want their video covered. No team names by default — just initials, current
-// game score, and the game number. Sport icon for context.
+// Minimal Bug — the smallest useful overlay: a single ~150px row. For streamers
+// who don't want their video covered at all. Initials, live points, nothing
+// else. `score-bug` is the step up when you want game history too.
+//
+// The sport icon that used to lead this row is gone: it cost ~22px of a 190px
+// bug to say something the viewer already knows from the footage. Everything
+// here has to beat that bar, which is why there are no names, no event line and
+// no status wording.
 
 import { computed, toRef } from 'vue';
 import type { ThemeProps } from '../index';
 import PenaltyCards from '../penalty-cards.vue';
-import SportIcon from '../sport-icon.vue';
+import ServeMarker from '../serve-marker.vue';
 import {
   endReasonLabel,
   teamColor,
@@ -42,29 +47,33 @@ const initials = computed(() => ({
 
 <template>
   <div
-    class="absolute top-9 right-9 rounded-md px-3 py-2 inline-flex items-center gap-3 border border-white/10 backdrop-blur-md bg-neutral-950/85 text-white font-sans"
+    class="absolute top-8 right-8 rounded-[4px] px-2 py-1.5 inline-flex items-center gap-2 ring-1 ring-white/[0.08] bg-[#0a0d12]/92 text-white font-sans"
   >
-    <SportIcon
-      :sport="config.sport"
-      class="text-[14px] text-neutral-300 shrink-0"
-    />
     <div
       v-for="side in ['a', 'b'] as const"
       :key="side"
       class="inline-flex items-center gap-1.5"
     >
-      <span
-        class="size-1.5 rounded-full transition-opacity"
-        :class="isServingSide(side) ? 'animate-pulse-soft' : 'opacity-30'"
-        :style="{ background: teamColor(side) }"
+      <!-- Serve marker holds its slot when idle, so the two halves stay aligned
+           and nothing shifts on a change of service. -->
+      <ServeMarker
+        v-if="isServingSide(side)"
+        :color="teamColor(side)"
+        size="xs"
       />
       <span
-        class="text-[11px] font-bold tracking-wide"
+        v-else
+        class="inline-block size-[5px] shrink-0 rounded-full opacity-25"
+        :style="{ background: teamColor(side) }"
+        aria-hidden="true"
+      />
+      <span
+        class="text-[11px] font-bold tracking-wide w-[9px] text-center"
         :style="{ color: teamColor(side) }"
         >{{ initials[side] }}</span
       >
       <span
-        class="score text-base text-neutral-50 min-w-[20px]"
+        class="score text-[15px] text-neutral-50 w-[22px]"
         :class="side === 'a' ? 'text-right' : 'text-left'"
         >{{ currentGame[side] }}</span
       >
@@ -72,7 +81,7 @@ const initials = computed(() => ({
       <span
         v-if="side === 'a'"
         aria-hidden="true"
-        class="w-px h-3 bg-white/15 ml-1"
+        class="w-px h-3 bg-white/15"
       />
     </div>
     <!-- Status priority: match-over → pause icon → game number. Tiny

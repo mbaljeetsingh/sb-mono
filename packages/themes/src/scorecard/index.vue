@@ -12,9 +12,12 @@
 import { computed, toRef } from 'vue';
 import type { ThemeProps } from '../index';
 import PenaltyCards from '../penalty-cards.vue';
+import ServeMarker from '../serve-marker.vue';
 import SportIcon from '../sport-icon.vue';
 import {
   endReasonLabel,
+  gameCellsOf,
+  showStanding,
   teamColor,
   useMetaLine,
   useStatusPill,
@@ -27,6 +30,7 @@ const {
   playersB,
   cards,
   games,
+  gamesWon,
   isServingSide,
   isLastGameWinner,
   isMatchWinner,
@@ -47,22 +51,31 @@ const playersOf = (side: 'a' | 'b') =>
 // — the layout grows as games roll in instead of pre-allocating empty G3 slots.
 const gameColumns = computed(() => games.value);
 
+// SERVING drops out — the marker next to the name carries it, the way a printed
+// scoresheet marks service with a tick rather than a word.
 const sideStatus = (side: 'a' | 'b') => {
   if (isMatchWinner(side)) return 'WINNER';
   if (isLastGameWinner(side)) return 'GAME WON';
-  if (isServingSide(side)) return 'SERVING';
   return null;
 };
 
-const isCurrentGameCol = (idx: number) =>
-  !props.state.matchOver &&
-  !props.state.betweenGames &&
-  idx === games.value.length - 1;
+const cells = computed(() => gameCellsOf(props.state));
+const isCurrentGameCol = (idx: number) => cells.value[idx]?.isCurrent ?? false;
+// A completed game this side took. Emphasising the winner per cell is what
+// turns the grid from "numbers in boxes" into a readable scoresheet — the old
+// version only distinguished the live column, so a finished BO5 was flat.
+const wonGame = (idx: number, side: 'a' | 'b') =>
+  cells.value[idx]?.winner === side;
+
+const withStanding = computed(() => showStanding(props.config));
 
 // Score columns are fluid: shrink to ~52px on a phone, grow to 90px on a TV.
+// The trailing column is the games-won total, present only in BO5+.
 const gridTemplate = computed(
   () =>
-    `minmax(0,1fr) repeat(${gameColumns.value.length}, clamp(52px,10vw,90px))`
+    `minmax(0,1fr) repeat(${gameColumns.value.length}, clamp(52px,10vw,90px))${
+      withStanding.value ? ' clamp(56px,11vw,100px)' : ''
+    }`
 );
 </script>
 
@@ -121,6 +134,12 @@ const gridTemplate = computed(
           >
             G{{ idx + 1 }}
           </div>
+          <div
+            v-if="withStanding"
+            class="text-center text-[clamp(9px,1.2vmin,11px)] font-bold tracking-[0.16em] text-neutral-900 uppercase"
+          >
+            Games
+          </div>
         </div>
 
         <!-- Per-team rows -->
@@ -149,16 +168,22 @@ const gridTemplate = computed(
                   <span
                     :class="
                       p.isServer
-                        ? 'font-bold'
+                        ? 'font-bold text-neutral-950'
                         : p.isPartner
                           ? 'text-neutral-400 font-medium'
                           : 'text-neutral-900 font-semibold'
                     "
-                    :style="p.isServer ? { color: teamColor(side) } : undefined"
                     >{{ p.name }}</span
                   >
                 </template>
               </span>
+              <ServeMarker
+                v-if="isServingSide(side)"
+                :color="teamColor(side)"
+                size="sm"
+                :animate="false"
+                class="shrink-0"
+              />
               <span
                 v-if="sideStatus(side)"
                 class="text-[clamp(8px,1.1vmin,10px)] font-bold tracking-[0.18em] uppercase shrink-0"
@@ -168,13 +193,18 @@ const gridTemplate = computed(
               <PenaltyCards :cards="cards(side)" size="sm" class="shrink-0" />
             </div>
           </div>
-          <!-- Per-game scores -->
+          <!-- Per-game scores. Three tiers: live column in team colour, a game
+               this side won in full black, a game they lost dimmed. -->
           <div v-for="(g, idx) in gameColumns" :key="idx" class="text-center">
             <span
               v-if="g"
               class="score leading-none tabular-nums text-[clamp(24px,5vmin,44px)]"
               :class="
-                isCurrentGameCol(idx) ? 'text-neutral-950' : 'text-neutral-700'
+                isCurrentGameCol(idx)
+                  ? ''
+                  : wonGame(idx, side)
+                    ? 'text-neutral-950 font-bold'
+                    : 'text-neutral-400'
               "
               :style="
                 isCurrentGameCol(idx) ? { color: teamColor(side) } : undefined
@@ -185,6 +215,21 @@ const gridTemplate = computed(
               v-else
               class="text-neutral-300 text-[clamp(16px,2.5vmin,24px)]"
               >·</span
+            >
+          </div>
+          <!-- Games-won total (BO5+ only) -->
+          <div v-if="withStanding" class="text-center">
+            <span
+              class="score inline-flex items-center justify-center rounded-[3px] px-[clamp(4px,1vmin,10px)] leading-none tabular-nums text-[clamp(24px,5vmin,44px)]"
+              :class="
+                gamesWon[side] > 0
+                  ? 'text-white'
+                  : 'bg-neutral-200/80 text-neutral-400'
+              "
+              :style="
+                gamesWon[side] > 0 ? { background: teamColor(side) } : undefined
+              "
+              >{{ gamesWon[side] }}</span
             >
           </div>
         </div>
