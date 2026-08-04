@@ -10,11 +10,14 @@
 // in portrait so the same theme reads well on phone, tablet, TV, and stream.
 
 import { computed, toRef } from 'vue';
+import GameCells from '../game-cells.vue';
 import type { ThemeProps } from '../index';
 import PenaltyCards from '../penalty-cards.vue';
+import ServeMarker from '../serve-marker.vue';
 import SportIcon from '../sport-icon.vue';
 import {
   endReasonLabel,
+  showStanding,
   teamColor,
   useMetaLine,
   useStatusPill,
@@ -27,6 +30,7 @@ const {
   playersB,
   cards,
   currentGame,
+  gamesWon,
   isServingSide,
   isLastGameWinner,
   isMatchWinner,
@@ -49,21 +53,13 @@ const formatLine = computed(() => {
   return `${heading} · first to ${c.pointsPerGame}`;
 });
 
-const allGamesLine = computed(() => {
-  // Only show *completed* games — the in-progress game is already on the
-  // big numerals above. In BO1 (or before the first game finishes) there's
-  // nothing to list, so fall back to the format caption.
-  const s = props.state;
-  const finished = s.games.length - (s.matchOver ? 0 : 1);
-  const completed = s.games.slice(0, Math.max(finished, 0));
-  if (!completed.length) return formatLine.value;
-  return completed.map((g) => `${g.a}–${g.b}`).join('  ');
-});
+const withStanding = computed(() => showStanding(props.config));
 
+// SERVING is no longer a caption here — the marker beside it says that, and the
+// word crowded a layout whose whole argument is restraint.
 const sideLabel = (side: 'a' | 'b') => {
   if (isMatchWinner(side)) return 'WINNER';
   if (isLastGameWinner(side)) return 'GAME WON';
-  if (isServingSide(side)) return 'SERVING';
   return null;
 };
 </script>
@@ -151,25 +147,39 @@ const sideLabel = (side: 'a' | 'b') => {
           >
             {{ currentGame[side] }}
           </div>
-          <!-- Side-status caption (SERVING / GAME WON / WINNER) + cards -->
+          <!-- Completed games as light-tone cells, plus the serve marker and any
+               GAME WON / WINNER caption. Replaces the old footer line that
+               joined every game into "21–18  14–11" — one shared string for two
+               teams, which the reader had to split by hand.
+
+               No flex-row-reverse on side B: the block is inline-flex inside a
+               right-aligned column, so it already sits right, and reversing it
+               would put the standing number before G1 and flip this side's
+               reading order against the other. Only alignment mirrors. -->
           <div
-            v-if="
-              sideLabel(side) ||
-              cards(side).yellow ||
-              cards(side).red ||
-              cards(side).black
-            "
-            :class="[
-              'inline-flex items-center gap-2 mt-2 text-[clamp(9px,1.2vmin,11px)] font-bold tracking-[0.18em] uppercase',
-              side === 'b' ? 'landscape:flex-row-reverse' : '',
-            ]"
+            class="inline-flex items-center gap-[clamp(4px,1vmin,10px)] mt-[clamp(6px,1.5vh,16px)] text-[clamp(9px,1.2vmin,11px)] font-bold tracking-[0.18em] uppercase"
             :style="{ color: teamColor(side) }"
           >
-            <span
+            <ServeMarker
               v-if="isServingSide(side)"
-              class="size-1.5 rounded-full"
-              :style="{ background: teamColor(side) }"
+              :color="teamColor(side)"
+              size="sm"
+              :animate="false"
             />
+            <GameCells
+              v-if="config.gamesToWin > 1"
+              :state="state"
+              :side="side"
+              :color="teamColor(side)"
+              size="sm"
+              tone="light"
+              :include-current="false"
+            />
+            <span
+              v-if="withStanding"
+              class="score text-[clamp(13px,1.8vmin,18px)] tabular-nums text-neutral-900"
+              >{{ gamesWon[side] }}</span
+            >
             <span v-if="sideLabel(side)">{{ sideLabel(side) }}</span>
             <PenaltyCards :cards="cards(side)" size="sm" />
           </div>
@@ -192,7 +202,7 @@ const sideLabel = (side: 'a' | 'b') => {
       <div
         class="flex justify-between items-end gap-3 text-[clamp(9px,1.2vmin,12px)] text-neutral-500 tracking-[0.1em] font-semibold uppercase shrink-0"
       >
-        <span class="truncate">{{ allGamesLine || '&nbsp;' }}</span>
+        <span class="truncate">{{ formatLine }}</span>
         <span class="shrink-0">SCOREBOARD APP</span>
       </div>
     </div>

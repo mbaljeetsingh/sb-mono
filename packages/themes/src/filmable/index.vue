@@ -2,18 +2,23 @@
 // Filmable — default scoreboard. Split-halves layout with massive numerals,
 // designed to be read across the venue and to be filmed by a camera at the
 // back of the hall. The hardest constraint is contrast at distance, so the
-// active server gets a chunky team-colored pill + the player name flips into
-// the team color.
+// active server is marked with a glyph beside the name and the name itself goes
+// to the heaviest weight — hue is left alone, because tinting the one name you
+// most need to read spends contrast to repeat what the team badge already says.
 //
 // Sizing is fluid (clamp + vmin/vh/vw) and the layout reflows to stacked rows
 // in portrait so the same theme reads well on phone, tablet, TV, and stream.
 
 import { computed, toRef } from 'vue';
+import GameCells from '../game-cells.vue';
+import GamesWonPlate from '../games-won-plate.vue';
 import type { ThemeProps } from '../index';
 import PenaltyCards from '../penalty-cards.vue';
+import ServeMarker from '../serve-marker.vue';
 import SportIcon from '../sport-icon.vue';
 import {
   endReasonLabel,
+  showStanding,
   teamColor,
   useStatusPill,
   useThemeState,
@@ -25,6 +30,7 @@ const {
   playersA,
   playersB,
   currentGame,
+  gamesWon,
   isServingSide,
   isLastGameWinner,
   isMatchWinner,
@@ -36,6 +42,7 @@ const {
 );
 const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
+const withStanding = computed(() => showStanding(props.config));
 
 const playersOf = (side: 'a' | 'b') =>
   side === 'a' ? playersA.value : playersB.value;
@@ -57,13 +64,6 @@ const topMeta = computed(() => {
   ]
     .filter(Boolean)
     .join(' · ');
-});
-
-// Filmable's bottom history shows ALL completed games; while in-progress, the
-// last entry is the current game (excluded).
-const previousGames = computed(() => {
-  const finished = props.state.games.length - (props.state.matchOver ? 0 : 1);
-  return props.state.games.slice(0, Math.max(finished, 0));
 });
 
 const formatLine = computed(() => {
@@ -171,35 +171,45 @@ const formatLine = computed(() => {
           >
             GAME WON
           </span>
-          <span
-            v-else-if="isServingSide(side)"
-            class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-white text-[clamp(9px,1.3vmin,12px)] font-bold tracking-[0.16em]"
-            :style="{ background: teamColor(side) }"
-          >
-            <span class="size-1.5 rounded-full bg-white animate-pulse-soft" />
-            SERVE
-          </span>
           <PenaltyCards :cards="cards(side)" size="sm" />
         </div>
+        <!-- Serve marker sits inline with the name, not in the chip row above.
+             In singles there is no TEAM badge, so a marker up there rendered as
+             a single dot floating over empty space with nothing to attach to. -->
         <div
-          class="text-[clamp(13px,2.2vmin,28px)] font-semibold leading-snug uppercase"
+          :class="[
+            'flex items-center gap-[clamp(4px,1vmin,10px)] portrait:justify-center',
+            side === 'b' ? 'landscape:flex-row-reverse' : '',
+          ]"
         >
-          <template v-for="(p, idx) in playersOf(side)" :key="idx">
-            <span v-if="idx > 0" class="mx-1.5 text-neutral-600 font-normal"
-              >/</span
-            >
-            <span
-              :class="
-                p.isServer
-                  ? 'font-extrabold'
-                  : p.isPartner
-                    ? 'text-neutral-400 font-medium'
-                    : 'text-neutral-50 font-semibold'
-              "
-              :style="p.isServer ? { color: teamColor(side) } : undefined"
-              >{{ p.name }}</span
-            >
-          </template>
+          <div
+            class="text-[clamp(13px,2.2vmin,28px)] font-semibold leading-snug uppercase min-w-0"
+          >
+            <template v-for="(p, idx) in playersOf(side)" :key="idx">
+              <span v-if="idx > 0" class="mx-1.5 text-neutral-600 font-normal"
+                >/</span
+              >
+              <!-- Weight, not hue. On a camera-filmed board the serving player's
+                 name is the one you most need legible, and tinting it to the
+                 team colour traded contrast away for identity the badge and
+                 marker already supply. -->
+              <span
+                :class="
+                  p.isServer
+                    ? 'font-extrabold text-white'
+                    : p.isPartner
+                      ? 'text-neutral-400 font-medium'
+                      : 'text-neutral-50 font-semibold'
+                "
+                >{{ p.name }}</span
+              >
+            </template>
+          </div>
+          <ServeMarker
+            v-if="isServingSide(side)"
+            :color="teamColor(side)"
+            size="md"
+          />
         </div>
         <div
           v-if="meta?.venue"
@@ -211,6 +221,37 @@ const formatLine = computed(() => {
           class="score leading-[0.9] mt-1 text-[clamp(72px,min(24vh,30vw),200px)] portrait:text-[clamp(96px,min(28vh,38vw),260px)]"
         >
           {{ currentGame[side] }}
+        </div>
+        <!-- Completed games as boxed cells, directly under this side's numeral.
+             They used to live in a single shared "HISTORY G1 21–18" line in the
+             footer, which meant reading a match standing required parsing a
+             sentence and mentally splitting each pair. Per-side cells put each
+             side's history under its own score, where it belongs. -->
+        <!-- Cells keep left-to-right game order on BOTH sides (G1 first), and the
+             standing plate stays last. Mirroring the row for side B — as the name
+             and chip rows do — put its plate before its cells and reversed the
+             reading order against side A, so comparing the two took a second
+             look. Only the block's alignment mirrors, never the cell order. -->
+        <div
+          v-if="config.gamesToWin > 1"
+          :class="[
+            'mt-[clamp(4px,1.2vh,14px)] flex items-center gap-[clamp(4px,1vmin,10px)] portrait:justify-center',
+            side === 'b' ? 'landscape:justify-end' : '',
+          ]"
+        >
+          <GameCells
+            :state="state"
+            :side="side"
+            :color="teamColor(side)"
+            size="md"
+            :include-current="false"
+          />
+          <GamesWonPlate
+            v-if="withStanding"
+            :value="gamesWon[side]"
+            :color="teamColor(side)"
+            size="md"
+          />
         </div>
       </div>
 
@@ -251,26 +292,7 @@ const formatLine = computed(() => {
     <div
       class="shrink-0 bg-neutral-950 border-t border-neutral-900 px-[clamp(12px,3vw,36px)] py-[clamp(6px,1.5vh,18px)] flex items-center justify-between gap-3"
     >
-      <div
-        v-if="previousGames.length"
-        class="flex gap-3 items-center min-w-0 flex-wrap"
-      >
-        <span
-          class="text-[clamp(9px,1.2vmin,11px)] text-neutral-400 tracking-wider font-semibold uppercase"
-          >HISTORY</span
-        >
-        <span
-          class="font-mono text-[clamp(11px,1.6vmin,16px)] font-semibold tabular-nums tracking-wide"
-        >
-          <template v-for="(g, i) in previousGames" :key="i">
-            G{{ i + 1 }} <span class="text-neutral-50">{{ g.a }}</span
-            >–<span class="text-neutral-600">{{ g.b }}</span>
-            <span v-if="i < previousGames.length - 1" class="mx-2">·</span>
-          </template>
-        </span>
-      </div>
       <span
-        v-else
         class="text-[clamp(9px,1.2vmin,11px)] text-neutral-500 tracking-[0.14em] font-semibold uppercase truncate"
         >{{ formatLine }}</span
       >

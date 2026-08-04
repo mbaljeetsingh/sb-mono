@@ -4,24 +4,27 @@
 // inside a scaled card so the user sees how scoring will actually look — no
 // guessing from a name + description.
 
-import { computed } from "vue";
-import { Check } from "lucide-vue-next";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@sb/layer-ui/components/ui/dialog";
+} from '@sb/layer-ui/components/ui/dialog';
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from "@sb/layer-ui/components/ui/tabs";
-import { themes as themeRegistry, type ThemeSurface } from "@sb/themes";
-import { Button } from "@sb/layer-ui/components/ui/button";
-import ThemePreview from "./ThemePreview.vue";
+} from '@sb/layer-ui/components/ui/tabs';
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from '@sb/layer-ui/components/ui/toggle-group';
+import { type ThemeSurface, themes as themeRegistry } from '@sb/themes';
+import { Check } from 'lucide-vue-next';
+import { computed } from 'vue';
+import ThemePreview from './ThemePreview.vue';
 
 const props = defineProps<{
   open: boolean;
@@ -30,23 +33,23 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  "update:open": [value: boolean];
+  'update:open': [value: boolean];
   pick: [args: { surface: ThemeSurface; id: string }];
 }>();
 
 const isOpen = computed({
   get: () => props.open,
-  set: (v) => emit("update:open", v),
+  set: (v) => emit('update:open', v),
 });
 
 const themesBySurface = computed(() => {
   const overlay = [];
   const scoreboard = [];
   for (const entry of Object.values(themeRegistry)) {
-    if (entry.manifest.supports.includes("overlay")) {
+    if (entry.manifest.supports.includes('overlay')) {
       overlay.push(entry);
     }
-    if (entry.manifest.supports.includes("scoreboard")) {
+    if (entry.manifest.supports.includes('scoreboard')) {
       scoreboard.push(entry);
     }
   }
@@ -54,14 +57,19 @@ const themesBySurface = computed(() => {
 });
 
 const pick = (surface: ThemeSurface, id: string) => {
-  emit("pick", { surface, id });
+  emit('pick', { surface, id });
 };
 </script>
 
 <template>
   <Dialog v-model:open="isOpen">
-    <DialogContent class="max-w-3xl p-0">
-      <DialogHeader class="px-6 pt-6 pb-2">
+    <!-- Height is capped and the grid scrolls, not the dialog: with 5+ themes
+         per surface the cards exceed the viewport, and an unbounded DialogContent
+         pushed the last row (and the tab strip) off-screen with no way to reach
+         it. The header and TabsList stay pinned so switching surface is always
+         one click away. -->
+    <DialogContent class="flex max-h-[88vh] max-w-3xl flex-col p-0">
+      <DialogHeader class="shrink-0 px-6 pt-6 pb-2">
         <DialogTitle>Themes</DialogTitle>
         <DialogDescription>
           Pick how the overlay (OBS) and venue scoreboard look. Tap a card to
@@ -69,26 +77,36 @@ const pick = (surface: ThemeSurface, id: string) => {
         </DialogDescription>
       </DialogHeader>
 
-      <Tabs default-value="overlay" class="px-6 pb-6">
-        <TabsList class="grid w-full grid-cols-2">
+      <Tabs
+        default-value="overlay"
+        class="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6"
+      >
+        <TabsList class="grid w-full shrink-0 grid-cols-2">
           <TabsTrigger value="overlay">Overlay (OBS)</TabsTrigger>
           <TabsTrigger value="scoreboard">Scoreboard (TV)</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overlay" class="mt-4">
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Button
+        <TabsContent
+          value="overlay"
+          class="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          <!-- ToggleGroup rather than Buttons with a hand-rolled selected class:
+               these ARE a single-select group, and the built-in `data-[state=on]`
+               treatment is the same primary ring the format toggles on /new use.
+               The overrides below are layout only (card shape, wrapping text) —
+               the selected state itself is the component's. -->
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            :model-value="overlayTheme"
+            class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2"
+            @update:model-value="(v) => v && pick('overlay', v as string)"
+          >
+            <ToggleGroupItem
               v-for="t in themesBySurface.overlay"
               :key="t.manifest.id"
-              type="button"
-              variant="outline"
-              class="h-auto flex-col items-stretch gap-2 rounded-lg border-[1.5px] p-2 whitespace-normal"
-              :class="
-                overlayTheme === t.manifest.id
-                  ? 'border-primary bg-primary/5 hover:bg-primary/5'
-                  : ''
-              "
-              @click="pick('overlay', t.manifest.id)"
+              :value="t.manifest.id"
+              class="h-auto w-full flex-col items-stretch gap-2 rounded-lg p-2 whitespace-normal"
             >
               <ThemePreview :component="t.component" surface="overlay" />
               <div class="flex items-center justify-between gap-2 px-1 pt-1">
@@ -107,24 +125,26 @@ const pick = (surface: ThemeSurface, id: string) => {
                   class="size-5 shrink-0 text-primary"
                 />
               </div>
-            </Button>
-          </div>
+            </ToggleGroupItem>
+          </ToggleGroup>
         </TabsContent>
 
-        <TabsContent value="scoreboard" class="mt-4">
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Button
+        <TabsContent
+          value="scoreboard"
+          class="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            :model-value="scoreboardTheme"
+            class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2"
+            @update:model-value="(v) => v && pick('scoreboard', v as string)"
+          >
+            <ToggleGroupItem
               v-for="t in themesBySurface.scoreboard"
               :key="t.manifest.id"
-              type="button"
-              variant="outline"
-              class="h-auto flex-col items-stretch gap-2 rounded-lg border-[1.5px] p-2 whitespace-normal"
-              :class="
-                scoreboardTheme === t.manifest.id
-                  ? 'border-primary bg-primary/5 hover:bg-primary/5'
-                  : ''
-              "
-              @click="pick('scoreboard', t.manifest.id)"
+              :value="t.manifest.id"
+              class="h-auto w-full flex-col items-stretch gap-2 rounded-lg p-2 whitespace-normal"
             >
               <ThemePreview :component="t.component" surface="scoreboard" />
               <div class="flex items-center justify-between gap-2 px-1 pt-1">
@@ -143,8 +163,8 @@ const pick = (surface: ThemeSurface, id: string) => {
                   class="size-5 shrink-0 text-primary"
                 />
               </div>
-            </Button>
-          </div>
+            </ToggleGroupItem>
+          </ToggleGroup>
         </TabsContent>
       </Tabs>
     </DialogContent>

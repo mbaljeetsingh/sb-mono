@@ -5,11 +5,15 @@
 // the frame.
 
 import { computed, toRef } from 'vue';
+import GameCells from '../game-cells.vue';
+import GamesWonPlate from '../games-won-plate.vue';
 import type { ThemeProps } from '../index';
 import PenaltyCards from '../penalty-cards.vue';
+import ServeMarker from '../serve-marker.vue';
 import SportIcon from '../sport-icon.vue';
 import {
   endReasonLabel,
+  showStanding,
   teamColor,
   useMetaLine,
   useStatusPill,
@@ -22,7 +26,7 @@ const {
   playersB,
   cards,
   currentGame,
-  priorGames,
+  gamesWon,
   isServingSide,
   isLastGameWinner,
   isMatchWinner,
@@ -35,9 +39,17 @@ const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const isLive = computed(() => props.meta?.isLive !== false);
 const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
+const withStanding = computed(() => showStanding(props.config));
 
 const playersOf = (side: 'a' | 'b') =>
   side === 'a' ? playersA.value : playersB.value;
+
+// Shared across both rows so the two live numerals sit in one column.
+const columns = computed(() =>
+  ['5px', 'minmax(0,1fr)', 'auto', withStanding.value ? 'auto' : null, '46px']
+    .filter(Boolean)
+    .join(' ')
+);
 </script>
 
 <template>
@@ -100,14 +112,13 @@ const playersOf = (side: 'a' | 'b') =>
       <div
         v-for="side in ['a', 'b'] as const"
         :key="side"
-        class="grid grid-cols-[5px_1fr_auto_auto] gap-3 items-center pr-4"
-        :style="
-          isServingSide(side)
-            ? {
-                background: `linear-gradient(90deg, color-mix(in srgb, ${teamColor(side)} 18%, transparent), transparent 80%)`,
-              }
-            : undefined
-        "
+        class="grid gap-x-3 items-center pr-4"
+        :style="{
+          gridTemplateColumns: columns,
+          background: isServingSide(side)
+            ? `linear-gradient(90deg, color-mix(in srgb, ${teamColor(side)} 18%, transparent), transparent 80%)`
+            : undefined,
+        }"
       >
         <div
           class="h-full self-stretch"
@@ -118,19 +129,24 @@ const playersOf = (side: 'a' | 'b') =>
             <span class="truncate text-[14px] tracking-tight">
               <template v-for="(p, idx) in playersOf(side)" :key="idx">
                 <span v-if="idx > 0" class="mx-1 text-white/35">/</span>
+                <!-- Weight, not hue: the rail already says which side. -->
                 <span
                   :class="
                     p.isServer
-                      ? 'font-bold'
+                      ? 'font-bold text-white'
                       : p.isPartner
                         ? 'text-white/55 font-medium'
                         : 'text-white font-semibold'
                   "
-                  :style="p.isServer ? { color: teamColor(side) } : undefined"
                   >{{ p.name }}</span
                 >
               </template>
             </span>
+            <ServeMarker
+              v-if="isServingSide(side)"
+              :color="teamColor(side)"
+              size="xs"
+            />
             <span
               v-if="isMatchWinner(side)"
               class="shrink-0 text-[8px] font-bold tracking-[0.16em] text-white px-1 py-0.5 rounded-sm"
@@ -146,25 +162,24 @@ const playersOf = (side: 'a' | 'b') =>
               }"
               >GAME WON</span
             >
-            <span
-              v-else-if="isServingSide(side)"
-              class="shrink-0 inline-flex items-center gap-1 text-[8px] font-bold tracking-[0.14em] text-white px-1 py-0.5 rounded-sm"
-              :style="{ background: teamColor(side) }"
-            >
-              <span class="size-1 rounded-full bg-white animate-pulse-soft" />
-              SERVE
-            </span>
             <PenaltyCards :cards="cards(side)" size="xs" class="shrink-0" />
           </div>
         </div>
+        <GameCells
+          :state="state"
+          :side="side"
+          :color="teamColor(side)"
+          size="xs"
+          :include-current="false"
+        />
+        <GamesWonPlate
+          v-if="withStanding"
+          :value="gamesWon[side]"
+          :color="teamColor(side)"
+          size="xs"
+        />
         <div
-          v-if="priorGames.length"
-          class="score text-sm text-white/45 tabular-nums tracking-wide flex items-center gap-1.5"
-        >
-          <span v-for="(g, i) in priorGames" :key="i">{{ g[side] }}</span>
-        </div>
-        <div
-          class="score text-[36px] leading-none text-white tabular-nums min-w-[44px] text-right"
+          class="score text-[36px] leading-none text-white tabular-nums text-right"
         >
           {{ currentGame[side] }}
         </div>

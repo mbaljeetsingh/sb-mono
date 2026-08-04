@@ -7,12 +7,16 @@
 
 import type { RacquetConfig, RacquetState } from '@sb/engine';
 import type { Component } from 'vue';
+import ArenaBoard from './arena-board/index.vue';
 import BroadcastClassic from './broadcast-classic/index.vue';
 import Filmable from './filmable/index.vue';
 import MinimalBug from './minimal-bug/index.vue';
 import MinimalTypographic from './minimal-typographic/index.vue';
+import ScoreBug from './score-bug/index.vue';
 import Scorecard from './scorecard/index.vue';
 import TopRibbon from './top-ribbon/index.vue';
+import TourCard from './tour-card/index.vue';
+import VerticalBoard from './vertical-board/index.vue';
 import VerticalStack from './vertical-stack/index.vue';
 
 export type ThemeSurface = 'overlay' | 'scoreboard';
@@ -36,6 +40,14 @@ export type ThemeProps = {
     category?: string | null;
     venue?: string | null;
     sponsorName?: string | null;
+    /**
+     * Short per-side codes for the plate small surfaces render instead of a
+     * name ("INA", "AXE"). Themes derive a code from the name when this is
+     * absent, so nothing depends on it being set — it exists so an operator can
+     * correct a bad guess, and as the seam richer side badges (flags, club
+     * crests, per E2.5 branding) hang off later.
+     */
+    codes?: { a?: string | null; b?: string | null } | null;
     // Suppress the LIVE pill. Used by the post-game render page where the
     // overlay is being burned into recorded video — "LIVE" would be a lie.
     // Defaults to live (undefined / true).
@@ -61,6 +73,66 @@ type ThemeEntry = {
 };
 
 export const themes: Record<string, ThemeEntry> = {
+  'tour-card': {
+    component: TourCard,
+    manifest: {
+      id: 'tour-card',
+      name: 'Tour Card',
+      description:
+        'World-tour lower third — boxed per-game cells, code plates, flat broadcast ink.',
+      author: 'Scoreboard core team',
+      license: 'MIT',
+      version: '1.0.0',
+      supports: ['overlay'],
+      supportedSports: ['badminton', 'tennis', 'pickleball', 'table-tennis'],
+      bundleSizeBytes: 0,
+    },
+  },
+  'score-bug': {
+    component: ScoreBug,
+    manifest: {
+      id: 'score-bug',
+      name: 'Score Bug',
+      description:
+        'Tiny stacked corner bug (236px) with team codes and game cells — the TV-feed footprint.',
+      author: 'Scoreboard core team',
+      license: 'MIT',
+      version: '1.0.0',
+      supports: ['overlay'],
+      supportedSports: ['badminton', 'tennis', 'pickleball', 'table-tennis'],
+      bundleSizeBytes: 0,
+    },
+  },
+  'arena-board': {
+    component: ArenaBoard,
+    manifest: {
+      id: 'arena-board',
+      name: 'Arena Board',
+      description:
+        'Official scoring-table board — row per team, labelled columns, framed digit windows.',
+      author: 'Scoreboard core team',
+      license: 'MIT',
+      version: '1.0.0',
+      supports: ['scoreboard'],
+      supportedSports: ['badminton', 'tennis', 'pickleball', 'table-tennis'],
+      bundleSizeBytes: 0,
+    },
+  },
+  'vertical-board': {
+    component: VerticalBoard,
+    manifest: {
+      id: 'vertical-board',
+      name: 'Vertical Board',
+      description:
+        'Full-bleed team panels for a tablet propped courtside. Portrait-first, works landscape.',
+      author: 'Scoreboard core team',
+      license: 'MIT',
+      version: '1.0.0',
+      supports: ['scoreboard'],
+      supportedSports: ['badminton', 'tennis', 'pickleball', 'table-tennis'],
+      bundleSizeBytes: 0,
+    },
+  },
   'broadcast-classic': {
     component: BroadcastClassic,
     manifest: {

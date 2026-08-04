@@ -87,6 +87,7 @@ export function useThemeState(
   const cards = (side: SideKey) => stateRef.value.cards?.[side] ?? EMPTY_CARDS;
 
   const games = computed(() => stateRef.value.games);
+  const gamesWon = computed(() => stateRef.value.gamesWon);
   const currentGame = computed(
     () => games.value[games.value.length - 1] ?? { a: 0, b: 0 }
   );
@@ -128,6 +129,7 @@ export function useThemeState(
     playersB,
     cards,
     games,
+    gamesWon,
     currentGame,
     priorGames,
     isServingSide,
@@ -137,6 +139,86 @@ export function useThemeState(
     isWinningSide: isMatchWinner,
   };
 }
+
+/**
+ * One boxed per-game cell, in game order. This is the core broadcast
+ * convention: professional graphics tabulate each game in its own fixed-width
+ * window rather than listing bare numbers, so the eye can count games at a
+ * glance and the current game can be highlighted without moving anything.
+ */
+export type GameCell = {
+  /** 1-based game number, for the G1 / G2 headers themes draw above cells. */
+  n: number;
+  a: number;
+  b: number;
+  /** Winner of a *completed* game. null while the game is still being played. */
+  winner: SideKey | null;
+  /** The game currently in play. At most one cell has this. */
+  isCurrent: boolean;
+};
+
+/**
+ * Derive the cell row from state. `state.games` keeps the in-progress game as
+ * its last entry (except between games / at match end), which is exactly the
+ * "current cell" every broadcast board highlights.
+ */
+export const gameCellsOf = (state: RacquetState): GameCell[] =>
+  state.games.map((g, i) => {
+    const isCurrent =
+      !state.matchOver && !state.betweenGames && i === state.games.length - 1;
+    const winner = isCurrent || g.a === g.b ? null : g.a > g.b ? 'a' : 'b';
+    return { n: i + 1, a: g.a, b: g.b, winner, isCurrent };
+  });
+
+/**
+ * ROADMAP E1.27 — the leading "games won" number only earns its space in BO5+.
+ * In a single game there is nothing to count, and in BO3 the two or three
+ * per-game cells already convey the standing; adding a third numeric column
+ * there is noise. Tennis broadcasts draw the same line in the same place.
+ */
+export const showStanding = (config: RacquetConfig) => config.gamesToWin >= 3;
+
+/**
+ * Short code plate for a side — the "INA" / "DEN" of a BWF graphic, the
+ * "MUN" / "LIV" of a football bug. Small surfaces (corner bugs, ribbon
+ * centres) have no room for full names, and broadcast graphics solve that with
+ * a code rather than by truncating mid-word.
+ *
+ * Derivation takes the FIRST word of the name. That looks arbitrary next to
+ * "use the surname", so here is why it isn't:
+ *
+ * There is no rule that gets every name right, because word order encodes
+ * family name inconsistently across the sport. Badminton's field is heavily
+ * CHN / KOR / JPN / TPE, where the family name comes first, and BWF's own
+ * graphics normalise to family-name-first ("AN Se Young", "AXELSEN Viktor").
+ * So the two candidate rules fail differently:
+ *
+ *   last word  → An Se Young = "YOU", Tai Tzu-ying = "TZU"   ← nonsense
+ *   first word → An Se Young = "AN",  Tai Tzu-ying = "TAI"   ← correct
+ *                Viktor Axelsen = "VIK"                       ← informal, but reads
+ *
+ * Taking the last word produces a code that looks broken for a large share of
+ * the actual player base; taking the first produces a merely informal one for
+ * the rest. A wrong-but-readable default beats a wrong-and-confusing one, and
+ * `meta.codes` is the escape hatch either way — it is also the seam the
+ * branding work (E2.5) hangs richer per-side badges off.
+ *
+ * Team names that are already proper nouns fall out correctly: "Indonesia" → IND.
+ */
+export const teamCodeOf = (
+  displayName: string,
+  override?: string | null
+): string => {
+  const explicit = override?.trim();
+  if (explicit) return explicit.slice(0, 4).toUpperCase();
+  // First entrant only — a doubles pair gets the lead player's code, same as a
+  // broadcast bug showing one code per side. Split on a bare slash so this holds
+  // whether the caller passed a joined pair or an already-resolved single name.
+  const lead = displayName.split('/')[0]?.trim() ?? '';
+  const first = lead.split(/\s+/).find(Boolean);
+  if (!first) return '—';
+  return first.slice(0, 3).toUpperCase();
+};
 
 /**
  * Status pill priority shared across themes that show a contextual banner.

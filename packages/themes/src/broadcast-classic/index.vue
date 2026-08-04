@@ -2,16 +2,21 @@
 // Broadcast Classic — default overlay. Modern dark-glass lower-third.
 // Brand-neutral by design; tournament-branded variants ship as paid packs.
 //
-// Surfaces: name (with active-server highlight in doubles), games-won pips,
-// prior-game scores, current game in big numerals, serve dot, penalty card
-// glyphs, and a context status pill (GP / MP / timeout / interval / suspension).
+// Surfaces: name (with active-server emphasis in doubles), boxed per-game
+// cells, games-won standing in BO5+, current game in big numerals, serve
+// marker, penalty card glyphs, and a context status pill (GP / MP / timeout /
+// interval / suspension).
 
 import { computed, toRef } from 'vue';
+import GameCells from '../game-cells.vue';
+import GamesWonPlate from '../games-won-plate.vue';
 import type { ThemeProps } from '../index';
 import PenaltyCards from '../penalty-cards.vue';
+import ServeMarker from '../serve-marker.vue';
 import SportIcon from '../sport-icon.vue';
 import {
   endReasonLabel,
+  showStanding,
   teamColor,
   useMetaLine,
   useStatusPill,
@@ -26,7 +31,7 @@ const {
   playersB,
   cards,
   currentGame,
-  priorGames,
+  gamesWon,
   isServingSide,
   isLastGameWinner,
   isMatchWinner,
@@ -38,9 +43,19 @@ const {
 const status = useStatusPill(toRef(props, 'state'));
 const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const isLive = computed(() => props.meta?.isLive !== false);
+const withStanding = computed(() => showStanding(props.config));
 
 const playersOf = (side: 'a' | 'b') =>
   side === 'a' ? playersA.value : playersB.value;
+
+// One template for both rows, so the score columns form true vertical columns.
+// Previously each row sized its own `auto` columns from its own content, which
+// let the two big numerals sit at different x positions.
+const columns = computed(() =>
+  ['4px', 'minmax(0,1fr)', 'auto', withStanding.value ? 'auto' : null, '56px']
+    .filter(Boolean)
+    .join(' ')
+);
 </script>
 
 <template>
@@ -80,14 +95,13 @@ const playersOf = (side: 'a' | 'b') =>
       <div
         v-for="side in ['a', 'b'] as const"
         :key="side"
-        class="grid grid-cols-[4px_1fr_auto_auto] gap-4 items-center pr-5 transition-colors duration-200"
-        :style="
-          isServingSide(side)
-            ? {
-                background: `linear-gradient(90deg, color-mix(in srgb, ${teamColor(side)} 14%, transparent), transparent 70%)`,
-              }
-            : undefined
-        "
+        class="grid gap-x-4 items-center pr-5 transition-colors duration-200"
+        :style="{
+          gridTemplateColumns: columns,
+          background: isServingSide(side)
+            ? `linear-gradient(90deg, color-mix(in srgb, ${teamColor(side)} 14%, transparent), transparent 70%)`
+            : undefined,
+        }"
       >
         <!-- Team color bar -->
         <div
@@ -105,27 +119,27 @@ const playersOf = (side: 'a' | 'b') =>
                 <span v-if="idx > 0" class="mx-1 text-white/40 font-normal"
                   >/</span
                 >
+                <!-- Server emphasis is weight, not hue: the team rail two
+                     columns left already carries side identity, and recoloring
+                     the name spent contrast on the one name most worth
+                     reading. -->
                 <span
                   :class="
                     p.isServer
-                      ? 'font-bold'
+                      ? 'font-bold text-white'
                       : p.isPartner
                         ? 'text-white/55 font-medium'
                         : 'text-white font-semibold'
                   "
-                  :style="p.isServer ? { color: teamColor(side) } : undefined"
                   >{{ p.name }}</span
                 >
               </template>
             </span>
-            <span
+            <ServeMarker
               v-if="isServingSide(side)"
-              class="shrink-0 inline-flex items-center gap-1 text-[9px] font-bold tracking-[0.14em] text-white px-1.5 py-0.5 rounded-sm"
-              :style="{ background: teamColor(side) }"
-            >
-              <span class="size-1 rounded-full bg-white animate-pulse-soft" />
-              SERVE
-            </span>
+              :color="teamColor(side)"
+              size="sm"
+            />
             <span
               v-else-if="isMatchWinner(side)"
               class="shrink-0 inline-flex items-center gap-1.5 text-[9px] font-bold tracking-[0.16em] text-white px-1.5 py-0.5 rounded-sm"
@@ -153,31 +167,28 @@ const playersOf = (side: 'a' | 'b') =>
           </div>
         </div>
 
-        <!-- Prior games (small column) -->
-        <div
-          class="flex items-center gap-2 score text-base text-neutral-500 tabular-nums"
-        >
-          <span v-for="(g, i) in priorGames" :key="i">{{ g[side] }}</span>
-        </div>
+        <!-- Completed games as boxed cells. The live game is excluded: it's in
+             big numerals two columns right, and printing it twice made the
+             panel read as two different scores. -->
+        <GameCells
+          :state="state"
+          :side="side"
+          :color="teamColor(side)"
+          size="xs"
+          :include-current="false"
+        />
 
-        <!-- Current game (big) + serve dot -->
-        <div class="flex items-center gap-2">
-          <span
-            v-if="isServingSide(side)"
-            class="size-2 rounded-full animate-pulse-soft"
-            :style="{ background: teamColor(side) }"
-          />
-          <span
-            v-else
-            class="size-2 rounded-full bg-transparent"
-            aria-hidden="true"
-          />
-          <span
-            class="score text-[34px] leading-none text-white min-w-[44px] text-right"
-          >
-            {{ currentGame[side] }}
-          </span>
-        </div>
+        <GamesWonPlate
+          v-if="withStanding"
+          :value="gamesWon[side]"
+          :color="teamColor(side)"
+          size="xs"
+        />
+
+        <!-- Current game -->
+        <span class="score text-[34px] leading-none text-white text-right">
+          {{ currentGame[side] }}
+        </span>
       </div>
     </div>
 

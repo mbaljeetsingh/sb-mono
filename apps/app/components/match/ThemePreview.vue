@@ -29,6 +29,16 @@ const SOURCE_W = 1920;
 const SOURCE_H = 1080;
 const scale = computed(() => (width.value > 0 ? width.value / SOURCE_W : 0.2));
 
+// Two distinct surnames, not "Team A" / "Team B".
+//
+// Themes that render a short code plate derive it from the name, and both
+// placeholders began with the same word — so every preview showed "TEA" against
+// "TEA" and the two sides were indistinguishable in exactly the picker whose job
+// is to stop people guessing. Real surnames also exercise the honest cases the
+// placeholders hid: a long name that has to truncate, and a code that actually
+// differs per side.
+const SAMPLE_NAMES = { a: 'Axelsen', b: 'Vitidsarn' } as const;
+
 // Default sample state — partway through a competitive match. Keeps things
 // honest: scores, games-won pips, server indicator, partner positions all
 // reflect what an operator actually sees on day-of.
@@ -52,7 +62,7 @@ const defaultState: RacquetState = {
   // 14–11 isn't level, so the sample is not at deuce. The preview deliberately
   // shows the INTERVAL pill (atInterval above) as its status-pill example.
   isDeuce: false,
-  names: { a: 'Team A', b: 'Team B' },
+  names: { a: SAMPLE_NAMES.a, b: SAMPLE_NAMES.b },
   sidesSwapped: false,
   endReason: null,
   timeout: null,
@@ -66,7 +76,7 @@ const defaultState: RacquetState = {
 
 const previewState = computed(() => props.state ?? defaultState);
 const previewConfig = computed(() => props.config ?? badminton21);
-const teamNames = { a: 'Team A', b: 'Team B' };
+const teamNames = { a: SAMPLE_NAMES.a, b: SAMPLE_NAMES.b };
 const meta = {
   courtLabel: 'COURT 3',
   round: 'QF',
