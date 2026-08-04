@@ -2,9 +2,13 @@
 import type { GameScore, RacquetState, SideId } from '@sb/engine';
 import { Trophy } from 'lucide-vue-next';
 import { computed } from 'vue';
+import type { MatchStatus } from '~/lib/matchSummaries';
 
 const props = defineProps<{
   matchOver: boolean;
+  /** ready | live | final, from lib/matchSummaries.matchStatusFrom — the same
+   *  rule the /matches rows and the home card badge against. */
+  status: MatchStatus;
   displayName: string;
   statusLabel: string;
   teamNames: { a: string; b: string };
@@ -104,26 +108,42 @@ const completedGames = computed<GameScore[]>(() => {
     class="rounded-lg p-4 border bg-surface text-foreground transition-colors"
     :class="matchOver ? 'border-success/40' : 'border-border'"
   >
-    <div class="flex justify-between items-center mb-3">
-      <span class="inline-flex gap-1.5 items-center">
+    <!-- Badge + format + where-are-we, one line. `min-w-0` + truncate on the
+         format rather than letting the row wrap: at 390px "Badminton
+         (21-point, BWF) · Single" and the status label together broke this
+         header across three ragged lines above the scoreline. -->
+    <div class="flex justify-between items-center gap-2 mb-3">
+      <span class="inline-flex min-w-0 gap-1.5 items-center">
         <span
           v-if="matchOver"
-          class="px-2 py-0.5 rounded text-[10px] font-bold tracking-[0.06em] uppercase bg-success-soft text-success"
+          class="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold tracking-[0.06em] uppercase bg-success-soft text-success"
         >
           Final
         </span>
         <!-- LIVE is a status, not a competitor: it used to be painted with
-             team-a, which read as "team A is live" next to team B's score. -->
+             team-a, which read as "team A is live" next to team B's score.
+             It is also gated on `status`, not on `!matchOver` — a match nobody
+             has scored a rally in was getting the pulsing red dot right next
+             to its own "Ready · 0 events". -->
         <span
-          v-else
-          class="inline-flex items-center gap-1 text-[10px] font-bold tracking-[0.1em] uppercase text-live"
+          v-else-if="status === 'live'"
+          class="inline-flex shrink-0 items-center gap-1 text-[10px] font-bold tracking-[0.1em] uppercase text-live"
         >
           <span class="size-1.5 rounded-full bg-live animate-pulse-soft" />
           LIVE
         </span>
-        <span class="text-sm text-fg-muted">{{ displayName }}</span>
+        <span
+          v-else
+          class="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold tracking-[0.06em] uppercase bg-surface-2 text-fg-muted"
+        >
+          Not started
+        </span>
+        <span class="truncate text-sm text-fg-muted">{{ displayName }}</span>
       </span>
-      <span v-if="!matchOver" class="text-sm text-fg-subtle">
+      <span
+        v-if="!matchOver && statusLabel"
+        class="shrink-0 whitespace-nowrap text-sm text-fg-subtle"
+      >
         {{ statusLabel }}
       </span>
     </div>

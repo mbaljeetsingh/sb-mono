@@ -112,9 +112,8 @@ const onDeleted = () => emit('deleted', props.id);
         </span>
         <span class="min-w-0 flex-1">
           <span class="flex items-center gap-2">
-            <!-- Wraps on mobile rather than truncating. On a 375px screen the
-                 status chip and scoreline leave so little room that a single
-                 truncated line rendered "Axelsen …" — the opponent gone
+            <!-- Wraps on mobile rather than truncating: a single truncated line
+                 rendered "Axelsen …" on a 375px screen — the opponent gone
                  entirely, which also threw away the winner emphasis. No
                  line-clamp either: capping at two lines still cut the opponent
                  off in doubles-vs-doubles, and a taller row costs less than a
@@ -143,50 +142,59 @@ const onDeleted = () => emit('deleted', props.id);
               {{ formatBadge }}
             </span>
           </span>
+          <!-- Second line: identity metadata on the left, status + scoreline
+               pushed to the right edge.
+               The status block used to be a third column beside the names. At
+               390px that left the names ~180px — "Chou Tien-chen vs Anders
+               Antonsen" wrapped to three lines while the sport label truncated
+               to "Badmin…" — and the scoreline lined up with nothing. Down here
+               it shares a row that had spare width, and the names get the full
+               row back.
+               Widths: the date is what you scan a history list by, so it holds
+               its width; the sport / event / court labels give theirs up. -->
           <span
-            class="mt-0.5 flex items-center gap-2 truncate text-xs text-fg-muted"
+            class="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-fg-muted"
           >
-            <span>{{ sportLabel }}</span>
-            <span v-if="eventName">· {{ eventName }}</span>
-            <span v-if="courtLabel">· {{ courtLabel }}</span>
-            <span>· {{ formattedDate }}</span>
+            <span class="truncate">{{ sportLabel }}</span>
+            <span v-if="eventName" class="truncate">· {{ eventName }}</span>
+            <span v-if="courtLabel" class="truncate">· {{ courtLabel }}</span>
+            <span class="shrink-0 whitespace-nowrap">
+              · {{ formattedDate }}
+            </span>
+            <span
+              v-if="summary && summary.status !== 'ready'"
+              class="ml-auto flex shrink-0 items-center gap-2"
+            >
+              <span
+                v-if="summary.status === 'live'"
+                class="flex items-center gap-1.5 rounded-full bg-live-soft px-2 py-0.5 text-[10px] font-bold tracking-wider text-live"
+              >
+                <span class="relative flex h-1.5 w-1.5">
+                  <span
+                    class="absolute inline-flex h-full w-full animate-ping rounded-full bg-live opacity-75"
+                  />
+                  <span
+                    class="relative inline-flex h-1.5 w-1.5 rounded-full bg-live"
+                  />
+                </span>
+                LIVE
+              </span>
+              <span
+                v-else
+                class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold tracking-wider text-fg-muted"
+              >
+                FINAL
+              </span>
+              <span
+                v-if="summary.scoreline"
+                class="font-mono text-sm font-semibold tabular-nums text-foreground"
+              >
+                {{ summary.scoreline }}
+              </span>
+            </span>
           </span>
         </span>
       </NuxtLink>
-
-      <!-- Status + scoreline — answers "which match is live and what's the
-           score?" without opening the match. -->
-      <div
-        v-if="summary && summary.status !== 'ready'"
-        class="flex shrink-0 items-center gap-2"
-      >
-        <span
-          v-if="summary.status === 'live'"
-          class="flex items-center gap-1.5 rounded-full bg-live-soft px-2 py-0.5 text-[10px] font-bold tracking-wider text-live"
-        >
-          <span class="relative flex h-1.5 w-1.5">
-            <span
-              class="absolute inline-flex h-full w-full animate-ping rounded-full bg-live opacity-75"
-            />
-            <span
-              class="relative inline-flex h-1.5 w-1.5 rounded-full bg-live"
-            />
-          </span>
-          LIVE
-        </span>
-        <span
-          v-else
-          class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold tracking-wider text-fg-muted"
-        >
-          FINAL
-        </span>
-        <span
-          v-if="summary.scoreline"
-          class="font-mono text-sm font-semibold tabular-nums"
-        >
-          {{ summary.scoreline }}
-        </span>
-      </div>
 
       <DropdownMenu>
         <DropdownMenuTrigger as-child>
