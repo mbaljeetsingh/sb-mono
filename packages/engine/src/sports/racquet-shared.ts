@@ -78,6 +78,14 @@ export type RacquetState = BaseState & {
    */
   gamePoint: { a: boolean; b: boolean };
   matchPoint: { a: boolean; b: boolean };
+  /**
+   * Scores level in the win-by-2 extension (20–20 for BWF-21, 14–14 for 15pt,
+   * 10–10 for TT) — the "deuce" every club player calls it. Mutually exclusive
+   * with game/match point BY CONSTRUCTION: at the cap tie (29–29) the next
+   * point wins, so gamePoint carries the display and this stays false. UI can
+   * therefore show exactly one of DEUCE / GAME POINT / MATCH POINT.
+   */
+  isDeuce: boolean;
   names: { a: string; b: string };
   sidesSwapped: boolean;
   /** How the match ended: 'normal' if scored to completion, or one of the
@@ -151,6 +159,7 @@ export const initialRacquetState = (): RacquetState => ({
   isMatchPoint: false,
   gamePoint: { a: false, b: false },
   matchPoint: { a: false, b: false },
+  isDeuce: false,
   names: { a: 'Team A', b: 'Team B' },
   sidesSwapped: false,
   endReason: null,
@@ -221,6 +230,26 @@ export const wouldWinGameWithPoint = (
   const next =
     side === 'A' ? { a: game.a + 1, b: game.b } : { a: game.a, b: game.b + 1 };
   return isGameWon(next, cfg) === side;
+};
+
+/**
+ * "Deuce": scores level inside the win-by-2 extension — 20–20 for BWF-21,
+ * 14–14 for the 15-point variant, 10–10 for table tennis.
+ *
+ * Callers must treat this as strictly lower priority than game/match point, and
+ * it is built so the two can never both apply: if the next point would win the
+ * game (29–29 under the BWF cap, or any level score under a `winBy: 0` preset
+ * like pickleball rally) `wouldWinGameWithPoint` is true for both sides, so this
+ * returns false and the game-point display wins.
+ */
+export const isDeuceScore = (game: GameScore, cfg: RacquetConfig): boolean => {
+  if (game.a !== game.b) return false;
+  if (game.a < cfg.pointsPerGame - 1) return false;
+  if (isGameWon(game, cfg)) return false;
+  return (
+    !wouldWinGameWithPoint(game, 'A', cfg) &&
+    !wouldWinGameWithPoint(game, 'B', cfg)
+  );
 };
 
 /**

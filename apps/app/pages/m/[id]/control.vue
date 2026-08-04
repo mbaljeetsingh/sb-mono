@@ -914,6 +914,17 @@ const swapLabelB = computed(() =>
           <!-- Counts down the BWF 60s interval rather than showing a static
                badge — umpires run to that clock. Falls back to the plain badge
                once it expires (or if the event has no timestamp). -->
+          <!-- Deuce belongs to the scoreline, not to a team, so it sits here
+               rather than as a TeamRow chip (those are per-side: GAME PT /
+               MATCH PT). The engine never sets isDeuce alongside game point —
+               at 29–29 the next point wins, so that stays a per-side chip. -->
+          <span
+            v-if="state.isDeuce"
+            class="text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-sm text-warning bg-warning-soft"
+            :title="`Level at ${score('A')} — two clear points needed`"
+          >
+            Deuce
+          </span>
           <span
             v-if="state.atInterval"
             class="text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-sm tabular-nums"

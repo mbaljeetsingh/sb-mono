@@ -23,7 +23,18 @@ export type SnapshotPlanEntry = { videoTimeSec: number; replayTimeMs: number };
  * point to hang a frame on).
  *
  * Events belonging to a game with no anchor are skipped — at least one game
- * must be synced before anything can be rendered.
+ * must be synced before anything can be rendered. (The render page warns when
+ * that leaves games out; the overlay freezes across their footage.)
+ *
+ * KNOWN CONSTRAINT — games are segmented by `game.end` events only, here and
+ * in render.vue's `firstPointPerGame`. A `score.correct` that CHANGES the
+ * number of games would desynchronize both: its fabricated games emit no
+ * game.end, so their events stay pinned to the previous game's anchor. This is
+ * unreachable from the app today — ScoreCorrectSheet edits existing games and
+ * can't add or remove one (and "reset current game" keeps the count) — so it
+ * can only arise from hand-written events. If the sheet ever grows an "add
+ * game" affordance, segmentation must switch from counting game.end to
+ * deriving each event's game index from an engine replay.
  */
 export const buildSnapshotPlan = (
   events: readonly PlanEvent[],

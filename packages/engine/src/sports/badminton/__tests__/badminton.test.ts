@@ -376,6 +376,123 @@ describe('badminton 21-point — game/match points', () => {
   });
 });
 
+describe('badminton — deuce', () => {
+  /**
+   * Level score at `n`–`n`, reached by strict alternation. Front-loading one
+   * side (20 × A then 20 × B) works up to 20–20 but not beyond: 29 × A ends the
+   * game at 21–0 long before B starts scoring. Alternating never opens a
+   * 2-point gap, so it walks cleanly through the extension to the 29–29 cap.
+   */
+  const levelAt = (n: number): RacquetEvent[] =>
+    points(
+      Array.from({ length: n * 2 }, (_, i): SideId => (i % 2 === 0 ? 'A' : 'B'))
+    );
+
+  it('flags 20-20 in a 21-point game', () => {
+    const s = reduce([start('A'), ...levelAt(20)], badminton21);
+    expect(s.games[0]).toEqual({ a: 20, b: 20 });
+    expect(s.isDeuce).toBe(true);
+    // Deuce and game point are mutually exclusive — at 20–20 neither side wins
+    // with the next point.
+    expect(s.isGamePoint).toBe(false);
+  });
+
+  it('is false before the extension (19-19) and after a break (21-20)', () => {
+    const at19 = reduce([start('A'), ...levelAt(19)], badminton21);
+    expect(at19.isDeuce).toBe(false);
+
+    const at2120 = reduce(
+      [start('A'), ...levelAt(20), point('A')],
+      badminton21
+    );
+    expect(at2120.games[0]).toEqual({ a: 21, b: 20 });
+    expect(at2120.isDeuce).toBe(false);
+    expect(at2120.gamePoint).toEqual({ a: true, b: false });
+  });
+
+  it('re-flags on every subsequent level score (21-21, 22-22)', () => {
+    const s = reduce(
+      [start('A'), ...levelAt(20), point('A'), point('B')],
+      badminton21
+    );
+    expect(s.games[0]).toEqual({ a: 21, b: 21 });
+    expect(s.isDeuce).toBe(true);
+  });
+
+  it('yields to GAME POINT at the 29-29 cap, where the next point wins', () => {
+    const s = reduce([start('A'), ...levelAt(29)], badminton21);
+    expect(s.games[0]).toEqual({ a: 29, b: 29 });
+    expect(s.isDeuce).toBe(false);
+    expect(s.gamePoint).toEqual({ a: true, b: true });
+  });
+
+  it('flags 14-14 in the 15-point variant', () => {
+    const s = reduce([start('A'), ...levelAt(14)], badminton15);
+    expect(s.isDeuce).toBe(true);
+    expect(s.isGamePoint).toBe(false);
+  });
+
+  it('is deuce AND match point-adjacent: deciding game defers to match point', () => {
+    // A leads 1–0 in a BO3; game 2 reaches 20–20. Neither side wins next point,
+    // so deuce shows rather than MATCH POINT.
+    const s = reduce(
+      [
+        start('A'),
+        ev('score.correct', {
+          games: [
+            { a: 21, b: 10 },
+            { a: 20, b: 20 },
+          ],
+          gamesWon: { a: 1, b: 0 },
+        }),
+      ],
+      badminton21
+    );
+    expect(s.isDeuce).toBe(true);
+    expect(s.isMatchPoint).toBe(false);
+    // One more point to A → 21–20, now A is at match point and deuce clears.
+    const after = reduce(
+      [
+        start('A'),
+        ev('score.correct', {
+          games: [
+            { a: 21, b: 10 },
+            { a: 20, b: 20 },
+          ],
+          gamesWon: { a: 1, b: 0 },
+        }),
+        point('A'),
+      ],
+      badminton21
+    );
+    expect(after.isDeuce).toBe(false);
+    expect(after.matchPoint).toEqual({ a: true, b: false });
+  });
+
+  it('clears when a new game starts and when the match ends', () => {
+    const viaGameEnd = reduce(
+      [start('A'), ...levelAt(20), point('A'), point('A'), ev('game.end')],
+      badminton21
+    );
+    expect(viaGameEnd.isDeuce).toBe(false);
+
+    const viaWalkover = reduce(
+      [start('A'), ...levelAt(20), ev('walkover', { winner: 'A' })],
+      badminton21
+    );
+    expect(viaWalkover.isDeuce).toBe(false);
+  });
+
+  it('survives an undo round-trip back into deuce', () => {
+    const seq = [start('A'), ...levelAt(20), point('A')];
+    const before = reduce(seq, badminton21);
+    expect(before.isDeuce).toBe(false);
+    const after = reduce(applyUndo(seq), badminton21);
+    expect(after.games[0]).toEqual({ a: 20, b: 20 });
+    expect(after.isDeuce).toBe(true);
+  });
+});
+
 describe('badminton 21-point — match win (best of 3)', () => {
   it('ends match when a side wins 2 games', () => {
     const winGameForA: SideId[] = [];
@@ -533,6 +650,83 @@ describe('badminton — server court rules (singles + doubles)', () => {
     s = reduce([start('A'), point('B'), point('A'), point('B')], badminton21);
     expect(s.servingSide).toBe('B');
     expect(s.serverCourt).toBe('right');
+  });
+});
+
+describe('badminton — new game starts service from the right court', () => {
+  // Regression: serverCourt was computed from the FINAL rally of the finished
+  // game and never reset when the next game began. Any game won on an odd
+  // score (21-19, 15-9, ...) left the new game's server displayed in the left
+  // court at 0-0 — BWF Law 9.1.1 says service at an even score (0 included)
+  // is from the right. The bug was invisible when the winning score happened
+  // to be even (22-20), which is why it slipped through.
+
+  /** A wins a 15-point game 15-9: 15 A-points, 9 B-points interleaved. */
+  const gameTo15Odd = (): RacquetEvent[] => [
+    ...points(Array<SideId>(9).fill('A')),
+    ...points(Array<SideId>(9).fill('B')),
+    ...points(Array<SideId>(6).fill('A')),
+  ];
+
+  it('manual game.end (Start Game 2 button) resets to the right court — 15pt, 15-9', () => {
+    const s = reduce([start('A'), ...gameTo15Odd(), ev('game.end')], {
+      ...badminton15,
+      gamesToWin: 2,
+    });
+    expect(s.games).toHaveLength(2);
+    expect(s.games[1]).toEqual({ a: 0, b: 0 });
+    // BWF: the winner of the previous game serves first in the next.
+    expect(s.servingSide).toBe('A');
+    expect(s.serverCourt).toBe('right');
+  });
+
+  it('auto-start via next point also lands parity-correct — 15pt', () => {
+    // Without the manual game.end, the first point of game 2 auto-creates it.
+    // A scores → 1-0, A's score odd → left. (This path already self-corrected;
+    // pinned so a refactor can't regress it.)
+    const s = reduce([start('A'), ...gameTo15Odd(), point('A')], {
+      ...badminton15,
+      gamesToWin: 2,
+    });
+    expect(s.games).toHaveLength(2);
+    expect(s.games[1]).toEqual({ a: 1, b: 0 });
+    expect(s.serverCourt).toBe('left');
+  });
+
+  it('between-games state already shows the upcoming game from the right', () => {
+    // The scoreboard keeps rendering during the between-games modal; the
+    // meaningful server display is the NEXT game's opening state.
+    const s = reduce([start('A'), ...gameTo15Odd()], {
+      ...badminton15,
+      gamesToWin: 2,
+    });
+    expect(s.betweenGames).toBe(true);
+    expect(s.serverCourt).toBe('right');
+  });
+
+  it('21pt game won 21-19 (odd) resets too, and doubles slot-1 serves from right', () => {
+    // 21-19: 19 A, 19 B, 2 A.
+    const g1: RacquetEvent[] = [
+      ...points(Array<SideId>(19).fill('A')),
+      ...points(Array<SideId>(19).fill('B')),
+      ...points(Array<SideId>(2).fill('A')),
+    ];
+    const s = reduce([start('A'), ...g1, ev('game.end')], badminton21);
+    expect(s.serverCourt).toBe('right');
+    // Doubles: fresh game puts slot 1 of each team in their right court, so
+    // with serverCourt right, A's slot-1 player is the first server.
+    expect(s.partnerOnRight).toEqual({ a: 1, b: 1 });
+  });
+
+  it('match over keeps the final rally court (audience surfaces freeze the end state)', () => {
+    // A wins two straight 15-pt games; after match point there is no next game
+    // to re-anchor to, so the closing state stays as played.
+    const s = reduce(
+      [start('A'), ...gameTo15Odd(), ev('game.end'), ...gameTo15Odd()],
+      { ...badminton15, gamesToWin: 2 }
+    );
+    expect(s.matchOver).toBe(true);
+    expect(s.serverCourt).toBe('left'); // final score 15, odd — as played
   });
 });
 

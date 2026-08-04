@@ -49,6 +49,9 @@ const defaultState: RacquetState = {
   isMatchPoint: false,
   gamePoint: { a: false, b: false },
   matchPoint: { a: false, b: false },
+  // 14–11 isn't level, so the sample is not at deuce. The preview deliberately
+  // shows the INTERVAL pill (atInterval above) as its status-pill example.
+  isDeuce: false,
   names: { a: 'Team A', b: 'Team B' },
   sidesSwapped: false,
   endReason: null,

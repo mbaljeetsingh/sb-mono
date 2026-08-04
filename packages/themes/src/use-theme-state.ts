@@ -202,6 +202,11 @@ export function useStatusPill(stateRef: Ref<RacquetState>) {
         tone: 'accent',
         side: pointSide(s.gamePoint),
       };
+    // Below game point by construction — the engine never sets both (at the
+    // 29–29 cap the next point wins, so that reads GAME POINT). Neutral side:
+    // deuce belongs to the scoreline, not to one team. Reuses the existing
+    // `accent` tone so every theme picks it up without a new class branch.
+    if (s.isDeuce) return { label: 'DEUCE', tone: 'accent', side: null };
     if (s.atInterval) return { label: 'INTERVAL', tone: 'muted', side: null };
     return null;
   });
