@@ -37,6 +37,17 @@ type RecentMatch = {
 const recent = ref<RecentMatch | null>(null);
 const recentSummary = ref<MatchSummary | null>(null);
 
+const recentCardLabel = computed(() => {
+  switch (recentSummary.value?.status) {
+    case 'final':
+      return 'Last match';
+    case 'live':
+      return 'Continue scoring';
+    default:
+      return 'Ready to score';
+  }
+});
+
 const recentLabel = computed(() => {
   const a = recent.value?.team_name_a?.trim() || 'Team A';
   const b = recent.value?.team_name_b?.trim() || 'Team B';
@@ -101,14 +112,14 @@ onMounted(async () => {
       class="mt-8 flex w-full max-w-sm items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left transition hover:border-border-strong"
     >
       <div class="min-w-0">
+        <!-- Three cases, not two. `ready` used to fall through to "Continue
+             scoring", which is what a match you created but never scored a
+             rally in showed — inviting you to continue something that hadn't
+             started. -->
         <div
           class="text-[11px] font-bold uppercase tracking-wider text-fg-subtle"
         >
-          {{
-            recentSummary?.status === 'final'
-              ? 'Last match'
-              : 'Continue scoring'
-          }}
+          {{ recentCardLabel }}
         </div>
         <div class="mt-0.5 flex items-center gap-2">
           <span class="truncate text-sm font-medium">{{ recentLabel }}</span>

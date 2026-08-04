@@ -4,6 +4,7 @@ import {
   defaultPresetBySport,
   sportPresets,
 } from '@sb/engine';
+import { markCreated } from '@sb/layer-app-base/lib/eventStore';
 import { Button } from '@sb/layer-ui/components/ui/button';
 import { Input } from '@sb/layer-ui/components/ui/input';
 import { Label } from '@sb/layer-ui/components/ui/label';
@@ -335,6 +336,20 @@ const createMatch = async () => {
     toast.error("Couldn't create match. Check your connection and try again.");
     return;
   }
+  // Claim the match for this device *before* navigating. `/matches` and the
+  // home "Continue scoring" card both list `sb:scored:*`, which until now was
+  // only written by the first score tap — so a match created and abandoned
+  // before the first rally was invisible everywhere in the UI. Awaited so a
+  // fast navigation can't cancel the IDB write.
+  //
+  // Caught, never thrown: the Supabase row above is the source of truth and
+  // this key is local bookkeeping. If IDB is unavailable (Safari private mode,
+  // some in-app webviews, quota) an unhandled rejection here would skip
+  // navigateTo and leave the operator stuck on a "Creating…" button for a match
+  // that was in fact created.
+  await markCreated(matchId.value).catch((err) => {
+    console.warn('[/new] local match registration failed', err);
+  });
   navigateTo(`/m/${matchId.value}`);
 };
 </script>
@@ -344,7 +359,11 @@ const createMatch = async () => {
        which stretched a player-name field across 1150px on a laptop; a form
        this short reads as one column at any size. -->
   <div class="mx-auto flex w-full max-w-xl flex-col font-sans">
-    <h1 class="px-4 pt-6 pb-3 text-xl font-semibold">New match</h1>
+    <!-- text-2xl/tracking-tight is the shared page-title scale (/matches,
+         /profile) — this page was the odd one out at text-xl. -->
+    <h1 class="px-4 pt-6 pb-3 text-2xl font-semibold tracking-tight">
+      New match
+    </h1>
 
     <main class="flex-1 px-4 pb-48 pt-2 space-y-6 md:pb-6">
       <!-- Format sits above the names, collapsed behind a one-line summary.
@@ -517,13 +536,19 @@ const createMatch = async () => {
           v-model="teamA.p1"
           type="text"
           :placeholder="isDoubles ? 'Player 1' : 'Name'"
+          :aria-label="isDoubles ? 'Team A player 1' : undefined"
           class="h-11"
         />
+        <!-- The section <Label> points at p1, so in doubles the partner field
+             would otherwise reach a screen reader as an unlabelled textbox
+             ("edit text" with only the visual placeholder to go on). -->
         <Input
           v-if="isDoubles"
+          id="team-a-p2"
           v-model="teamA.p2"
           type="text"
           placeholder="Player 2"
+          aria-label="Team A player 2"
           class="h-11 mt-2"
         />
       </section>
@@ -540,13 +565,16 @@ const createMatch = async () => {
           v-model="teamB.p1"
           type="text"
           :placeholder="isDoubles ? 'Player 1' : 'Name'"
+          :aria-label="isDoubles ? 'Team B player 1' : undefined"
           class="h-11"
         />
         <Input
           v-if="isDoubles"
+          id="team-b-p2"
           v-model="teamB.p2"
           type="text"
           placeholder="Player 2"
+          aria-label="Team B player 2"
           class="h-11 mt-2"
         />
       </section>
@@ -618,9 +646,15 @@ const createMatch = async () => {
     <footer
       class="fixed inset-x-0 bottom-0 px-4 pt-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] bg-background border-t border-border md:static md:border-t-0 md:px-4 md:pt-2 md:pb-10"
     >
+      <!-- Secondary while incomplete. `disabled` alone is opacity-only, so the
+           blocked CTA still rendered as a full brand-green fill — the loudest
+           thing on the page, and it reads as tappable right up until you tap
+           it. The variant swap makes "not yet" visible at a glance, and the
+           label already says what's missing. -->
       <Button
         type="button"
         size="lg"
+        :variant="canCreate ? 'default' : 'secondary'"
         class="w-full h-12 text-base font-semibold"
         :disabled="!canCreate || isCreating"
         @click="createMatch"

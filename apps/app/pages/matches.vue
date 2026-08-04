@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button } from '@sb/layer-ui/components/ui/button';
 import { useInfiniteScroll } from '@vueuse/core';
-import { Plus } from 'lucide-vue-next';
+import { Plus, Trophy } from 'lucide-vue-next';
 import { computed, onUnmounted, ref, watch } from 'vue';
 import MatchListItem from '~/components/match/MatchListItem.vue';
 import { collectLocalMatchIds } from '~/lib/localMatches';
@@ -193,7 +193,7 @@ const emptyLabel = computed(() =>
        — the bar behaved differently on this page than on every other one. -->
   <div class="mx-auto w-full max-w-3xl px-6 py-10">
     <header class="mb-6 flex items-center justify-between gap-4">
-      <h1 class="text-3xl font-semibold tracking-tight">Matches</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">Matches</h1>
       <Button as-child size="sm" class="font-semibold">
         <NuxtLink to="/new">
           <Plus class="size-4" />
@@ -202,8 +202,11 @@ const emptyLabel = computed(() =>
       </Button>
     </header>
 
+    <!-- Only meaningful once there's something to sync. Stacked above the
+         empty state it gave a first-time visitor two grey boxes and no call to
+         action; the empty state below now carries the sign-in line instead. -->
     <div
-      v-if="!isAuthed"
+      v-if="!isAuthed && matches.length > 0"
       class="mb-4 rounded-md border border-dashed border-border-strong bg-surface px-3 py-2 text-xs text-fg-muted"
     >
       <p>
@@ -241,12 +244,35 @@ const emptyLabel = computed(() =>
       />
     </ul>
 
+    <!-- The empty state is the page for a first-time visitor, so it gets the
+         real CTA rather than an underlined link sitting under the header
+         button. Anonymous visitors get the sync pitch here too — it only makes
+         sense next to "nothing here yet". -->
     <div
       v-if="!loading && matches.length === 0 && !error"
-      class="rounded-md border border-dashed border-border-strong bg-surface px-4 py-10 text-center text-sm text-fg-muted"
+      class="flex flex-col items-center gap-4 rounded-lg border border-dashed border-border-strong bg-surface px-6 py-12 text-center"
     >
-      {{ emptyLabel }}
-      <NuxtLink to="/new" class="underline">Start your first match →</NuxtLink>
+      <span
+        class="flex size-11 items-center justify-center rounded-full bg-surface-2 text-fg-muted"
+      >
+        <Trophy class="size-5" />
+      </span>
+      <div>
+        <p class="text-sm font-medium">{{ emptyLabel }}</p>
+        <p class="mt-1 text-xs text-fg-muted">
+          Create a match and it shows up here — no sign-up needed.
+        </p>
+      </div>
+      <Button as-child class="font-semibold">
+        <NuxtLink to="/new">
+          <Plus class="size-4" />
+          Start your first match
+        </NuxtLink>
+      </Button>
+      <p v-if="!isAuthed" class="text-xs text-fg-subtle">
+        <NuxtLink to="/auth/signin" class="underline">Sign in</NuxtLink>
+        to keep matches across devices — anonymous matches expire after 30 days.
+      </p>
     </div>
 
     <div v-if="loading" class="py-4 text-center text-xs text-fg-subtle">

@@ -61,6 +61,17 @@ export const markScored = async (matchId: string): Promise<void> => {
   await set(scoredKey(matchId), Date.now());
 };
 
+// Same local-ownership key, claimed at creation time rather than on the first
+// rally. Creating a match on this device is what makes it yours — without this
+// a match created and then backed out of before the first tap had no
+// `sb:scored:` key at all, so `/matches` and the home "Continue scoring" card
+// (both of which read `listScoredMatchIds`) couldn't see it and the only route
+// back was browser history. Separate name because the two call sites mean
+// different things even though the fact they record is the same one.
+export const markCreated = async (matchId: string): Promise<void> => {
+  await set(scoredKey(matchId), Date.now());
+};
+
 // Enumerate match IDs that have an event store on this device — includes
 // matches received via realtime / broadcast only. Kept for debug + migration.
 export const listLocalMatchIds = async (): Promise<string[]> => {

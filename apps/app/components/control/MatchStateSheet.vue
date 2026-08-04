@@ -3,6 +3,10 @@ import type { SideId } from '@sb/engine';
 import { Button } from '@sb/layer-ui/components/ui/button';
 import { BriefcaseMedical, Flag, Pause, X, XCircle } from 'lucide-vue-next';
 import { ref } from 'vue';
+// /control is `layout: false` and the theme toggle was pulled out of its header
+// (a live target beside the score halves mid-rally), so this sheet is the only
+// route to it on the page.
+import ThemeToggle from '~/components/common/ThemeToggle.vue';
 
 const props = defineProps<{
   teamNames: { a: string; b: string };
@@ -83,14 +87,17 @@ const onResetGameTap = () => {
             All recorded as events · undoable
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Close"
-          @click="emit('close')"
-        >
-          <X class="size-5" />
-        </Button>
+        <div class="flex items-center gap-1">
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Close"
+            @click="emit('close')"
+          >
+            <X class="size-5" />
+          </Button>
+        </div>
       </div>
     </div>
 

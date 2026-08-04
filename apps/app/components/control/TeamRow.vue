@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Cell } from '@sb/layer-app-base/composables/useCourtCells';
 import PenaltyCards from '@sb/themes/penalty-cards';
+import { useElementSize } from '@vueuse/core';
 import { computed, ref, watch } from 'vue';
 import type { SportId } from '~/lib/sports';
 
@@ -192,6 +193,50 @@ const zonesBandStyle = computed(() => ({
   [netEdge.value]: hasServiceLine.value ? SERVICE_INSET : '45%',
 }));
 
+// Score size, derived from the score band's own box rather than the viewport.
+//
+// It used to be `clamp(40px, 8.5vh, 80px)`, which broke the one layout the size
+// matters most in: switch a landscape phone to side-by-side (the umpire view)
+// and 8.5vh of a ~390px-tall viewport is 33px, so it pinned to the 40px floor
+// while each half was ~420px wide with room for double that. `vh` also can't
+// see the card's width cap, so widening it for side-by-side bought the score
+// nothing.
+//
+// Two real constraints, whichever bites first:
+//   height — one line at line-height 1, so keep it under ~half the band;
+//   width  — a two-digit score (JetBrains Mono digits are ~0.62em) has to fit,
+//            hence the /1.6.
+// The band spans the outer edge to the short-service line, so it takes ~45% of
+// the half along the net axis and the full half across it.
+const half = ref<HTMLElement | null>(null);
+const { width: halfWidth, height: halfHeight } = useElementSize(half);
+
+const NET_AXIS_FRACTION = 0.45;
+const SCORE_MIN_PX = 40;
+// Above the old 80px ceiling: with the side-by-side card no longer capped at
+// 672px, the binding constraint on a desktop umpire monitor was this number and
+// not the box. Two digits at 128px is ~159px against a ~247px band, so the
+// width term still has headroom.
+const SCORE_MAX_PX = 128;
+
+const scoreFontPx = computed(() => {
+  const w = halfWidth.value;
+  const h = halfHeight.value;
+  // Unmeasured on first paint — fall back to the CSS clamp on the element
+  // rather than flashing the 40px floor.
+  if (!w || !h) return null;
+  const bandWidth = isStacked.value ? w : w * NET_AXIS_FRACTION;
+  const bandHeight = isStacked.value ? h * NET_AXIS_FRACTION : h;
+  const fromHeight = bandHeight * 0.5;
+  const fromWidth = bandWidth / 1.6;
+  return Math.round(
+    Math.min(
+      SCORE_MAX_PX,
+      Math.max(SCORE_MIN_PX, Math.min(fromHeight, fromWidth))
+    )
+  );
+});
+
 const courtSurface: Record<SportId, string> = {
   badminton: 'bg-court-badminton',
   'table-tennis': 'bg-court-tabletennis',
@@ -221,6 +266,7 @@ watch(
 
 <template>
   <div
+    ref="half"
     class="relative flex flex-1 overflow-hidden transition-shadow duration-200"
     :class="[
       courtSurface[sport],
@@ -346,6 +392,7 @@ watch(
         <span
           class="score text-[clamp(40px,8.5vh,80px)] leading-none tabular-nums text-foreground transition-transform duration-150 ease-out"
           :class="ticking ? 'scale-[1.08]' : 'scale-100'"
+          :style="scoreFontPx ? { fontSize: `${scoreFontPx}px` } : undefined"
         >
           {{ score }}
         </span>

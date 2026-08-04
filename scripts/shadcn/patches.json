@@ -24,6 +24,12 @@
     "reason": "delegatedProps already contains modelValue (only `class` is stripped), so the explicit :model-value binding is a duplicate — vue-tsc TS2783"
   },
   {
+    "file": "toggle/index.ts",
+    "find": "data-[state=on]:bg-accent data-[state=on]:text-accent-foreground",
+    "replace": "data-[state=on]:bg-primary/10 data-[state=on]:text-foreground data-[state=on]:border-primary data-[state=on]:ring-1 data-[state=on]:ring-primary",
+    "reason": "Selected state was invisible: --accent equals --border in both modes, so data-[state=on]:bg-accent gave a 1.34:1 fill delta in dark / 1.16:1 in light with identical text colour — WCAG 1.4.11 needs 3:1 for a state indicator. A primary-coloured ring carries the state (7.3:1 dark, 5.9:1 light) with the tint as reinforcement"
+  },
+  {
     "file": "toggle-group/ToggleGroupItem.vue",
     "find": "import type { toggleVariants } from '@sb/layer-ui/components/ui/toggle'",
     "replace": "import { toggleVariants } from '@sb/layer-ui/components/ui/toggle'",

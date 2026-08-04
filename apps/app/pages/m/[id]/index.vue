@@ -30,6 +30,7 @@ import QrDialog from '~/components/match/QrDialog.vue';
 import SettingsSheet from '~/components/match/SettingsSheet.vue';
 import ThemePickerDialog from '~/components/match/ThemePickerDialog.vue';
 import { useRolePermissions } from '~/composables/useRolePermissions';
+import { matchStatusFrom } from '~/lib/matchSummaries';
 import { useUserStore } from '~/stores/user';
 
 useSeoMeta({ title: 'Match' });
@@ -125,9 +126,15 @@ const displayName = computed(
     }`
 );
 
+const matchStatus = computed(() => matchStatusFrom(state.value));
+
+// "Ready · 0 events" leaked the event-log vocabulary into the one line a
+// player reads. Empty for a match that hasn't started: the "Not started" chip
+// on the other end of the same row already says it, and spending the row on
+// both squeezed the format down to "Badmint…" on a phone.
 const statusLabel = computed(() => {
   if (state.value.matchOver) return 'Final';
-  if (events.value.length === 0) return 'Ready · 0 events';
+  if (matchStatus.value === 'ready') return '';
   return `Game ${state.value.games.length} · ${score('a')}–${score('b')}`;
 });
 
@@ -287,6 +294,7 @@ const onRegenerateToken = async () => {
     <div class="px-4 pt-2 pb-4">
       <MatchHeroCard
         :match-over="state.matchOver"
+        :status="matchStatus"
         :display-name="displayName"
         :status-label="statusLabel"
         :team-names="teamNames"

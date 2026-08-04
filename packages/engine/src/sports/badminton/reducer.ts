@@ -18,6 +18,7 @@ import type {
 import {
   computeAlternatingServer,
   initialRacquetState,
+  isDeuceScore,
   isGameWon,
   trimLastPointOrGameEnd,
   wouldWinGameWithPoint,
@@ -80,7 +81,13 @@ function applyEvent(
         isMatchPoint: false,
         gamePoint: { a: false, b: false },
         matchPoint: { a: false, b: false },
+        isDeuce: false,
         atInterval: false,
+        // BWF Law 9.1.1: service at an even score — 0 included — is from the
+        // right court. serverCourt still holds the parity of the FINISHED
+        // game's final rally, so any game won on an odd score (21-19, 15-9)
+        // otherwise opened the next game with the server shown on the left.
+        serverCourt: 'right',
       };
 
     case 'undo':
@@ -103,6 +110,7 @@ function applyEvent(
         isMatchPoint: false,
         gamePoint: { a: false, b: false },
         matchPoint: { a: false, b: false },
+        isDeuce: false,
       };
 
     case 'retirement': {
@@ -119,6 +127,7 @@ function applyEvent(
         isMatchPoint: false,
         gamePoint: { a: false, b: false },
         matchPoint: { a: false, b: false },
+        isDeuce: false,
       };
     }
 
@@ -135,6 +144,7 @@ function applyEvent(
         isMatchPoint: false,
         gamePoint: { a: false, b: false },
         matchPoint: { a: false, b: false },
+        isDeuce: false,
       };
     }
 
@@ -185,6 +195,7 @@ function applyEvent(
         isMatchPoint: false,
         gamePoint: { a: false, b: false },
         matchPoint: { a: false, b: false },
+        isDeuce: false,
       };
     }
 
@@ -246,6 +257,9 @@ function applyEvent(
         isMatchPoint: aWouldWinMatch || bWouldWinMatch,
         gamePoint: { a: aWouldWinGame, b: bWouldWinGame },
         matchPoint: { a: aWouldWinMatch, b: bWouldWinMatch },
+        // Same reason the point flags are recomputed rather than cleared: a
+        // correction can land the game straight on 20–20.
+        isDeuce: !matchOver && isDeuceScore(cur, cfg),
         atInterval: false,
       };
     }
@@ -335,7 +349,13 @@ function applyPoint(
       games: newGames,
       gamesWon,
       servingSide: servingSideAfterGame,
-      serverCourt,
+      // Between games the meaningful server display is the NEXT game's opening
+      // state: score 0 → right court (Law 9.1.1), matching servingSideAfterGame
+      // and the partner reset below. Keeping the finished game's parity here
+      // put the opening server in the left court whenever the game was won on
+      // an odd score. Match over freezes the final rally as played — there is
+      // no next game to anchor to.
+      serverCourt: matchOver ? serverCourt : 'right',
       // BWF: each new game starts with both teams' slot-1 in the right court.
       // (Match-over keeps last positions for the audience-facing surfaces.)
       partnerOnRight: matchOver ? nextPartnerOnRight : { a: 1, b: 1 },
@@ -347,6 +367,7 @@ function applyPoint(
       isMatchPoint: false,
       gamePoint: { a: false, b: false },
       matchPoint: { a: false, b: false },
+      isDeuce: false,
     };
   }
 
@@ -368,6 +389,7 @@ function applyPoint(
     isMatchPoint: aWouldWinMatch || bWouldWinMatch,
     gamePoint: { a: aWouldWinGame, b: bWouldWinGame },
     matchPoint: { a: aWouldWinMatch, b: bWouldWinMatch },
+    isDeuce: isDeuceScore(next, cfg),
   };
 }
 

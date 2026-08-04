@@ -162,6 +162,25 @@ const canRender = computed(
   () => !!videoFile.value && snapshotPlan.value.length > 0
 );
 
+// Games that exist in the event log but have no anchor. buildSnapshotPlan
+// silently drops every event in an unanchored game, so the burned-in overlay
+// FREEZES at the previous game's last frame for that stretch of video — with
+// nothing at render time to say so. Not a blocker (a video that only covers
+// game 1 is a legitimate render); it must just never be a surprise.
+const unsyncedGames = computed(() =>
+  firstPointPerGame.value
+    .map((ev, i) => (ev && !anchors.value[i] ? i + 1 : null))
+    .filter((n): n is number => n !== null)
+);
+const syncedCount = computed(
+  () => Object.values(anchors.value).filter(Boolean).length
+);
+const unsyncedWarning = computed(() => {
+  if (syncedCount.value === 0 || unsyncedGames.value.length === 0) return null;
+  const list = unsyncedGames.value.map((n) => `Game ${n}`).join(', ');
+  return `${list} not synced — the overlay will freeze on the last synced game's final score for that part of the video.`;
+});
+
 const snapshotting = ref(false);
 const snapshotProgress = ref({ done: 0, total: 0 });
 
@@ -348,10 +367,15 @@ const meta = computed(() => ({
           >
             Sync points
           </div>
+          <!-- This copy used to say syncing Game 1 was "usually enough" for a
+               continuous recording. It never was: the plan builder drops every
+               event in an unanchored game, so that advice produced overlays
+               frozen from game 2 onward. Every game needs its anchor. -->
           <p class="text-xs text-fg-muted">
             Scrub to the moment the first rally of each game ends (shuttle
-            lands, score would flip), then tap "Sync." For one continuous
-            recording, syncing Game 1 is usually enough.
+            lands, score would flip), then tap "Sync." Do this for every game —
+            even in one continuous recording — so each game's overlay lines up
+            with its footage.
           </p>
           <div class="flex flex-col gap-2">
             <div
@@ -386,6 +410,12 @@ const meta = computed(() => ({
               </Button>
             </div>
           </div>
+          <p
+            v-if="unsyncedWarning"
+            class="rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-xs text-warning"
+          >
+            {{ unsyncedWarning }}
+          </p>
         </div>
 
         <!-- Render — WebCodecs (hardware H.264) + modern-screenshot for the
@@ -408,9 +438,10 @@ const meta = computed(() => ({
             </Button>
             <span class="text-xs text-fg-muted">
               {{ snapshotPlan.length }}
-              event{{ snapshotPlan.length === 1 ? '' : 's' }} will be drawn.
-              Sync at least one game above; games without a sync row are
-              skipped.
+              event{{ snapshotPlan.length === 1 ? '' : 's' }} will be drawn
+              <template v-if="totalGames > 1">
+                from {{ syncedCount }} of {{ totalGames }} games</template
+              >.
             </span>
             <Button
               v-if="outputUrl"

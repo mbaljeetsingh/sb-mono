@@ -13,8 +13,27 @@ import type { Database } from '@sb/shared';
 // per match, while the home card stays a mount-time snapshot.
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+export type MatchStatus = 'ready' | 'live' | 'final';
+
+// One definition of "has this match actually started", shared by every surface
+// that badges a match. Opening /control seeds a `match.start` event, so "the
+// log is non-empty" is not the same question — a match nobody has scored a
+// rally in is still `ready`, and the /m/[id] hero card used to badge it LIVE
+// (with a pulsing dot) directly beside its own "Ready · 0 events".
+export const matchStatusFrom = (
+  state: Pick<RacquetState, 'matchOver' | 'games' | 'gamesWon'>,
+  endedAt?: string | null
+): MatchStatus => {
+  if (state.matchOver || endedAt) return 'final';
+  const played =
+    state.games.some((g) => g.a > 0 || g.b > 0) ||
+    state.gamesWon.a > 0 ||
+    state.gamesWon.b > 0;
+  return played ? 'live' : 'ready';
+};
+
 export type MatchSummary = {
-  status: 'ready' | 'live' | 'final';
+  status: MatchStatus;
   /** Compact scoreline — live multi-game: "1–0 · 14–11" (games won · current
    *  game); final multi-game: "2–0"; single-game: just the points. */
   scoreline: string | null;
@@ -49,10 +68,10 @@ const summarize = (
   config: RacquetConfig,
   endedAt: string | null | undefined
 ): MatchSummary => {
-  const finished = state.matchOver || !!endedAt;
+  const status = matchStatusFrom(state, endedAt);
   const cur = state.games[state.games.length - 1] ?? { a: 0, b: 0 };
   const multiGame = config.gamesToWin > 1;
-  if (finished) {
+  if (status === 'final') {
     // A walkover called before the first rally ends the match with every game
     // still 0–0. Printing that as the scoreline claims a nil-nil result nobody
     // played, so drop it and let the winner carry the row. (A walkover or
@@ -67,6 +86,11 @@ const summarize = (
         : null,
       winner: state.winner,
     };
+  }
+  // `ready` carries no scoreline: 0–0 is not a result, and every consumer
+  // (list row, home card) already treats a null scoreline as "nothing to show".
+  if (status === 'ready') {
+    return { status, scoreline: null, winner: null };
   }
   return {
     status: 'live',
