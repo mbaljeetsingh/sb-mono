@@ -21,7 +21,6 @@ import {
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import AppLogo from '~/components/common/AppLogo.vue';
-import ThemeToggle from '~/components/common/ThemeToggle.vue';
 import FormatSheet from '~/components/control/FormatSheet.vue';
 import GameOverModal from '~/components/control/GameOverModal.vue';
 import MatchOverModal from '~/components/control/MatchOverModal.vue';
@@ -92,8 +91,22 @@ const {
 const {
   isActive,
   activeDeviceId,
+  myDeviceId,
   claim: claimScoring,
 } = useScorerActive(matchId, { writeToken });
+
+// Positive counterpart to the take-over overlay, which only ever renders when
+// this device is *not* the scorer — so when you were the scorer nothing said
+// so, and two operators both tapping "Score from this device" ping-ponged with
+// no feedback beyond taps going dead.
+//
+// Deliberately gated on an actual claim rather than on `isActive`: `isActive`
+// is also true in the bootstrap case (nobody has claimed, column still NULL),
+// and asserting "scoring here" before any device is stamped would be a claim we
+// can't back. On a fresh match the pill appears on the first tap.
+const isClaimedScorer = computed(
+  () => !!myDeviceId.value && activeDeviceId.value === myDeviceId.value
+);
 
 const teamMeta = computed(() => ({
   isDoubles: matchMeta.value.isDoubles ?? false,
@@ -124,7 +137,7 @@ onMounted(() => {
 });
 onUnmounted(() => clearInterval(nowTimer));
 
-const intervalClock = computed(() => {
+const intervalSecondsLeft = computed<number | null>(() => {
   if (!state.value.atInterval) return null;
   // Anchor to the last *point* — the event that actually reached the interval.
   // The reducer keeps atInterval true across timeout/penalty events appended
@@ -132,9 +145,22 @@ const intervalClock = computed(() => {
   // restart the countdown every time the umpire logs one.
   const anchor = events.value.findLast((e) => e.type === 'point');
   if (!anchor?.ts) return null;
-  const left = Math.ceil((anchor.ts + INTERVAL_MS - nowMs.value) / 1000);
-  if (left <= 0) return null;
+  return Math.ceil((anchor.ts + INTERVAL_MS - nowMs.value) / 1000);
+});
+
+const intervalClock = computed(() => {
+  const left = intervalSecondsLeft.value;
+  if (left === null || left <= 0) return null;
   return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+});
+
+// Distinct from "no clock at all". The badge used to fall back from
+// "Interval · 0:23" to a bare "Interval" the moment the 60s expired, so it
+// silently changed meaning — an umpire glancing down couldn't tell "hasn't
+// started" from "time's up". Expiry now says so, and switches tint.
+const intervalOver = computed(() => {
+  const left = intervalSecondsLeft.value;
+  return left !== null && left <= 0;
 });
 
 // Sync matches.ended_at to the engine's view of "match is finished". Going
@@ -578,11 +604,41 @@ const lastGameScore = computed(() => ({
   loser: Math.min(lastGame.value.a, lastGame.value.b),
 }));
 
+// Completed games only. The strip used to render every entry in `games`,
+// including the in-progress one — so at 1–0 it printed "1 – 0" directly above
+// the two giant numbers saying the same thing, distinguished from a finished
+// game only by the *absence* of a ✓. Now the live score lives on court and the
+// strip is pure history, with the game number carried by `stripStateLabel`.
+//
+// The `played` guard is the same one MatchHeroCard needs: a walkover called
+// before the first rally ends the match with `games` still [{a:0,b:0}], and
+// printing "G1 0–0" claims a nil-nil result nobody played. Unlike the hero card
+// we keep single-game results — "G1 21–19" in the strip is worth the ink.
+const completedGames = computed(() => {
+  const all = games.value;
+  if (state.value.matchOver) {
+    return all.some((g) => g.a > 0 || g.b > 0) ? all : [];
+  }
+  if (state.value.betweenGames) return all;
+  return all.slice(0, -1);
+});
+
+// Where-are-we, in the strip rather than the header — the header's copy is
+// `hidden sm:block`, so on a phone (the primary device) the game number never
+// appeared at all and you inferred it by counting entries in this strip.
+const stripStateLabel = computed(() => {
+  if (state.value.matchOver) return null;
+  if (state.value.betweenGames) return 'Between games';
+  return `Game ${games.value.length}`;
+});
+
+// The matchup, not the match state. The state moved into the strip below, and
+// repeating "Game 1" in both places was worse than the gap it filled. Naming the
+// players earns the slot instead: with a control tab open per court, nothing in
+// this page's chrome said which match you were about to score.
 const headerLabel = computed(() => {
   if (state.value.matchOver) return 'Match complete';
-  if (state.value.betweenGames)
-    return `Between games · ${gamesWon.value.a}–${gamesWon.value.b}`;
-  return `Game ${games.value.length} · ${presetLabel.value} · ${seriesLabel.value}`;
+  return `${displayNameA.value} vs ${displayNameB.value}`;
 });
 
 // Wake-lock keeps the phone screen on during a match.
@@ -744,16 +800,25 @@ const swapLabelB = computed(() =>
   <div
     class="fixed inset-0 bg-muted/40 sm:bg-muted pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
   >
+    <!-- Width follows the layout. `max-w-2xl` is right for the stacked phone
+         layout, and wrong for side-by-side: that layout exists to be read from
+         an umpire's chair, and capping it at 672px on a desktop monitor left
+         two narrow halves in a wide grey field — which also starved the score
+         (see TeamRow's box-derived sizing). The sheets stay 2xl-centred either
+         way: they're `absolute` against the `fixed inset-0` root, not this card,
+         which has no `position` of its own. -->
     <div
-      class="mx-auto flex h-full max-w-2xl flex-col bg-background text-foreground font-sans sm:border-x sm:border-border sm:shadow-2xl"
+      class="mx-auto flex h-full flex-col bg-background text-foreground font-sans sm:border-x sm:border-border sm:shadow-2xl"
+      :class="layout === 'sideBySide' ? 'max-w-5xl' : 'max-w-2xl'"
     >
       <!-- Top chrome. Same h-14 / border-b / backdrop-blur styling as the
            site-wide AppHeader so /control reads as part of the product.
            AppLogo links home (same target as everywhere else); explicit
            Back button next to it covers the "step back one" intent — having
            the logo navigate to the match hub felt off vs. the rest of the
-           site. ThemeToggle joins the actions on the right for consistency
-           with AppHeader. -->
+           site. The right side holds only the ⋯ menu and the "this device is
+           scoring" marker: everything tappable up here is a thumb-width from
+           the score halves, so it has to be something you can't regret. -->
       <header
         class="sticky top-0 z-30 h-14 flex-shrink-0 flex w-full items-center justify-between gap-2 border-b border-border bg-background/80 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/60"
       >
@@ -774,7 +839,17 @@ const swapLabelB = computed(() =>
           {{ headerLabel }}
         </span>
         <div class="flex items-center gap-1">
-          <ThemeToggle />
+          <!-- ThemeToggle used to sit here, a thumb-width from the score halves.
+               Flipping light/dark mid-rally is never the intent, so it moved
+               into the ⋯ sheet — this bar should hold nothing you can regret
+               tapping. -->
+          <span
+            v-if="isClaimedScorer"
+            class="mr-1 inline-flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-fg-muted"
+          >
+            <span class="size-1.5 rounded-full bg-success" />
+            Scoring
+          </span>
           <Button
             variant="ghost"
             size="icon"
@@ -815,23 +890,25 @@ const swapLabelB = computed(() =>
       <div
         class="h-9 px-3 flex items-center justify-between border-b border-border bg-background/80 backdrop-blur-sm text-sm text-fg-muted"
       >
-        <span class="flex items-center gap-2 text-xs">
-          <template v-for="(g, i) in games" :key="i">
-            <span
-              class="font-mono tabular-nums inline-flex gap-1 items-baseline"
-            >
-              <span class="score">{{ g.a }}</span>
-              <span class="opacity-40">–</span>
-              <span class="score">{{ g.b }}</span>
-              <span
-                v-if="i < games.length - 1 || state.betweenGames"
-                class="ml-1 text-success"
-              >
-                ✓
-              </span>
+        <span class="flex min-w-0 items-center gap-2 overflow-hidden text-xs">
+          <span
+            v-if="stripStateLabel"
+            class="shrink-0 text-[11px] font-bold uppercase tracking-wider text-foreground"
+          >
+            {{ stripStateLabel }}
+          </span>
+          <span
+            v-for="(g, i) in completedGames"
+            :key="i"
+            class="shrink-0 inline-flex items-baseline gap-1 font-mono tabular-nums"
+          >
+            <span class="text-[10px] font-bold uppercase text-fg-subtle">
+              G{{ i + 1 }}
             </span>
-            <span v-if="i < games.length - 1" class="opacity-40">·</span>
-          </template>
+            <span class="score">{{ g.a }}</span>
+            <span class="opacity-40">–</span>
+            <span class="score">{{ g.b }}</span>
+          </span>
         </span>
         <div class="flex items-center gap-2">
           <!-- Counts down the BWF 60s interval rather than showing a static
@@ -839,9 +916,18 @@ const swapLabelB = computed(() =>
                once it expires (or if the event has no timestamp). -->
           <span
             v-if="state.atInterval"
-            class="text-[11px] font-bold tracking-wider uppercase text-warning bg-warning-soft px-2 py-0.5 rounded-sm tabular-nums"
+            class="text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-sm tabular-nums"
+            :class="
+              intervalOver
+                ? 'text-danger bg-danger-soft'
+                : 'text-warning bg-warning-soft'
+            "
           >
-            Interval{{ intervalClock ? ` · ${intervalClock}` : '' }}
+            {{
+              intervalOver
+                ? 'Interval over'
+                : `Interval${intervalClock ? ` · ${intervalClock}` : ''}`
+            }}
           </span>
           <Button
             v-if="canEditMeta"
