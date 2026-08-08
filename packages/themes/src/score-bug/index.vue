@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Score Bug — the stacked two-row corner bug every live sports feed uses.
-// Deliberately tiny: 236px at 1080p, which is roughly what ESPN, Sky and Star
+// Deliberately small: 300px at 1080p, which is roughly what ESPN, Sky and Star
 // Sports actually occupy. A corner bug earns its place by staying out of the
 // way, so the design rule here is subtractive — no event line, no venue, no
 // status wording, no player names.
@@ -51,7 +51,7 @@ const codeOf = (side: 'a' | 'b') => props.meta?.codes?.[side] ?? null;
 
 // The code is rendered bare rather than via <TeamCode> because a bug needs
 // tighter metrics: no plate fill (the rail already colors the row) and a fixed
-// 34px column so both codes align to the pixel.
+// 44px column so both codes align to the pixel.
 const code = (side: 'a' | 'b') => teamCodeOf(nameOf(side), codeOf(side));
 
 // Only completed games get cells here — the live number is right beside them,
@@ -67,14 +67,14 @@ const code = (side: 'a' | 'b') => teamCodeOf(nameOf(side), codeOf(side));
 
 <template>
   <div
-    class="absolute top-8 left-8 w-[236px] overflow-hidden rounded-[5px] bg-[#0a0d12]/95 font-sans text-white shadow-[0_10px_30px_-8px_rgba(0,0,0,0.8)] ring-1 ring-white/[0.08]"
+    class="absolute top-10 left-10 w-[300px] overflow-hidden rounded-[6px] bg-[#0a0d12]/95 font-sans text-white shadow-[0_10px_30px_-8px_rgba(0,0,0,0.8)] ring-1 ring-white/[0.08]"
   >
     <div
       v-for="side in ['a', 'b'] as const"
       :key="side"
-      class="grid items-center gap-x-2 border-t border-white/[0.06] pr-2 first:border-t-0"
+      class="grid items-center gap-x-2.5 border-t border-white/[0.06] pr-2.5 first:border-t-0"
       :style="{
-        gridTemplateColumns: `3px 34px minmax(0,1fr) ${withStanding ? 'auto ' : ''}26px`,
+        gridTemplateColumns: `4px 44px minmax(0,1fr) ${withStanding ? 'auto ' : ''}34px`,
         background: isServingSide(side)
           ? `linear-gradient(90deg, color-mix(in srgb, ${teamColor(side)} 22%, transparent), transparent 70%)`
           : undefined,
@@ -87,7 +87,7 @@ const code = (side: 'a' | 'b') => teamCodeOf(nameOf(side), codeOf(side));
       />
 
       <span
-        class="py-[7px] text-[12px] font-bold tracking-[0.04em] uppercase"
+        class="py-[9px] text-[15px] font-bold tracking-[0.04em] uppercase"
         :class="isServingSide(side) ? 'text-white' : 'text-white/75'"
         >{{ code(side) }}</span
       >
@@ -98,18 +98,18 @@ const code = (side: 'a' | 'b') => teamCodeOf(nameOf(side), codeOf(side));
         <ServeMarker
           v-if="isServingSide(side)"
           :color="teamColor(side)"
-          size="xs"
+          size="sm"
         />
         <span
           v-else
-          class="inline-block size-[5px] shrink-0"
+          class="inline-block size-[8px] shrink-0"
           aria-hidden="true"
         />
         <GameCells
           :state="state"
           :side="side"
           :color="teamColor(side)"
-          size="xs"
+          size="sm"
           :include-current="false"
         />
         <PenaltyCards :cards="cards(side)" size="xs" class="shrink-0" />
@@ -117,14 +117,14 @@ const code = (side: 'a' | 'b') => teamCodeOf(nameOf(side), codeOf(side));
 
       <span
         v-if="withStanding"
-        class="score text-[13px] leading-none tabular-nums"
+        class="score text-[16px] leading-none tabular-nums"
         :class="gamesWon[side] > 0 ? 'text-white/90' : 'text-white/35'"
         >{{ gamesWon[side] }}</span
       >
 
-      <!-- Live points, hard right, fixed 26px so 9 → 10 doesn't shift the row -->
+      <!-- Live points, hard right, fixed 34px so 9 → 10 doesn't shift the row -->
       <span
-        class="score text-right text-[19px] leading-none tabular-nums"
+        class="score text-right text-[24px] leading-none tabular-nums"
         :class="isMatchWinner(side) ? 'text-white' : 'text-white/95'"
         >{{ currentGame[side] }}</span
       >
@@ -134,7 +134,7 @@ const code = (side: 'a' | 'b') => teamCodeOf(nameOf(side), codeOf(side));
          then GP/MP/pause. At 236px wide there is no room for a second line. -->
     <div
       v-if="state.matchOver || status"
-      class="px-2 py-[3px] text-center text-[8px] font-bold tracking-[0.2em] text-white uppercase"
+      class="px-2.5 py-[4px] text-center text-[10px] font-bold tracking-[0.2em] text-white uppercase"
       :style="{
         background: state.matchOver
           ? 'rgba(255,255,255,0.1)'

@@ -52,7 +52,7 @@ const playersOf = (side: 'a' | 'b') =>
 // Previously each row sized its own `auto` columns from its own content, which
 // let the two big numerals sit at different x positions.
 const columns = computed(() =>
-  ['4px', 'minmax(0,1fr)', 'auto', withStanding.value ? 'auto' : null, '56px']
+  ['5px', 'minmax(0,1fr)', 'auto', withStanding.value ? 'auto' : null, '74px']
     .filter(Boolean)
     .join(' ')
 );
@@ -60,29 +60,29 @@ const columns = computed(() =>
 
 <template>
   <div
-    class="absolute left-9 bottom-9 w-[480px] rounded-xl overflow-hidden border border-white/10 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)] bg-neutral-950/90 backdrop-blur-md font-sans"
+    class="absolute left-12 bottom-12 w-[620px] rounded-xl overflow-hidden border border-white/10 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)] bg-neutral-950/90 backdrop-blur-md font-sans"
   >
     <!-- Meta strip -->
     <div
-      class="px-5 py-2.5 flex items-center justify-between border-b border-white/5"
+      class="px-6 py-3 flex items-center justify-between border-b border-white/5"
     >
       <span
-        class="inline-flex items-center gap-2 text-[10px] font-semibold tracking-[0.14em] uppercase text-neutral-400 min-w-0 flex-1"
+        class="inline-flex items-center gap-2 text-[13px] font-semibold tracking-[0.14em] uppercase text-neutral-400 min-w-0 flex-1"
       >
-        <SportIcon :sport="config.sport" class="text-[14px] shrink-0" />
+        <SportIcon :sport="config.sport" class="text-[17px] shrink-0" />
         <span class="truncate">{{ meta || '&nbsp;' }}</span>
       </span>
       <span
         v-if="state.matchOver"
-        class="text-[10px] font-bold tracking-[0.14em] text-white/90 shrink-0 ml-2"
+        class="text-[13px] font-bold tracking-[0.14em] text-white/90 shrink-0 ml-2"
       >
         {{ config.gamesToWin > 1 ? 'FINAL' : 'GAME' }}
       </span>
       <span
         v-else-if="isLive"
-        class="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.14em] text-white/80 shrink-0 ml-2"
+        class="inline-flex items-center gap-1.5 text-[13px] font-bold tracking-[0.14em] text-white/80 shrink-0 ml-2"
       >
-        <span class="size-1.5 rounded-full bg-white animate-pulse-soft" />
+        <span class="size-2 rounded-full bg-white animate-pulse-soft" />
         LIVE
         <span v-if="config.gamesToWin > 1" class="text-white/55 font-semibold"
           >· GAME {{ state.games.length }}</span
@@ -95,7 +95,7 @@ const columns = computed(() =>
       <div
         v-for="side in ['a', 'b'] as const"
         :key="side"
-        class="grid gap-x-4 items-center pr-5 transition-colors duration-200"
+        class="grid gap-x-4 items-center pr-6 transition-colors duration-200"
         :style="{
           gridTemplateColumns: columns,
           background: isServingSide(side)
@@ -110,10 +110,10 @@ const columns = computed(() =>
         />
 
         <!-- Name + cards + games-won pips -->
-        <div class="py-3 min-w-0">
-          <div class="flex items-center gap-2 min-w-0">
+        <div class="py-3.5 min-w-0">
+          <div class="flex items-center gap-2.5 min-w-0">
             <span
-              class="truncate text-[15px] font-semibold tracking-tight text-white"
+              class="truncate text-[19px] font-semibold tracking-tight text-white"
             >
               <template v-for="(p, idx) in playersOf(side)" :key="idx">
                 <span v-if="idx > 0" class="mx-1 text-white/40 font-normal"
@@ -138,24 +138,24 @@ const columns = computed(() =>
             <ServeMarker
               v-if="isServingSide(side)"
               :color="teamColor(side)"
-              size="sm"
+              size="md"
             />
             <span
               v-else-if="isMatchWinner(side)"
-              class="shrink-0 inline-flex items-center gap-1.5 text-[9px] font-bold tracking-[0.16em] text-white px-1.5 py-0.5 rounded-sm"
+              class="shrink-0 inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.16em] text-white px-2 py-0.5 rounded-sm"
               :style="{ background: teamColor(side) }"
             >
               WINNER
               <span
                 v-if="endReason"
-                class="text-[8px] font-semibold tracking-[0.12em] text-white/80 uppercase"
+                class="text-[10px] font-semibold tracking-[0.12em] text-white/80 uppercase"
               >
                 · {{ endReason }}
               </span>
             </span>
             <span
               v-else-if="isLastGameWinner(side)"
-              class="shrink-0 text-[9px] font-bold tracking-[0.14em] text-white/85 px-1.5 py-0.5 rounded-sm border"
+              class="shrink-0 text-[11px] font-bold tracking-[0.14em] text-white/85 px-2 py-0.5 rounded-sm border"
               :style="{
                 borderColor: teamColor(side),
                 background: `color-mix(in srgb, ${teamColor(side)} 18%, transparent)`,
@@ -163,7 +163,7 @@ const columns = computed(() =>
             >
               GAME WON
             </span>
-            <PenaltyCards :cards="cards(side)" size="xs" />
+            <PenaltyCards :cards="cards(side)" size="sm" />
           </div>
         </div>
 
@@ -174,7 +174,7 @@ const columns = computed(() =>
           :state="state"
           :side="side"
           :color="teamColor(side)"
-          size="xs"
+          size="sm"
           :include-current="false"
         />
 
@@ -182,11 +182,11 @@ const columns = computed(() =>
           v-if="withStanding"
           :value="gamesWon[side]"
           :color="teamColor(side)"
-          size="xs"
+          size="sm"
         />
 
         <!-- Current game -->
-        <span class="score text-[34px] leading-none text-white text-right">
+        <span class="score text-[44px] leading-none text-white text-right">
           {{ currentGame[side] }}
         </span>
       </div>
@@ -195,7 +195,7 @@ const columns = computed(() =>
     <!-- Status pill -->
     <div
       v-if="status"
-      class="px-5 py-1.5 border-t border-white/5 flex items-center gap-2"
+      class="px-6 py-2 border-t border-white/5 flex items-center gap-2"
       :class="{
         'bg-white/5': status.tone === 'muted' || status.tone === 'warn',
       }"
@@ -207,12 +207,12 @@ const columns = computed(() =>
           : undefined
       "
     >
-      <span class="text-[10px] font-bold tracking-[0.18em] text-white">
+      <span class="text-[13px] font-bold tracking-[0.18em] text-white">
         {{ status.label }}
       </span>
       <span
         v-if="status.side"
-        class="text-[10px] font-semibold tracking-[0.14em] text-white/75"
+        class="text-[13px] font-semibold tracking-[0.14em] text-white/75"
       >
         · {{ status.side === 'A' ? teamNames.a : teamNames.b }}
       </span>
