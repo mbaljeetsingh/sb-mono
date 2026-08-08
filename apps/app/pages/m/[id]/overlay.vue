@@ -53,7 +53,15 @@ useHead({
 
 <style>
 /* Overlay routes are inserted into OBS as transparent browser sources.
- * Force the page background transparent regardless of theme.css. */
+ * Force the page background transparent regardless of theme.css.
+ *
+ * Two consequences for theme authors. Panel fills must be fully opaque:
+ * any alpha lets the footage through behind the text, and OBS composites
+ * the video after the browser has rendered, so we can't see what we're
+ * sitting on. And `backdrop-filter` is a no-op here for the same reason —
+ * there is nothing painted behind the panel to sample. It still renders in
+ * the theme picker (ThemePreview paints a gradient behind the canvas),
+ * which is what makes it look like it works. */
 html,
 body,
 #__nuxt {

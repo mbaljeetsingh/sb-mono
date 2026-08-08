@@ -47,7 +47,7 @@ const initials = computed(() => ({
 
 <template>
   <div
-    class="absolute top-10 right-10 rounded-[5px] px-3 py-2 inline-flex items-center gap-2.5 ring-1 ring-white/[0.08] bg-[#0a0d12]/92 text-white font-sans"
+    class="absolute top-10 right-10 rounded-[5px] px-3 py-2 inline-flex items-center gap-2.5 ring-1 ring-white/[0.08] bg-[#0a0d12] text-white font-sans"
   >
     <div
       v-for="side in ['a', 'b'] as const"

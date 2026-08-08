@@ -54,7 +54,7 @@ const columns = computed(() =>
 
 <template>
   <div
-    class="absolute bottom-12 left-1/2 -translate-x-1/2 w-[440px] rounded-2xl overflow-hidden border border-white/10 bg-neutral-950/92 backdrop-blur-md text-white font-sans shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
+    class="absolute bottom-12 left-1/2 -translate-x-1/2 w-[440px] rounded-2xl overflow-hidden border border-white/10 bg-neutral-950 text-white font-sans shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
   >
     <!-- Top meta strip -->
     <div

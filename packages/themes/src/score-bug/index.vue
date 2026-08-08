@@ -67,7 +67,7 @@ const code = (side: 'a' | 'b') => teamCodeOf(nameOf(side), codeOf(side));
 
 <template>
   <div
-    class="absolute top-10 left-10 w-[300px] overflow-hidden rounded-[6px] bg-[#0a0d12]/95 font-sans text-white shadow-[0_10px_30px_-8px_rgba(0,0,0,0.8)] ring-1 ring-white/[0.08]"
+    class="absolute top-10 left-10 w-[300px] overflow-hidden rounded-[6px] bg-[#0a0d12] font-sans text-white shadow-[0_10px_30px_-8px_rgba(0,0,0,0.8)] ring-1 ring-white/[0.08]"
   >
     <div
       v-for="side in ['a', 'b'] as const"

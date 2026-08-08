@@ -60,7 +60,7 @@ const columns = computed(() =>
 
 <template>
   <div
-    class="absolute left-12 bottom-12 w-[620px] rounded-xl overflow-hidden border border-white/10 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)] bg-neutral-950/90 backdrop-blur-md font-sans"
+    class="absolute left-12 bottom-12 w-[620px] rounded-xl overflow-hidden border border-white/10 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)] bg-neutral-950 font-sans"
   >
     <!-- Meta strip -->
     <div

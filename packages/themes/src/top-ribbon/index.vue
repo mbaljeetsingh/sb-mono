@@ -47,7 +47,7 @@ const playersOf = (side: 'a' | 'b') =>
 <template>
   <!-- Main ribbon -->
   <div
-    class="absolute top-0 inset-x-0 h-20 grid grid-cols-[1fr_auto_1fr] items-center px-8 border-b border-white/10 bg-[linear-gradient(180deg,rgba(10,10,10,0.95)_0%,rgba(23,23,23,0.95)_100%)] text-white font-sans"
+    class="absolute top-0 inset-x-0 h-20 grid grid-cols-[1fr_auto_1fr] items-center px-8 border-b border-white/10 bg-[linear-gradient(180deg,#0a0a0a_0%,#171717_100%)] text-white font-sans"
   >
     <!-- Each team block: side A left-aligned, side B right-aligned with order swap -->
     <div
@@ -155,7 +155,7 @@ const playersOf = (side: 'a' | 'b') =>
   <!-- Sub-strip: meta on the left, status on the right. Dark + restrained,
        no tournament-branded accent. -->
   <div
-    class="absolute top-20 inset-x-0 h-[28px] bg-neutral-900/95 text-neutral-300 flex items-center justify-between px-8 text-[13px] font-semibold tracking-[0.12em] uppercase border-b border-white/5"
+    class="absolute top-20 inset-x-0 h-[28px] bg-neutral-900 text-neutral-300 flex items-center justify-between px-8 text-[13px] font-semibold tracking-[0.12em] uppercase border-b border-white/5"
   >
     <span class="inline-flex items-center gap-2 min-w-0 flex-1">
       <SportIcon :sport="config.sport" class="text-[15px] shrink-0" />
