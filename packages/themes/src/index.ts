@@ -94,7 +94,7 @@ export const themes: Record<string, ThemeEntry> = {
       id: 'score-bug',
       name: 'Score Bug',
       description:
-        'Tiny stacked corner bug (236px) with team codes and game cells — the TV-feed footprint.',
+        'Compact stacked corner bug (300px) with team codes and game cells — the TV-feed footprint.',
       author: 'Scoreboard core team',
       license: 'MIT',
       version: '1.0.0',

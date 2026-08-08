@@ -47,7 +47,7 @@ const playersOf = (side: 'a' | 'b') =>
 <template>
   <!-- Main ribbon -->
   <div
-    class="absolute top-0 inset-x-0 h-16 grid grid-cols-[1fr_auto_1fr] items-center px-6 border-b border-white/10 bg-[linear-gradient(180deg,rgba(10,10,10,0.95)_0%,rgba(23,23,23,0.95)_100%)] text-white font-sans"
+    class="absolute top-0 inset-x-0 h-20 grid grid-cols-[1fr_auto_1fr] items-center px-8 border-b border-white/10 bg-[linear-gradient(180deg,rgba(10,10,10,0.95)_0%,rgba(23,23,23,0.95)_100%)] text-white font-sans"
   >
     <!-- Each team block: side A left-aligned, side B right-aligned with order swap -->
     <div
@@ -58,9 +58,12 @@ const playersOf = (side: 'a' | 'b') =>
         side === 'b' ? 'justify-start flex-row-reverse order-3' : '',
       ]"
     >
-      <span class="w-1 h-9 shrink-0" :style="{ background: teamColor(side) }" />
+      <span
+        class="w-1.5 h-11 shrink-0"
+        :style="{ background: teamColor(side) }"
+      />
       <div :class="['min-w-0', side === 'b' ? 'text-right' : '']">
-        <div class="text-[13px] font-semibold leading-tight uppercase truncate">
+        <div class="text-[17px] font-semibold leading-tight uppercase truncate">
           <template v-for="(p, idx) in playersOf(side)" :key="idx">
             <span v-if="idx > 0" class="mx-1 text-white/35 font-normal">/</span>
             <!-- Weight, not hue — the colour rule left of the name already
@@ -81,21 +84,21 @@ const playersOf = (side: 'a' | 'b') =>
       <ServeMarker
         v-if="isServingSide(side)"
         :color="teamColor(side)"
-        size="sm"
+        size="md"
         :variant="'caret'"
         :direction="side === 'a' ? 'right' : 'left'"
       />
       <!-- Chip cycle: WINNER → GAME WON (serve is the caret above) -->
       <span
         v-if="isMatchWinner(side)"
-        class="shrink-0 text-[9px] font-bold tracking-[0.16em] text-white px-1.5 py-0.5 rounded-sm"
+        class="shrink-0 text-[11px] font-bold tracking-[0.16em] text-white px-2 py-0.5 rounded-sm"
         :style="{ background: teamColor(side) }"
       >
         WINNER
       </span>
       <span
         v-else-if="isLastGameWinner(side)"
-        class="shrink-0 text-[9px] font-bold tracking-[0.14em] text-white/85 px-1.5 py-0.5 rounded-sm border"
+        class="shrink-0 text-[11px] font-bold tracking-[0.14em] text-white/85 px-2 py-0.5 rounded-sm border"
         :style="{
           borderColor: teamColor(side),
           background: `color-mix(in srgb, ${teamColor(side)} 18%, transparent)`,
@@ -103,48 +106,48 @@ const playersOf = (side: 'a' | 'b') =>
       >
         GAME WON
       </span>
-      <PenaltyCards :cards="cards(side)" size="xs" class="shrink-0" />
+      <PenaltyCards :cards="cards(side)" size="sm" class="shrink-0" />
     </div>
 
     <!-- Center scoreline. Completed games read outward from the centre as boxed
          cells, mirrored either side of the live score — a ribbon has no room for
          a column layout, so the mirror is what keeps each side's history
-         attached to that side. Fixed 52px live columns so the numbers stay put
+         attached to that side. Fixed 66px live columns so the numbers stay put
          as the score crosses 10. -->
-    <div class="flex items-center justify-center gap-2.5 order-2">
+    <div class="flex items-center justify-center gap-3 order-2">
       <GamesWonPlate
         v-if="withStanding"
         :value="gamesWon.a"
         :color="teamColor('a')"
-        size="xs"
+        size="sm"
       />
       <GameCells
         :state="state"
         side="a"
         :color="teamColor('a')"
-        size="xs"
+        size="sm"
         :include-current="false"
       />
       <span
-        class="score text-[40px] text-neutral-50 tabular-nums w-[52px] text-right"
+        class="score text-[50px] text-neutral-50 tabular-nums w-[66px] text-right"
         >{{ currentGame.a }}</span
       >
-      <span class="text-lg text-neutral-600 font-medium">—</span>
-      <span class="score text-[40px] text-neutral-50 tabular-nums w-[52px]">{{
+      <span class="text-xl text-neutral-600 font-medium">—</span>
+      <span class="score text-[50px] text-neutral-50 tabular-nums w-[66px]">{{
         currentGame.b
       }}</span>
       <GameCells
         :state="state"
         side="b"
         :color="teamColor('b')"
-        size="xs"
+        size="sm"
         :include-current="false"
       />
       <GamesWonPlate
         v-if="withStanding"
         :value="gamesWon.b"
         :color="teamColor('b')"
-        size="xs"
+        size="sm"
       />
     </div>
   </div>
@@ -152,10 +155,10 @@ const playersOf = (side: 'a' | 'b') =>
   <!-- Sub-strip: meta on the left, status on the right. Dark + restrained,
        no tournament-branded accent. -->
   <div
-    class="absolute top-16 inset-x-0 h-[22px] bg-neutral-900/95 text-neutral-300 flex items-center justify-between px-6 text-[10px] font-semibold tracking-[0.12em] uppercase border-b border-white/5"
+    class="absolute top-20 inset-x-0 h-[28px] bg-neutral-900/95 text-neutral-300 flex items-center justify-between px-8 text-[13px] font-semibold tracking-[0.12em] uppercase border-b border-white/5"
   >
     <span class="inline-flex items-center gap-2 min-w-0 flex-1">
-      <SportIcon :sport="config.sport" class="text-[12px] shrink-0" />
+      <SportIcon :sport="config.sport" class="text-[15px] shrink-0" />
       <span class="truncate">{{ meta || '&nbsp;' }}</span>
     </span>
     <span
@@ -163,7 +166,7 @@ const playersOf = (side: 'a' | 'b') =>
       class="inline-flex items-center gap-1.5 text-white tracking-[0.16em] font-bold shrink-0 ml-3"
     >
       FINAL
-      <span v-if="endReason" class="text-[9px] text-white/70">
+      <span v-if="endReason" class="text-[11px] text-white/70">
         · {{ endReason }}
       </span>
     </span>

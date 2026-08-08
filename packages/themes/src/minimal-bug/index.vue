@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Minimal Bug — the smallest useful overlay: a single ~150px row. For streamers
+// Minimal Bug — the smallest useful overlay: a single ~190px row. For streamers
 // who don't want their video covered at all. Initials, live points, nothing
 // else. `score-bug` is the step up when you want game history too.
 //
@@ -47,33 +47,33 @@ const initials = computed(() => ({
 
 <template>
   <div
-    class="absolute top-8 right-8 rounded-[4px] px-2 py-1.5 inline-flex items-center gap-2 ring-1 ring-white/[0.08] bg-[#0a0d12]/92 text-white font-sans"
+    class="absolute top-10 right-10 rounded-[5px] px-3 py-2 inline-flex items-center gap-2.5 ring-1 ring-white/[0.08] bg-[#0a0d12]/92 text-white font-sans"
   >
     <div
       v-for="side in ['a', 'b'] as const"
       :key="side"
-      class="inline-flex items-center gap-1.5"
+      class="inline-flex items-center gap-2"
     >
       <!-- Serve marker holds its slot when idle, so the two halves stay aligned
            and nothing shifts on a change of service. -->
       <ServeMarker
         v-if="isServingSide(side)"
         :color="teamColor(side)"
-        size="xs"
+        size="sm"
       />
       <span
         v-else
-        class="inline-block size-[5px] shrink-0 rounded-full opacity-25"
+        class="inline-block size-[8px] shrink-0 rounded-full opacity-25"
         :style="{ background: teamColor(side) }"
         aria-hidden="true"
       />
       <span
-        class="text-[11px] font-bold tracking-wide w-[9px] text-center"
+        class="text-[14px] font-bold tracking-wide w-[12px] text-center"
         :style="{ color: teamColor(side) }"
         >{{ initials[side] }}</span
       >
       <span
-        class="score text-[15px] text-neutral-50 w-[22px]"
+        class="score text-[19px] text-neutral-50 w-[28px]"
         :class="side === 'a' ? 'text-right' : 'text-left'"
         >{{ currentGame[side] }}</span
       >
@@ -81,7 +81,7 @@ const initials = computed(() => ({
       <span
         v-if="side === 'a'"
         aria-hidden="true"
-        class="w-px h-3 bg-white/15"
+        class="w-px h-4 bg-white/15"
       />
     </div>
     <!-- Status priority: match-over → pause icon → game number. Tiny
@@ -91,7 +91,7 @@ const initials = computed(() => ({
          as a 2-letter glyph after FINAL when applicable. -->
     <span
       v-if="state.matchOver"
-      class="text-[9px] tracking-[0.14em] font-bold text-white/80 ml-1"
+      class="text-[11px] tracking-[0.14em] font-bold text-white/80 ml-1"
       :title="endReason ?? undefined"
     >
       FINAL · {{ isWinningSide('a') ? initials.a : initials.b }}
@@ -108,7 +108,7 @@ const initials = computed(() => ({
     </span>
     <span
       v-else-if="status"
-      class="inline-flex items-center gap-1 text-[9px] font-bold tracking-wide ml-1"
+      class="inline-flex items-center gap-1 text-[11px] font-bold tracking-wide ml-1"
       :class="status.tone === 'warn' ? 'text-amber-300' : 'text-white/80'"
       :title="`${status.label}${status.side ? ` · TEAM ${status.side}` : ''}`"
     >
@@ -120,7 +120,7 @@ const initials = computed(() => ({
     </span>
     <span
       v-else
-      class="text-[9px] font-mono font-bold tracking-wide text-white/60 ml-1"
+      class="text-[11px] font-mono font-bold tracking-wide text-white/60 ml-1"
       >G{{ state.games.length }}</span
     >
   </div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Vertical Stack — overlay sized for portrait streams (TikTok, Reels, IG Live).
-// Pinned to the bottom-center, ~360px wide stack of two team blocks. Designed
+// Pinned to the bottom-center, ~440px wide stack of two team blocks. Designed
 // to hug the bottom safe area without covering player faces in the middle of
 // the frame.
 
@@ -46,7 +46,7 @@ const playersOf = (side: 'a' | 'b') =>
 
 // Shared across both rows so the two live numerals sit in one column.
 const columns = computed(() =>
-  ['5px', 'minmax(0,1fr)', 'auto', withStanding.value ? 'auto' : null, '46px']
+  ['6px', 'minmax(0,1fr)', 'auto', withStanding.value ? 'auto' : null, '58px']
     .filter(Boolean)
     .join(' ')
 );
@@ -54,15 +54,15 @@ const columns = computed(() =>
 
 <template>
   <div
-    class="absolute bottom-9 left-1/2 -translate-x-1/2 w-[360px] rounded-2xl overflow-hidden border border-white/10 bg-neutral-950/92 backdrop-blur-md text-white font-sans shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
+    class="absolute bottom-12 left-1/2 -translate-x-1/2 w-[440px] rounded-2xl overflow-hidden border border-white/10 bg-neutral-950/92 backdrop-blur-md text-white font-sans shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
   >
     <!-- Top meta strip -->
     <div
-      class="px-4 py-2 flex items-center justify-between border-b border-white/5 text-[10px] font-semibold tracking-[0.14em] uppercase text-neutral-400"
+      class="px-5 py-2.5 flex items-center justify-between border-b border-white/5 text-[12px] font-semibold tracking-[0.14em] uppercase text-neutral-400"
     >
       <!-- Meta is the flex item that gives way; live/game stays full. -->
       <span class="inline-flex items-center gap-1.5 min-w-0 flex-1">
-        <SportIcon :sport="config.sport" class="text-[12px] shrink-0" />
+        <SportIcon :sport="config.sport" class="text-[14px] shrink-0" />
         <span class="truncate">{{ meta || '&nbsp;' }}</span>
       </span>
       <!-- Status priority: match-over wins, then any active pause/GP/MP
@@ -74,7 +74,7 @@ const columns = computed(() =>
         class="inline-flex items-center gap-1.5 text-white/90 tracking-[0.16em] shrink-0 ml-2"
       >
         FINAL
-        <span v-if="endReason" class="text-[9px] text-white/60">
+        <span v-if="endReason" class="text-[11px] text-white/60">
           · {{ endReason }}
         </span>
       </span>
@@ -112,7 +112,7 @@ const columns = computed(() =>
       <div
         v-for="side in ['a', 'b'] as const"
         :key="side"
-        class="grid gap-x-3 items-center pr-4"
+        class="grid gap-x-3 items-center pr-5"
         :style="{
           gridTemplateColumns: columns,
           background: isServingSide(side)
@@ -124,9 +124,9 @@ const columns = computed(() =>
           class="h-full self-stretch"
           :style="{ background: teamColor(side) }"
         />
-        <div class="py-3 min-w-0">
-          <div class="flex items-center gap-1.5 min-w-0">
-            <span class="truncate text-[14px] tracking-tight">
+        <div class="py-3.5 min-w-0">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="truncate text-[17px] tracking-tight">
               <template v-for="(p, idx) in playersOf(side)" :key="idx">
                 <span v-if="idx > 0" class="mx-1 text-white/35">/</span>
                 <!-- Weight, not hue: the rail already says which side. -->
@@ -145,17 +145,17 @@ const columns = computed(() =>
             <ServeMarker
               v-if="isServingSide(side)"
               :color="teamColor(side)"
-              size="xs"
+              size="sm"
             />
             <span
               v-if="isMatchWinner(side)"
-              class="shrink-0 text-[8px] font-bold tracking-[0.16em] text-white px-1 py-0.5 rounded-sm"
+              class="shrink-0 text-[10px] font-bold tracking-[0.16em] text-white px-1.5 py-0.5 rounded-sm"
               :style="{ background: teamColor(side) }"
               >WINNER</span
             >
             <span
               v-else-if="isLastGameWinner(side)"
-              class="shrink-0 text-[8px] font-bold tracking-[0.14em] text-white/85 px-1 py-0.5 rounded-sm border"
+              class="shrink-0 text-[10px] font-bold tracking-[0.14em] text-white/85 px-1.5 py-0.5 rounded-sm border"
               :style="{
                 borderColor: teamColor(side),
                 background: `color-mix(in srgb, ${teamColor(side)} 18%, transparent)`,
@@ -169,17 +169,17 @@ const columns = computed(() =>
           :state="state"
           :side="side"
           :color="teamColor(side)"
-          size="xs"
+          size="sm"
           :include-current="false"
         />
         <GamesWonPlate
           v-if="withStanding"
           :value="gamesWon[side]"
           :color="teamColor(side)"
-          size="xs"
+          size="sm"
         />
         <div
-          class="score text-[36px] leading-none text-white tabular-nums text-right"
+          class="score text-[44px] leading-none text-white tabular-nums text-right"
         >
           {{ currentGame[side] }}
         </div>
