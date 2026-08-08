@@ -31,6 +31,7 @@ import SettingsSheet from '~/components/match/SettingsSheet.vue';
 import ThemePickerDialog from '~/components/match/ThemePickerDialog.vue';
 import { useRolePermissions } from '~/composables/useRolePermissions';
 import { matchStatusFrom } from '~/lib/matchSummaries';
+import { namesInPlay } from '~/lib/recent-players';
 import { useUserStore } from '~/stores/user';
 
 useSeoMeta({ title: 'Match' });
@@ -45,6 +46,7 @@ const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ''));
 const { state, config, events } = useMatchState(matchId);
 const { meta, teamNames, players, flush: flushMeta } = useMatchMeta(matchId);
+const { remember: rememberPlayers } = useRecentPlayers();
 
 // Explicit handler — relying on `v-model:meta="meta"` to auto-translate
 // `meta = $event` to `meta.value = $event` is unreliable in template event
@@ -52,6 +54,29 @@ const { meta, teamNames, players, flush: flushMeta } = useMatchMeta(matchId);
 // JS removes the ambiguity: meta.value gets reassigned, the watch fires.
 const onMetaUpdate = (v: MatchMeta) => {
   meta.value = v;
+
+  // Feed the same device-local list /new's suggestion chips read from, so a
+  // name first typed here — or a typo corrected here — is offered next time
+  // instead of staying wrong in the chips forever.
+  //
+  // Which fields count depends on the mode, hence the shared `namesInPlay`:
+  // this sheet edits `players` in doubles but `teamNames` in singles, where
+  // `players` still holds whatever creation put there.
+  //
+  // Remembered on Save rather than after the write lands, unlike /new. There
+  // the upsert failing means no match exists at all; here the row already
+  // exists, the meta write is debounced-and-retried, and `flush()` only logs
+  // its errors — there's no success signal to gate on, and no harm in
+  // remembering a name the operator deliberately typed.
+  const p = v.players ?? { a1: '', a2: '', b1: '', b2: '' };
+  const t = v.teamNames ?? { a: '', b: '' };
+  rememberPlayers(
+    namesInPlay(
+      !!v.isDoubles,
+      [p.a1 ?? '', p.a2 ?? '', p.b1 ?? '', p.b2 ?? ''],
+      [t.a ?? '', t.b ?? '']
+    )
+  );
 };
 
 const settingsOpen = ref(false);

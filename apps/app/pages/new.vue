@@ -19,9 +19,11 @@ import { ulid } from 'ulid';
 import { computed, nextTick, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import LookAndFeelCards from '~/components/match/LookAndFeelCards.vue';
+import PlayerChips from '~/components/match/PlayerChips.vue';
 import SportPicker from '~/components/match/SportPicker.vue';
 import ThemePickerDialog from '~/components/match/ThemePickerDialog.vue';
 import { joinNames } from '~/lib/partner-swap';
+import { namesInPlay } from '~/lib/recent-players';
 import { SPORTS, type SportId } from '~/lib/sports';
 import { useUserStore } from '~/stores/user';
 
@@ -40,7 +42,13 @@ const matchId = ref(ulid());
 // doubles matches in an evening — and none of it is match-specific the way the
 // names are. Only viable because the format summary now sits at the very top of
 // the form: the restored format is the first line you read, and doubles visibly
-// turns two name fields into four. Names are deliberately never remembered.
+// turns two name fields into four.
+//
+// Names are still never *restored into the fields* — every match starts blank,
+// because a silently prefilled wrong opponent is worse than typing. They are
+// instead offered as tappable chips under each field (`useRecentPlayers` +
+// PlayerChips), which is the same club-evening argument as the sticky format
+// with the operator still making the choice.
 type StoredFormat = {
   sport: SportId;
   isDoubles: boolean;
@@ -107,6 +115,48 @@ const matchLength = ref<MatchLength>(
 const bestOfN = ref<number>(seedBestOf);
 const teamA = ref({ p1: '', p2: '' });
 const teamB = ref({ p1: '', p2: '' });
+
+// Device-local MRU list of previously used names, surfaced as chips under each
+// field. Written in `createMatch()` below, never before — a match that failed
+// to create shouldn't seed the list.
+// Destructured so `recentNames` is a top-level ref the template unwraps —
+// `recentPlayers.names` would reach the template as the Ref itself.
+const {
+  names: recentNames,
+  remember: rememberPlayers,
+  remove: removeRecent,
+  restore: restoreRecents,
+  hintDismissed,
+} = useRecentPlayers();
+
+// Undo rather than a confirm dialog. Removal is reversible and low-stakes, and
+// a dialog on every prune would cost more than the mistake it prevents — but
+// the gesture can misfire (a slow tap reads as a long-press), so there has to
+// be a way back.
+const onRemoveRecent = (name: string) => {
+  const snapshot = removeRecent(name);
+  toast(`Removed ${name}`, {
+    action: { label: 'Undo', onClick: () => restoreRecents(snapshot) },
+  });
+};
+
+// Passed to every chip row as `exclude`, this field included. Excluding the
+// row's own field is what makes it collapse once that field holds a name the
+// list already knows, without any focus tracking (see PlayerChips).
+//
+// Gated on isDoubles via the shared rule, and that guard is load-bearing
+// rather than tidiness: flipping Doubles → Singles hides the two partner
+// inputs but never clears their refs. Reading all four unconditionally would
+// silently drop those stale partners out of the chip rows, and — since
+// createMatch reuses this same array — file them into the recents list as
+// players who never played.
+const enteredNames = computed(() =>
+  namesInPlay(
+    isDoubles.value,
+    [teamA.value.p1, teamA.value.p2, teamB.value.p1, teamB.value.p2],
+    [teamA.value.p1, teamB.value.p1]
+  )
+);
 const eventName = ref('');
 const round = ref('');
 const courtLabel = ref('');
@@ -314,11 +364,19 @@ const createMatch = async () => {
       is_doubles: isDoubles.value,
       team_name_a: formatNames(teamA.value).trim() || null,
       team_name_b: formatNames(teamB.value).trim() || null,
+      // Partner slots gated on isDoubles for the same reason `enteredNames`
+      // is: flipping Doubles → Singles hides those inputs without clearing
+      // their refs, so an ungated write files partners into the row for a
+      // singles match that has none. `team_name_a/b` was already safe via
+      // formatNames; this brings `players` in line. No known reader is
+      // affected today (themes read team_name_* when is_doubles is false, and
+      // the rematch prefill takes its singles branch), but the row shouldn't
+      // carry names the match doesn't have.
       players: {
         a1: teamA.value.p1.trim(),
-        a2: teamA.value.p2.trim(),
+        a2: isDoubles.value ? teamA.value.p2.trim() : '',
         b1: teamB.value.p1.trim(),
-        b2: teamB.value.p2.trim(),
+        b2: isDoubles.value ? teamB.value.p2.trim() : '',
       },
       event_name: eventName.value.trim() || null,
       round: round.value.trim() || null,
@@ -336,6 +394,12 @@ const createMatch = async () => {
     toast.error("Couldn't create match. Check your connection and try again.");
     return;
   }
+  // Seed the suggestion chips for the next match. After the upsert so a failed
+  // create can't pollute the list, and before navigating since these refs go
+  // away with the page. Singles leaves the two partner slots blank; they're
+  // dropped on the way in.
+  rememberPlayers(enteredNames.value);
+
   // Claim the match for this device *before* navigating. `/matches` and the
   // home "Continue scoring" card both list `sb:scored:*`, which until now was
   // only written by the first score tap — so a match created and abandoned
@@ -539,6 +603,19 @@ const createMatch = async () => {
           :aria-label="isDoubles ? 'Team A player 1' : undefined"
           class="h-11"
         />
+        <PlayerChips
+          :list="recentNames"
+          :query="teamA.p1"
+          :exclude="enteredNames"
+          :label="
+            isDoubles
+              ? 'Recent players for Team A player 1'
+              : 'Recent players for Player 1'
+          "
+          :show-hint="!hintDismissed"
+          @pick="(n) => (teamA.p1 = n)"
+          @remove="onRemoveRecent"
+        />
         <!-- The section <Label> points at p1, so in doubles the partner field
              would otherwise reach a screen reader as an unlabelled textbox
              ("edit text" with only the visual placeholder to go on). -->
@@ -550,6 +627,15 @@ const createMatch = async () => {
           placeholder="Player 2"
           aria-label="Team A player 2"
           class="h-11 mt-2"
+        />
+        <PlayerChips
+          v-if="isDoubles"
+          :list="recentNames"
+          :query="teamA.p2"
+          :exclude="enteredNames"
+          label="Recent players for Team A player 2"
+          @pick="(n) => (teamA.p2 = n)"
+          @remove="onRemoveRecent"
         />
       </section>
 
@@ -568,6 +654,18 @@ const createMatch = async () => {
           :aria-label="isDoubles ? 'Team B player 1' : undefined"
           class="h-11"
         />
+        <PlayerChips
+          :list="recentNames"
+          :query="teamB.p1"
+          :exclude="enteredNames"
+          :label="
+            isDoubles
+              ? 'Recent players for Team B player 1'
+              : 'Recent players for Player 2'
+          "
+          @pick="(n) => (teamB.p1 = n)"
+          @remove="onRemoveRecent"
+        />
         <Input
           v-if="isDoubles"
           id="team-b-p2"
@@ -576,6 +674,15 @@ const createMatch = async () => {
           placeholder="Player 2"
           aria-label="Team B player 2"
           class="h-11 mt-2"
+        />
+        <PlayerChips
+          v-if="isDoubles"
+          :list="recentNames"
+          :query="teamB.p2"
+          :exclude="enteredNames"
+          label="Recent players for Team B player 2"
+          @pick="(n) => (teamB.p2 = n)"
+          @remove="onRemoveRecent"
         />
       </section>
 
