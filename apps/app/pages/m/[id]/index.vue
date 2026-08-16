@@ -11,10 +11,19 @@ import {
   AlertDialogTitle,
 } from '@sb/layer-ui/components/ui/alert-dialog';
 import { Button } from '@sb/layer-ui/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@sb/layer-ui/components/ui/dropdown-menu';
 import type { ThemeSurface } from '@sb/themes';
 import { useClipboard } from '@vueuse/core';
 import {
+  Check,
   Film,
+  // Aliased — the bare name would shadow the JS global inside this module.
+  Infinity as InfinityIcon,
   QrCode,
   Radio,
   RefreshCw,
@@ -188,6 +197,91 @@ const onPickTheme = ({
 }) => {
   if (surface === 'overlay') overlayTheme.value = id;
   if (surface === 'scoreboard') scoreboardTheme.value = id;
+};
+
+// --- Permanent OBS URL ------------------------------------------------------
+// The zero-navigation half of the dynamic-URL feature. Between matches the
+// operator is already on this page, so putting a match on air belongs here —
+// routing them to /d/{id} to hunt for it in a list is barely better than
+// copying a fresh overlay URL every game, which is the thing we're removing.
+const {
+  urls: dynamicUrls,
+  loaded: dynamicLoaded,
+  refresh: refreshDynamicUrls,
+  bind: bindDynamic,
+  createAndBind,
+  urlFor: dynamicUrlFor,
+  showingMatch,
+  // Realtime: rebinding from another device should update this row's "On air"
+  // state here too, not just on the list.
+} = useDynamicUrls({ realtime: true });
+
+const isSignedIn = computed(() => userStore.isAuthenticated);
+
+// Which of my URLs (if any) is currently showing THIS match. Drives the row's
+// "On air" state so the operator can tell at a glance whether they already
+// bound it — without this they tap twice out of doubt.
+const onAirUrl = computed(() => showingMatch(matchId.value));
+
+watch(
+  isSignedIn,
+  (signedIn) => {
+    if (signedIn) refreshDynamicUrls();
+  },
+  { immediate: true }
+);
+
+const revealDynamicUrl = (id: string) => {
+  openQr({
+    url: dynamicUrlFor(id),
+    title: 'Permanent OBS URL',
+    description:
+      'Paste this into an OBS browser source once. After that, tap "Put on air" on any match and OBS follows — you never edit the browser source again.',
+  });
+};
+
+const onPutOnAir = async (urlId?: string) => {
+  if (!isSignedIn.value) return;
+
+  // The list is fetched by an un-awaited watch, so a fast tap can arrive while
+  // it's still empty. Without this, the "no URL yet" branch below would fire
+  // for an operator who already has one and silently mint a second.
+  if (!dynamicLoaded.value) await refreshDynamicUrls();
+
+  // First tap ever: create AND reveal. Creating silently would report success
+  // while doing nothing in OBS, because the operator has never seen this URL
+  // to paste it anywhere — a tap that lies is worse than one that fails.
+  if (dynamicUrls.value.length === 0) {
+    const created = await createAndBind(matchId.value);
+    if (!created) {
+      toast.error("Couldn't create your OBS URL");
+      return;
+    }
+    revealDynamicUrl(created.id);
+    return;
+  }
+
+  const target = urlId ?? dynamicUrls.value[0]?.id;
+  if (!target) return;
+  const entry = dynamicUrls.value.find((u) => u.id === target);
+  const previous = entry?.currentMatchId ?? null;
+
+  const ok = await bindDynamic(target, matchId.value);
+  if (!ok) {
+    toast.error("Couldn't switch — try again");
+    return;
+  }
+  // Undo, not a confirm dialog. What you're replacing is already visible on
+  // the bind list, and a modal on every switch is exactly the friction this
+  // feature exists to remove — including for anyone deliberately cutting
+  // between two simultaneous live courts, where the outgoing match is *always*
+  // still in progress.
+  toast.success(`${entry?.name ?? 'OBS'} is showing this match`, {
+    action: {
+      label: 'Undo',
+      onClick: () => bindDynamic(target, previous),
+    },
+  });
 };
 
 // E2.8 — write token for delegated scoring. Anon matches stay open
@@ -389,28 +483,111 @@ const onRegenerateToken = async () => {
           </Button>
         </div>
 
-        <div
-          class="p-3 bg-surface border border-border rounded-md flex gap-3 items-center"
-        >
-          <span
-            class="size-8 rounded-lg bg-surface-2 text-fg-muted inline-flex items-center justify-center flex-shrink-0"
-          >
-            <Radio class="size-4" />
-          </span>
-          <span class="flex-1 min-w-0">
-            <span class="block text-sm font-semibold">Stream overlay</span>
-            <span class="block text-xs text-fg-muted mt-0.5">
-              Paste into an OBS browser source
+        <div class="p-3 bg-surface border border-border rounded-md">
+          <div class="flex gap-3 items-center">
+            <span
+              class="size-8 rounded-lg bg-surface-2 text-fg-muted inline-flex items-center justify-center flex-shrink-0"
+            >
+              <Radio class="size-4" />
             </span>
-          </span>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            @click="copy(urls.overlay, 'Overlay URL')"
-          >
-            Copy URL
-          </Button>
+            <span class="flex-1 min-w-0">
+              <span class="block text-sm font-semibold">Stream overlay</span>
+              <span class="block text-xs text-fg-muted mt-0.5">
+                Paste into an OBS browser source
+              </span>
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              @click="copy(urls.overlay, 'Overlay URL')"
+            >
+              Copy URL
+            </Button>
+          </div>
+
+          <!-- Permanent-URL affordance. One slot, three states: the pitch when
+               signed out, the send action when there's nothing on air, and the
+               current binding when there is. -->
+          <div class="mt-3 pt-3 border-t border-border">
+            <NuxtLink
+              v-if="!isSignedIn"
+              :to="`/auth/signin?redirect=/m/${matchId}`"
+              class="flex items-center gap-2 text-xs text-fg-muted hover:text-fg"
+            >
+              <InfinityIcon class="size-3.5 shrink-0" />
+              <span>
+                Doing this every match?
+                <span class="underline underline-offset-2"
+                  >Sign in for a permanent URL</span
+                >
+              </span>
+            </NuxtLink>
+
+            <div
+              v-else-if="onAirUrl"
+              class="flex items-center gap-2 justify-between"
+            >
+              <span class="flex items-center gap-2 min-w-0">
+                <Check class="size-4 shrink-0 text-brand" />
+                <span class="min-w-0 truncate text-xs">
+                  <span class="font-semibold"
+                    >On air on {{ onAirUrl.name }}</span
+                  >
+                  <span class="text-fg-muted"> · {{ overlayName }} theme</span>
+                </span>
+              </span>
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                class="shrink-0"
+                @click="navigateTo(`/d/${onAirUrl.id}`)"
+              >
+                Manage
+              </Button>
+            </div>
+
+            <div v-else class="flex items-center gap-2 justify-between">
+              <span class="text-xs text-fg-muted min-w-0">
+                One URL in OBS, always showing the match you pick.
+              </span>
+              <!-- Single URL is the normal case and stays a plain one-tap
+                   button; the picker only appears once there's a genuine
+                   "which one?" to answer. -->
+              <Button
+                v-if="dynamicUrls.length < 2"
+                type="button"
+                variant="default"
+                size="sm"
+                class="shrink-0"
+                @click="onPutOnAir()"
+              >
+                Put on air
+              </Button>
+              <DropdownMenu v-else>
+                <DropdownMenuTrigger as-child>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    class="shrink-0"
+                  >
+                    Put on air
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    v-for="u in dynamicUrls"
+                    :key="u.id"
+                    @select="onPutOnAir(u.id)"
+                  >
+                    {{ u.name }}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
         </div>
 
         <div

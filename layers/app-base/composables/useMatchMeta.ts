@@ -72,6 +72,11 @@ const fromRow = (row: {
 export function useMatchMeta(matchId: Ref<string>) {
   const supabase = useSupabaseClient();
   const meta = ref<MatchMeta>({});
+  // True once the first fetch for the current matchId has resolved. Consumers
+  // that must not paint until real names exist gate on this — notably the
+  // dynamic-URL overlay's double buffer, which would otherwise crossfade to
+  // "Team A / Team B" and then pop to the real names on air.
+  const loaded = ref(false);
   // Snapshot of the last value applied from Supabase. The watch-driven
   // update compares to this and skips when they match — that's how we
   // suppress the originator's own UPDATE echoing back as a duplicate write.
@@ -102,9 +107,13 @@ export function useMatchMeta(matchId: Ref<string>) {
       .maybeSingle();
     if (error) {
       console.warn('[useMatchMeta] fetch failed', error);
+      // Still mark loaded — a consumer gating a swap on this must not hang
+      // forever because one fetch failed.
+      loaded.value = true;
       return;
     }
     if (data) applyRemote(data);
+    loaded.value = true;
   };
 
   const updateRemote = async () => {
@@ -200,6 +209,7 @@ export function useMatchMeta(matchId: Ref<string>) {
   });
 
   watch(matchId, () => {
+    loaded.value = false;
     fetchRemote();
     subscribeRealtime();
   });
@@ -237,5 +247,5 @@ export function useMatchMeta(matchId: Ref<string>) {
   // flush, fast nav (sheet close → /matches) races the debounce.
   const flush = () => updateRemote();
 
-  return { meta, teamNames, players, flush };
+  return { meta, teamNames, players, flush, loaded };
 }

@@ -4,11 +4,11 @@
 // Format (preset + gamesToWin) is read via useFormat, which hits the matches
 // row in Supabase — same source on every device.
 
-import { computed, type Ref } from "vue";
-import { getPreset } from "@sb/engine";
+import { getPreset } from '@sb/engine';
+import { type Ref, computed } from 'vue';
 
 export function useMatchState(matchId: Ref<string>) {
-  const { events, append, replace } = useEvents(matchId);
+  const { events, append, replace, loaded } = useEvents(matchId);
   const { preset, config } = useFormat(matchId);
 
   const presetEntry = computed(() => getPreset(preset.value));
@@ -24,8 +24,19 @@ export function useMatchState(matchId: Ref<string>) {
   // read-only surfaces should never write events.)
 
   const state = computed(() =>
-    presetEntry.value.reducer(events.value, config.value),
+    presetEntry.value.reducer(events.value, config.value)
   );
 
-  return { events, append, replace, config, state, preset: presetEntry };
+  // `loaded` is passed through from useEvents — true once the event log for
+  // this matchId has been reconciled. The dynamic-URL overlay gates its
+  // crossfade on it so a swapped-in match never paints at 0–0 first.
+  return {
+    events,
+    append,
+    replace,
+    config,
+    state,
+    preset: presetEntry,
+    loaded,
+  };
 }

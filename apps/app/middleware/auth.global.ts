@@ -6,28 +6,32 @@
 //     OPTIONAL and unlocks history, ownership, premium features.
 //   - auth pages themselves
 //   - viewer surfaces (/m/*/scoreboard, /m/*/overlay, /d/*/overlay)
-// Pages requiring sign-in (today): /profile. Future: /history, /admin, etc.
+// Pages requiring sign-in (today): /profile, /d/* setup. Future: /history, /admin, etc.
 //
 // Per-route permission gates: set `definePageMeta({ requiredPermission: 'match.create' })` on a page.
 
-import { defineNuxtRouteMiddleware, navigateTo, createError } from "#app";
-import { useUserStore } from "@/stores/user";
-import { useRolePermissions } from "@/composables/useRolePermissions";
+import { useRolePermissions } from '@/composables/useRolePermissions';
+import { useUserStore } from '@/stores/user';
+import { createError, defineNuxtRouteMiddleware, navigateTo } from '#app';
 
 // Routes anyone can hit without being signed in. Match against `to.path`.
 const PUBLIC_PREFIXES = [
-  "/auth/", // signin / signup / forgot / reset / callback
-  "/m/", // match hub + control + scoreboard + overlay (free scorer)
-  "/d/", // dynamic-URL bindings (operator pre-publishes a stable overlay link)
+  '/auth/', // signin / signup / forgot / reset / callback
+  '/m/', // match hub + control + scoreboard + overlay (free scorer)
+  // NOTE: "/d/" is deliberately NOT here. Dynamic URLs are signed-in only —
+  // the setup/bind page needs an account. `/d/{id}/overlay` stays public via
+  // PUBLIC_SUFFIXES below, and that split is load-bearing: OBS's embedded
+  // browser is never authenticated, so gating the overlay too would kill the
+  // feature in the one place it has to work.
 ];
 
 // Anonymous-OK paths. The scorer is free — anyone can score without signing up.
 // Sign-in is optional and unlocks ownership, history, and Pro features later.
-const PUBLIC_EXACT = new Set<string>(["/", "/new", "/matches"]);
+const PUBLIC_EXACT = new Set<string>(['/', '/new', '/matches']);
 
 // Suffix-based public surfaces — the viewer-facing routes broadcasters and audience hit.
 // e.g. /m/abc/scoreboard, /m/abc/overlay, /d/abc/overlay
-const PUBLIC_SUFFIXES = ["/scoreboard", "/overlay"];
+const PUBLIC_SUFFIXES = ['/scoreboard', '/overlay'];
 
 const isPublicRoute = (path: string): boolean => {
   if (PUBLIC_EXACT.has(path)) return true;
@@ -37,9 +41,9 @@ const isPublicRoute = (path: string): boolean => {
 };
 
 const AUTH_PAGES = new Set<string>([
-  "/auth/signin",
-  "/auth/signup",
-  "/auth/forgot-password",
+  '/auth/signin',
+  '/auth/signup',
+  '/auth/forgot-password',
 ]);
 
 export default defineNuxtRouteMiddleware(async (to) => {
@@ -54,7 +58,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   // Bounce signed-in users away from signin/signup/forgot.
   if (AUTH_PAGES.has(to.path) && userStore.isAuthenticated) {
-    return navigateTo("/", { replace: true });
+    return navigateTo('/', { replace: true });
   }
 
   // Allow public surfaces to skip the gate.
@@ -63,8 +67,8 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // Gate everything else.
   if (!userStore.isAuthenticated) {
     return navigateTo(
-      { path: "/auth/signin", query: { redirect: to.fullPath } },
-      { replace: true },
+      { path: '/auth/signin', query: { redirect: to.fullPath } },
+      { replace: true }
     );
   }
 
@@ -77,8 +81,8 @@ export default defineNuxtRouteMiddleware(async (to) => {
     if (!granted) {
       throw createError({
         statusCode: 403,
-        statusMessage: "Access denied",
-        message: "You do not have permission to access this page.",
+        statusMessage: 'Access denied',
+        message: 'You do not have permission to access this page.',
         fatal: true,
       });
     }

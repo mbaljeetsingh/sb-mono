@@ -34,6 +34,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      dynamic_urls: {
+        Row: {
+          created_at: string
+          current_match_id: string | null
+          first_bound_at: string | null
+          id: string
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_match_id?: string | null
+          first_bound_at?: string | null
+          id: string
+          name?: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_match_id?: string | null
+          first_bound_at?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dynamic_urls_current_match_id_fkey"
+            columns: ["current_match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           device_id: string
