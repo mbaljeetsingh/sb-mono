@@ -37,6 +37,9 @@ type MatchLength = 'single' | 'best-of';
 // no orphan data anywhere.
 const matchId = ref(ulid());
 
+// Bootstrap binding for a permanent OBS URL — see the call site in createMatch.
+const { autoBindOnCreate: autoBindObsUrl } = useDynamicUrls();
+
 // Format is sticky per browser. Re-picking the same sport / doubles / best-of
 // is the single most repeated action in the app — a club scorer runs ten
 // doubles matches in an evening — and none of it is match-specific the way the
@@ -414,6 +417,20 @@ const createMatch = async () => {
   await markCreated(matchId.value).catch((err) => {
     console.warn('[/new] local match registration failed', err);
   });
+
+  // Bootstrap a never-used OBS URL onto this match, so an operator who set one
+  // up but hasn't bound anything yet doesn't stare at a transparent overlay.
+  // Fires only while `first_bound_at` is NULL — gating on "nothing currently
+  // bound" instead would mean clearing the overlay during a break and then
+  // prepping the next match shoves it straight on air.
+  //
+  // Deliberately NOT awaited: it costs two round-trips and nothing downstream
+  // depends on it, so awaiting would add Supabase latency to every match
+  // creation for signed-in users. It settles after navigation just fine.
+  autoBindObsUrl(matchId.value).catch((err) => {
+    console.warn('[/new] auto-bind of OBS URL failed', err);
+  });
+
   navigateTo(`/m/${matchId.value}`);
 };
 </script>

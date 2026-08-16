@@ -4,6 +4,7 @@ import { useInfiniteScroll } from '@vueuse/core';
 import { Plus, Trophy } from 'lucide-vue-next';
 import { computed, onUnmounted, ref, watch } from 'vue';
 import MatchListItem from '~/components/match/MatchListItem.vue';
+import { useDynamicUrls } from '~/composables/useDynamicUrls';
 import { collectLocalMatchIds } from '~/lib/localMatches';
 import { type MatchSummary, fetchMatchSummaries } from '~/lib/matchSummaries';
 import { useUserStore } from '~/stores/user';
@@ -28,6 +29,15 @@ const supabase = useSupabaseClient();
 const userStore = useUserStore();
 const ownerId = computed(() => userStore.currentUser?.id ?? '');
 const isAuthed = computed(() => userStore.isAuthenticated);
+
+// Which listed match (if any) each permanent OBS URL is showing. Realtime so
+// the badge survives the feature's own premise — rebinding from a phone while
+// this list is open on a laptop.
+const { urls: dynamicUrls, refresh: refreshDynamicUrls } = useDynamicUrls({
+  realtime: true,
+});
+const onAirName = (matchId: string) =>
+  dynamicUrls.value.find((u) => u.currentMatchId === matchId)?.name ?? null;
 
 const matches = ref<MatchRow[]>([]);
 const loading = ref(false);
@@ -170,10 +180,16 @@ useInfiniteScroll(
   { distance: 200 }
 );
 
-onMounted(reload);
+onMounted(() => {
+  reload();
+  refreshDynamicUrls();
+});
 // Re-source the list when auth state flips (sign-in claim → matches return
 // from Supabase; sign-out → fall back to localStorage view).
-watch(isAuthed, reload);
+watch(isAuthed, () => {
+  reload();
+  refreshDynamicUrls();
+});
 
 const onMatchDeleted = (id: string) => {
   matches.value = matches.value.filter((m) => m.id !== id);
@@ -240,6 +256,8 @@ const emptyLabel = computed(() =>
         :court-label="m.court_label"
         :updated-at="m.updated_at"
         :summary="summaries.get(m.id) ?? null"
+        :on-air="onAirName(m.id)"
+        :on-air-named="dynamicUrls.length > 1"
         @deleted="onMatchDeleted"
       />
     </ul>

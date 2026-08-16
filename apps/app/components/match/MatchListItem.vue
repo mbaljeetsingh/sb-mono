@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@sb/layer-ui/components/ui/dropdown-menu';
-import { MoreVertical, Trash2, Trophy } from 'lucide-vue-next';
+import { MoreVertical, Radio, Trash2, Trophy } from 'lucide-vue-next';
 import { computed } from 'vue';
 import SportGlyph from '~/components/common/SportGlyph.vue';
 import DeleteMatchDialog from '~/components/match/DeleteMatchDialog.vue';
@@ -33,6 +33,16 @@ const props = defineProps<{
   /** Status + scoreline from lib/matchSummaries. Optional — rows render
    *  fine without it while summaries load. */
   summary?: MatchSummary | null;
+  /** Name of the permanent OBS URL currently showing this match, or null.
+   *  Deliberately separate from `summary.status`: LIVE describes the match,
+   *  ON AIR describes the broadcast, and a match can be either without the
+   *  other — a finished match left up between games is still on air. */
+  onAir?: string | null;
+  /** Render the URL's name inside the badge. Set only when the account has
+   *  more than one — with a single stream the name answers a question nobody
+   *  asked ("ON AIR · Stream 1"), but with two it's the only thing that says
+   *  which feed you're looking at. */
+  onAirNamed?: boolean;
 }>();
 
 const formatBadge = computed(() => {
@@ -140,6 +150,20 @@ const onDeleted = () => emit('deleted', props.id);
               class="shrink-0 rounded-sm bg-brand/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-brand"
             >
               {{ formatBadge }}
+            </span>
+            <!-- Sits on the name line rather than beside LIVE/FINAL on the
+                 second: those describe the match, this describes the stream,
+                 and colliding them reads as one status with two values. -->
+            <span
+              v-if="onAir"
+              :title="`Showing on ${onAir}`"
+              class="flex shrink-0 items-center gap-1 rounded-sm bg-brand px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-brand-foreground"
+            >
+              <Radio class="size-3" />
+              ON AIR
+              <span v-if="onAirNamed" class="max-w-24 truncate font-semibold">
+                · {{ onAir }}
+              </span>
             </span>
           </span>
           <!-- Second line: identity metadata on the left, status + scoreline

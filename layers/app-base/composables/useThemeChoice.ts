@@ -21,6 +21,11 @@ export function useThemeChoice(matchId: Ref<string>) {
   const supabase = useSupabaseClient();
   const overlay = ref<string>(DEFAULT_OVERLAY);
   const scoreboard = ref<string>(DEFAULT_SCOREBOARD);
+  // True once the first fetch for the current matchId has resolved. The
+  // dynamic-URL overlay gates its crossfade on this: themes differ in size and
+  // anchor position, so swapping before the real theme lands would render the
+  // incoming match in `broadcast-classic` and then visibly re-layout on air.
+  const loaded = ref(false);
   let lastSeenRemote: string | null = null;
   let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
   // Per-instance unique channel-name suffix — see useEvents for rationale.
@@ -55,9 +60,12 @@ export function useThemeChoice(matchId: Ref<string>) {
       .maybeSingle();
     if (error) {
       console.warn('[useThemeChoice] fetch failed', error);
+      // Mark loaded anyway so a consumer gating a swap on this can't hang.
+      loaded.value = true;
       return;
     }
     if (data) applyRemote(data);
+    loaded.value = true;
   };
 
   const updateRemote = async () => {
@@ -118,6 +126,7 @@ export function useThemeChoice(matchId: Ref<string>) {
   });
 
   watch(matchId, () => {
+    loaded.value = false;
     fetchRemote();
     subscribeRealtime();
   });
@@ -140,5 +149,5 @@ export function useThemeChoice(matchId: Ref<string>) {
     () => themeRegistry[scoreboard.value]?.manifest.name ?? '—'
   );
 
-  return { overlay, scoreboard, overlayName, scoreboardName };
+  return { overlay, scoreboard, overlayName, scoreboardName, loaded };
 }

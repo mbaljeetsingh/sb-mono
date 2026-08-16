@@ -325,13 +325,19 @@ Schema:
 ```sql
 dynamic_urls(
   id text primary key,                 -- ULID
-  owner_id uuid?,
+  owner_id uuid not null,              -- signed-in only
+  name text not null,                  -- operator-facing label
   current_match_id text?,
+  first_bound_at timestamptz?,         -- null = never bound
   created_at, updated_at
 );
 ```
 
-Resolution: the overlay route `/d/[id]` reads `dynamic_urls.current_match_id`, then redirects/renders as `/m/[matchId]/overlay`. Realtime subscription on `dynamic_urls` row updates the page when the binding changes.
+**Signed-in only**, unlike the rest of the app: a permanent URL whose id lives only in localStorage is not recoverable if site data is cleared, and an ownerless row would need a permissive rebind policy — acceptable for a throwaway anonymous match URL, not for one that is reused on air. Anonymous scoring and `/m/{id}/overlay` are unaffected.
+
+RLS is deliberately asymmetric: **read is public-by-id** (OBS's browser is never authenticated), **writes are owner-only**. Middleware gates `/d/*` but keeps `/d/*/overlay` public.
+
+Resolution: `/d/[id]/overlay` reads `dynamic_urls.current_match_id` and subscribes to Realtime UPDATE. Rebinding double-buffers — the outgoing match stays on air until the incoming one's events, meta, and theme have all loaded, then they crossfade — because the overlay inherits each match's own theme, and themes differ in size and anchor position. `first_bound_at` gates one-time auto-bind on match creation.
 
 ## 7. Multi-tenancy strategy (v3 forward-compat)
 

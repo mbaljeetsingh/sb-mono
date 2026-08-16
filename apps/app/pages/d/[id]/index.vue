@@ -1,98 +1,162 @@
 <script setup lang="ts">
 import { Button } from '@sb/layer-ui/components/ui/button';
-import { useClipboard, useStorage } from '@vueuse/core';
-import { ArrowLeft } from 'lucide-vue-next';
+import { Input } from '@sb/layer-ui/components/ui/input';
+import { Label } from '@sb/layer-ui/components/ui/label';
+import { themes as themeRegistry } from '@sb/themes';
+import { useClipboard } from '@vueuse/core';
+import { Check, Radio } from 'lucide-vue-next';
+import { computed, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
-import { collectLocalMatchIds } from '~/lib/localMatches';
+import {
+  DYNAMIC_URL_NAME_MAX,
+  useDynamicUrls,
+} from '~/composables/useDynamicUrls';
+import { type MatchSummary, fetchMatchSummaries } from '~/lib/matchSummaries';
 import { useUserStore } from '~/stores/user';
 
-definePageMeta({ layout: false });
+// Setup + bind surface for one dynamic URL. Signed-in only — the middleware
+// gates /d/* (but not /d/*/overlay, which OBS hits anonymously).
+useSeoMeta({ title: 'OBS URL' });
 
 const route = useRoute();
 const dynamicId = computed(() => String(route.params.id ?? ''));
 
-// v1: dynamic URL bindings live in localStorage. v1.x will move to a
-// dynamic_urls table in Supabase per ARCHITECTURE.md §6.
-// useStorage gives us cross-tab sync — operator binds on phone, OBS browser
-// source on the laptop swaps automatically.
-const boundMatchId = useStorage<string | null>(
-  computed(() => `sb:dynamic:${dynamicId.value}`),
-  null
-);
-
-const dynamicUrl = computed(() => {
-  if (typeof window === 'undefined') return '';
-  return `${window.location.origin}/d/${dynamicId.value}`;
-});
-
-const overlayUrl = computed(() => {
-  if (typeof window === 'undefined') return '';
-  return `${window.location.origin}/d/${dynamicId.value}/overlay`;
-});
-
-// Recent matches from Supabase — most recently updated first. Same scoping
-// as /matches: signed-in users see only their own rows (owner_id = uid);
-// signed-out users see only matches scored on this device (filtered by the
-// IDs we have in localStorage). Without this filter the permissive
-// matches_read_by_id RLS would leak every other user's team names here.
-type RecentMatch = { id: string; teamA: string; teamB: string };
 const supabase = useSupabaseClient();
 const userStore = useUserStore();
+const {
+  urls,
+  loaded: urlsLoaded,
+  refresh,
+  rename,
+  bind,
+  unbind,
+  urlFor,
+} = useDynamicUrls();
+
+const url = computed(() => urls.value.find((u) => u.id === dynamicId.value));
+const overlayUrl = computed(() => urlFor(dynamicId.value));
+
+// Recent matches to bind. Owner-scoped only: the previous version also
+// accepted device-local anonymous matches, which no longer applies now that a
+// dynamic URL requires an account.
+type RecentMatch = {
+  id: string;
+  sport_preset: string;
+  config: { gamesToWin?: number } | null;
+  ended_at: string | null;
+  teamA: string;
+  teamB: string;
+  overlayThemeId: string;
+};
 const recent = ref<RecentMatch[]>([]);
+const summaries = ref<Map<string, MatchSummary>>(new Map());
 
 const refreshRecent = async () => {
-  let query = supabase
+  const ownerId = userStore.currentUser?.id;
+  if (!ownerId) {
+    recent.value = [];
+    return;
+  }
+  const { data, error } = await supabase
     .from('matches')
-    .select('id, team_name_a, team_name_b')
+    .select(
+      'id, sport_preset, config, ended_at, team_name_a, team_name_b, overlay_theme_id'
+    )
+    .eq('owner_id', ownerId)
     .order('updated_at', { ascending: false })
     .limit(10);
-
-  if (userStore.isAuthenticated && userStore.currentUser?.id) {
-    query = query.eq('owner_id', userStore.currentUser.id);
-  } else {
-    const ids = await collectLocalMatchIds();
-    if (ids.length === 0) {
-      recent.value = [];
-      return;
-    }
-    // Anon recents: only show matches this device scored that are still
-    // anon-owned. Excludes wt co-scorer sessions and view-only surfaces.
-    query = query.in('id', ids).is('owner_id', null);
-  }
-
-  const { data, error } = await query;
   if (error) {
     console.warn('[d/index] recent fetch failed', error);
     return;
   }
-  recent.value = (data ?? []).map((r) => ({
+  const rows = data ?? [];
+  recent.value = rows.map((r) => ({
     id: r.id,
+    sport_preset: r.sport_preset,
+    config: r.config as { gamesToWin?: number } | null,
+    ended_at: r.ended_at,
     teamA: r.team_name_a ?? '',
     teamB: r.team_name_b ?? '',
+    overlayThemeId: r.overlay_theme_id ?? 'broadcast-classic',
   }));
+  summaries.value = await fetchMatchSummaries(
+    supabase,
+    rows.map((r) => ({
+      id: r.id,
+      sport_preset: r.sport_preset,
+      config: r.config as { gamesToWin?: number } | null,
+      ended_at: r.ended_at,
+    }))
+  );
 };
 
-onMounted(refreshRecent);
-// Re-source when auth state flips (sign-in/out while on this page).
+onMounted(async () => {
+  await Promise.all([refresh(), refreshRecent()]);
+});
 watch(() => userStore.isAuthenticated, refreshRecent);
 
-// useStorage auto-persists assignments — `null` clears the entry as expected.
-const bind = (matchId: string) => {
-  boundMatchId.value = matchId;
-};
+// Theme name per match. Shown in the bind list because the overlay inherits
+// the *match's* theme — so binding can change the stream's look and geometry,
+// and the operator should see that before it happens rather than watch it
+// happen on air.
+const themeName = (id: string) => themeRegistry[id]?.manifest.name ?? '—';
 
-const unbind = () => {
-  boundMatchId.value = null;
-};
-
-// Reactive meta of the bound match — useMatchMeta swaps which storage entry
-// it reads when the bound id changes, so the "Now showing" pane updates
-// without manual JSON.parse boilerplate.
-const boundMatchIdRef = computed(() => boundMatchId.value ?? '');
-const { meta: boundMeta } = useMatchMeta(boundMatchIdRef as Ref<string>);
-const boundTeamNames = computed(() =>
-  boundMatchId.value ? (boundMeta.value.teamNames ?? null) : null
+const boundMatch = computed(() =>
+  recent.value.find((m) => m.id === url.value?.currentMatchId)
 );
+
+const onBind = async (matchId: string) => {
+  const previous = url.value?.currentMatchId ?? null;
+  const ok = await bind(dynamicId.value, matchId);
+  if (!ok) {
+    toast.error("Couldn't switch — try again");
+    return;
+  }
+  // Undo rather than a confirm dialog: the information that matters (which
+  // match is live, at what score) is already on the row you tapped, and a
+  // modal between every match is the friction this feature exists to remove.
+  toast.success('OBS switched to this match', {
+    action: {
+      label: 'Undo',
+      onClick: () => bind(dynamicId.value, previous),
+    },
+  });
+};
+
+const onUnbind = async () => {
+  const previous = url.value?.currentMatchId ?? null;
+  await unbind(dynamicId.value);
+  toast.success('Overlay cleared', {
+    action: {
+      label: 'Undo',
+      onClick: () => bind(dynamicId.value, previous),
+    },
+  });
+};
+
+// Rename. Local draft so each keystroke isn't a round-trip; committed on blur
+// or Enter.
+const nameDraft = ref('');
+watch(
+  url,
+  (u) => {
+    if (u && nameDraft.value === '') nameDraft.value = u.name;
+  },
+  { immediate: true }
+);
+
+const commitName = async () => {
+  const next = nameDraft.value.trim();
+  if (!url.value || !next || next === url.value.name) {
+    nameDraft.value = url.value?.name ?? '';
+    return;
+  }
+  const ok = await rename(dynamicId.value, next);
+  if (!ok) {
+    toast.error("Couldn't rename");
+    nameDraft.value = url.value.name;
+  }
+};
 
 const { copy: clipboardCopy } = useClipboard({ legacy: true });
 const copy = async (text: string, label = 'URL') => {
@@ -102,137 +166,177 @@ const copy = async (text: string, label = 'URL') => {
 </script>
 
 <template>
-  <div
-    class="min-h-screen bg-background text-foreground font-sans pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]"
-  >
-    <header
-      class="px-4 pt-[calc(env(safe-area-inset-top)+4rem)] pb-2 flex items-center justify-between"
-    >
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Back"
-        @click="navigateTo('/')"
-      >
-        <ArrowLeft class="size-4" />
-      </Button>
-      <span class="font-semibold">Dynamic URL</span>
-      <span class="size-9" />
-    </header>
-
-    <main class="px-4 pb-8">
-      <p class="text-sm text-fg-muted mb-4">
-        One OBS link. Swap matches all day.
+  <div class="mx-auto max-w-2xl px-4 pb-10">
+    <div v-if="urlsLoaded && !url" class="py-16 text-center">
+      <p class="text-sm text-fg-muted">
+        This OBS URL doesn't exist, or belongs to another account.
       </p>
+      <Button class="mt-4" @click="navigateTo('/profile')">
+        Go to your OBS URLs
+      </Button>
+    </div>
 
-      <!-- Your dynamic URL card -->
-      <div class="bg-brand text-brand-foreground rounded-lg p-4 mb-5">
+    <template v-else-if="url">
+      <div class="pt-4 pb-5">
+        <h1 class="text-xl font-semibold">{{ url.name }}</h1>
+        <p class="mt-1 text-sm text-fg-muted">
+          One OBS link. Point it at whichever match should be on air.
+        </p>
+      </div>
+
+      <!-- The permanent URL -->
+      <div class="mb-5 rounded-lg bg-brand p-4 text-brand-foreground">
         <div
-          class="text-[10px] tracking-[0.1em] uppercase opacity-85 font-semibold"
+          class="text-[10px] font-semibold uppercase tracking-[0.1em] opacity-85"
         >
-          Your dynamic OBS URL
+          Your permanent OBS URL
         </div>
-        <div class="font-mono text-sm mt-1.5 break-all">{{ overlayUrl }}</div>
-        <div class="flex gap-2 mt-3 items-center">
+        <div class="mt-1.5 break-all font-mono text-sm">{{ overlayUrl }}</div>
+        <div class="mt-3 flex items-center gap-2">
           <Button
             type="button"
             size="sm"
             class="bg-white text-brand hover:bg-white/90"
-            @click="copy(overlayUrl, 'Overlay URL')"
+            @click="copy(overlayUrl, 'OBS URL')"
           >
             Copy
           </Button>
-          <span class="text-[11px] opacity-85 font-mono"
-            >paste once into OBS</span
-          >
+          <span class="font-mono text-[11px] opacity-85">
+            paste once into OBS — never again
+          </span>
         </div>
+      </div>
+
+      <!-- Rename -->
+      <div class="mb-6">
+        <Label for="dynamic-url-name" class="text-xs text-fg-muted">
+          Name
+        </Label>
+        <Input
+          id="dynamic-url-name"
+          v-model="nameDraft"
+          :maxlength="DYNAMIC_URL_NAME_MAX"
+          class="mt-1.5"
+          placeholder="e.g. MacBook Air 13 stream"
+          @blur="commitName"
+          @keyup.enter="commitName"
+        />
+        <p class="mt-1.5 text-xs text-fg-subtle">
+          Only you see this. Renaming doesn't change the URL, so what's already
+          in OBS keeps working.
+        </p>
       </div>
 
       <!-- Now showing -->
       <div
-        class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
+        class="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle"
       >
         Now showing
       </div>
       <div
-        v-if="boundMatchId && boundTeamNames"
-        class="p-3 mb-2 rounded-md border-[1.5px] border-brand bg-surface"
+        v-if="boundMatch"
+        class="mb-6 rounded-md border-[1.5px] border-brand bg-surface p-3"
       >
-        <div class="flex justify-between items-baseline">
-          <div>
-            <span
-              class="px-1.5 py-0.5 rounded-sm bg-live-soft text-live text-[10px] font-bold tracking-wider uppercase"
-              >LIVE</span
-            >
-            <div class="text-[13px] font-semibold mt-1">
-              {{ boundTeamNames.a }} vs {{ boundTeamNames.b }}
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span
+                v-if="summaries.get(boundMatch.id)?.status === 'live'"
+                class="rounded-sm bg-live-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-live"
+              >
+                LIVE
+              </span>
+              <span
+                v-if="summaries.get(boundMatch.id)?.scoreline"
+                class="font-mono text-sm font-semibold tabular-nums"
+              >
+                {{ summaries.get(boundMatch.id)?.scoreline }}
+              </span>
+            </div>
+            <div class="mt-1 truncate text-[13px] font-semibold">
+              {{ boundMatch.teamA || 'Team A' }} vs
+              {{ boundMatch.teamB || 'Team B' }}
             </div>
             <div class="text-[11px] text-fg-muted">
-              ID: {{ boundMatchId.slice(0, 12) }}…
+              {{ themeName(boundMatch.overlayThemeId) }} theme
             </div>
           </div>
-          <Button
-            type="button"
-            variant="link"
-            size="sm"
-            class="text-brand"
-            @click="unbind"
-          >
-            Unbind
+          <Button type="button" variant="link" size="sm" @click="onUnbind">
+            Clear
           </Button>
         </div>
       </div>
       <div
         v-else
-        class="p-4 mb-2 rounded-md border-[1.5px] border-dashed border-border-strong bg-surface text-center text-fg-muted text-sm"
+        class="mb-6 rounded-md border-[1.5px] border-dashed border-border-strong bg-surface p-4 text-center text-sm text-fg-muted"
       >
-        No match bound yet. Pick one below.
+        Nothing bound — the overlay is transparent. Pick a match below.
       </div>
 
-      <!-- Recent matches list -->
+      <!-- Bind list -->
       <div
-        class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mt-5 mb-2"
+        class="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle"
       >
-        Recent matches — tap to bind
+        Your matches — tap to put on air
       </div>
       <div class="flex flex-col gap-1.5">
         <div
           v-for="m in recent"
           :key="m.id"
-          class="p-2.5 rounded-md border border-border bg-surface flex justify-between items-center"
+          class="flex items-center gap-3 rounded-md border border-border bg-surface p-3"
         >
-          <div class="text-[13px] flex-1 min-w-0 truncate">
-            {{ m.teamA }} vs {{ m.teamB }}
-            <span class="text-[10px] text-fg-subtle ml-1.5">
-              {{ m.id.slice(0, 8) }}…
-            </span>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            :class="
-              boundMatchId === m.id
-                ? 'bg-foreground text-background hover:bg-foreground/90'
-                : ''
-            "
-            @click="bind(m.id)"
+          <span
+            class="inline-flex size-8 flex-shrink-0 items-center justify-center rounded-lg bg-surface-2 text-fg-muted"
           >
-            {{ boundMatchId === m.id ? 'Bound' : 'Bind' }}
+            <Radio class="size-4" />
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center gap-2">
+              <span class="truncate text-sm font-medium">
+                {{ m.teamA || 'Team A' }} vs {{ m.teamB || 'Team B' }}
+              </span>
+              <span
+                v-if="summaries.get(m.id)?.status === 'live'"
+                class="flex shrink-0 items-center gap-1 rounded-full bg-live-soft px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-live"
+              >
+                <span class="h-1 w-1 rounded-full bg-live" />
+                LIVE
+              </span>
+              <span
+                v-if="summaries.get(m.id)?.scoreline"
+                class="shrink-0 font-mono text-xs font-semibold tabular-nums"
+              >
+                {{ summaries.get(m.id)?.scoreline }}
+              </span>
+            </span>
+            <span class="mt-0.5 block text-xs text-fg-muted">
+              {{ themeName(m.overlayThemeId) }} theme
+            </span>
+          </span>
+          <span
+            v-if="m.id === url.currentMatchId"
+            class="flex shrink-0 items-center gap-1 text-xs font-semibold text-brand"
+          >
+            <Check class="size-4" /> On air
+          </span>
+          <Button
+            v-else
+            type="button"
+            variant="secondary"
+            size="sm"
+            @click="onBind(m.id)"
+          >
+            Put on air
           </Button>
         </div>
-        <div
-          v-if="recent.length === 0"
-          class="p-4 rounded-md border border-dashed border-border-strong bg-surface text-center text-fg-muted text-sm"
-        >
-          No matches yet.
-          <a href="/new" class="underline">Create one →</a>
-        </div>
-      </div>
 
-      <p class="mt-6 text-[11px] text-fg-subtle text-center">
-        OBS source URL never changes · feed swaps via Realtime
-      </p>
-    </main>
+        <p
+          v-if="urlsLoaded && recent.length === 0"
+          class="py-6 text-center text-sm text-fg-muted"
+        >
+          No matches yet. Create one and it'll appear here.
+        </p>
+      </div>
+    </template>
   </div>
 </template>

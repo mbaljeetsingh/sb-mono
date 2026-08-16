@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { Button } from '@sb/layer-ui/components/ui/button';
-import { LogOut } from 'lucide-vue-next';
 import { Input } from '@sb/layer-ui/components/ui/input';
 import { Label } from '@sb/layer-ui/components/ui/label';
+import { LogOut } from 'lucide-vue-next';
 import { computed, ref, useTemplateRef, watchEffect } from 'vue';
 import { toast } from 'vue-sonner';
 // Value import — rendered in the template (don't let a lint autofix turn
 // this into `import type`; it only resolves at runtime via Nuxt auto-import).
 import ProfilePhotoUpload from '~/components/common/ProfilePhotoUpload.vue';
+import ObsUrls from '~/components/stream/ObsUrls.vue';
 import { useAuth } from '~/composables/useAuth';
 import { useUserStore } from '~/stores/user';
 
@@ -167,6 +168,8 @@ const savePassword = async () => {
         </Button>
       </form>
     </section>
+
+    <ObsUrls />
 
     <section class="space-y-4 rounded-lg border bg-card p-6 shadow-sm">
       <div>
