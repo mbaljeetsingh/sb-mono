@@ -976,18 +976,20 @@ const swapLabelB = computed(() =>
         </div>
       </div>
 
-      <!-- Court frame. Two team halves separated by the net — a 3px band of
+      <!-- Court frame. Two team halves separated by the net — a 4px band of
            the wrapper background showing through `gap`, painted with
-           --court-line so it reads as the net against the mats, which now sit
-           flush against this edge (--border-strong was tuned for a 1px
-           hairline between full-bleed halves). No border of its own: each
-           half paints its own court boundary, so anything here would stack a
-           third line around them. Render order follows `sidesSwapped` so the
+           foreground/50 so it reads as a real net against the mats, which
+           sit flush against this edge (the translucent --court-line washed
+           out to a faint seam here, and TeamRow suppresses its boundary on
+           the net edge so a serving team's tint can't overpaint the net).
+           foreground is safe now that only the 4px gap shows it — the old
+           warning about foreground lighting the frame up applied to a
+           full-perimeter border. Render order follows `sidesSwapped` so the
            swap is a real DOM reorder, not just a CSS reverse — TeamRow's
            orientation prop then puts the net on each half's correct inner
            edge. -->
       <div
-        class="relative m-2 flex flex-1 gap-[3px] overflow-hidden rounded-lg bg-court-line"
+        class="relative m-2 flex flex-1 gap-1 overflow-hidden rounded-lg bg-foreground/50"
         :class="layout === 'sideBySide' ? 'flex-row' : 'flex-col'"
       >
         <template

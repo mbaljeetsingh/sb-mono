@@ -208,6 +208,23 @@ const hasServiceLine = computed(
   () => geometry.value.serviceLineFromNet !== null
 );
 
+// Boundary line on the three OUTER sides only — the net edge belongs to the
+// net (a real court has no painted line there, and a serving team's tint
+// used to overpaint the net band drawn by the parent frame).
+const boundaryStyle = computed(() => {
+  const edgeProp: Record<string, string> = {
+    top: 'borderTopWidth',
+    bottom: 'borderBottomWidth',
+    left: 'borderLeftWidth',
+    right: 'borderRightWidth',
+  };
+  return {
+    ...matStyle.value,
+    borderWidth: '1.5px',
+    [edgeProp[netEdge.value]!]: '0px',
+  };
+});
+
 const sidelineStyles = computed<Record<string, string>[]>(() => {
   const inset = geometry.value.sidelineInset;
   if (!inset) return [];
@@ -420,9 +437,8 @@ watch(
          `rounded-lg overflow-hidden`), so the accent read as a clipped strip. -->
     <span
       class="pointer-events-none absolute z-[1] rounded-[2px] transition-colors"
-      :style="matStyle"
+      :style="boundaryStyle"
       :class="[
-        'border-[1.5px]',
         isServing
           ? team === 'A'
             ? 'border-team-a'
