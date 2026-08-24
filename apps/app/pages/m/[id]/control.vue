@@ -976,16 +976,18 @@ const swapLabelB = computed(() =>
         </div>
       </div>
 
-      <!-- Court frame. Two team halves separated by the net — a 1px line of
-           the wrapper background showing through `gap-px` (--border-strong,
-           not foreground/30: foreground is near-white in dark mode, which lit
-           the frame up). No border of its own: each half paints its own court
-           boundary, so anything here would stack a third line around them.
-           Render order follows `sidesSwapped` so the swap is a real DOM
-           reorder, not just a CSS reverse — TeamRow's orientation prop then
-           puts the net on each half's correct inner edge. -->
+      <!-- Court frame. Two team halves separated by the net — a 3px band of
+           the wrapper background showing through `gap`, painted with
+           --court-line so it reads as the net against the mats, which now sit
+           flush against this edge (--border-strong was tuned for a 1px
+           hairline between full-bleed halves). No border of its own: each
+           half paints its own court boundary, so anything here would stack a
+           third line around them. Render order follows `sidesSwapped` so the
+           swap is a real DOM reorder, not just a CSS reverse — TeamRow's
+           orientation prop then puts the net on each half's correct inner
+           edge. -->
       <div
-        class="relative m-2 flex flex-1 gap-px overflow-hidden rounded-lg bg-border-strong"
+        class="relative m-2 flex flex-1 gap-[3px] overflow-hidden rounded-lg bg-court-line"
         :class="layout === 'sideBySide' ? 'flex-row' : 'flex-col'"
       >
         <template

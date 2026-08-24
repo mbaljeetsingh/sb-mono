@@ -140,6 +140,61 @@ const hasServiceLine = computed(() => props.sport !== 'table-tennis');
 
 const SERVICE_INSET = '30%';
 
+// The mat floats on the app background (out-of-court surround) instead of
+// flooding the half edge-to-edge: 6px surround on the three outer sides, flush
+// against the net edge so the two halves read as one court split by the net.
+const MAT_INSET = '6px';
+const matStyle = computed(() => {
+  const style: Record<string, string> = {
+    top: MAT_INSET,
+    right: MAT_INSET,
+    bottom: MAT_INSET,
+    left: MAT_INSET,
+  };
+  style[netEdge.value] = '0px';
+  return style;
+});
+
+// Badminton-only extra markings. The tramline sits 0.46m in on a 6.1m-wide
+// court (~7.5%); the doubles long service line 0.76m up a 6.7m half (~13%
+// once the surround offset is folded in). Other sports keep the shared
+// boundary/service/centre set until they get their own treatment.
+const isBadminton = computed(() => props.sport === 'badminton');
+const SIDELINE_INSET = '7.5%';
+const LONG_SERVICE_INSET = '13%';
+
+const sidelineStyles = computed<Record<string, string>[]>(() => {
+  const along: Record<string, string> = {
+    [outerEdge.value]: MAT_INSET,
+    [netEdge.value]: '0px',
+  };
+  return isStacked.value
+    ? [
+        { ...along, width: '1.5px', left: SIDELINE_INSET },
+        { ...along, width: '1.5px', right: SIDELINE_INSET },
+      ]
+    : [
+        { ...along, height: '1.5px', top: SIDELINE_INSET },
+        { ...along, height: '1.5px', bottom: SIDELINE_INSET },
+      ];
+});
+
+const longServiceLineStyle = computed(() =>
+  isStacked.value
+    ? {
+        left: MAT_INSET,
+        right: MAT_INSET,
+        height: '1.5px',
+        [outerEdge.value]: LONG_SERVICE_INSET,
+      }
+    : {
+        top: MAT_INSET,
+        bottom: MAT_INSET,
+        width: '1.5px',
+        [outerEdge.value]: LONG_SERVICE_INSET,
+      }
+);
+
 /** Short-service / kitchen line: parallel to the net, inset from it. */
 const serviceLineStyle = computed(() =>
   isStacked.value
@@ -267,9 +322,8 @@ watch(
 <template>
   <div
     ref="half"
-    class="relative flex flex-1 overflow-hidden transition-shadow duration-200"
+    class="relative flex flex-1 overflow-hidden bg-background transition-shadow duration-200"
     :class="[
-      courtSurface[sport],
       isGlowing
         ? team === 'A'
           ? 'shadow-[inset_0_0_0_3px_var(--color-team-a)] animate-glow-a'
@@ -286,6 +340,14 @@ watch(
           : '',
     ]"
   >
+    <!-- Court mat. Painted below the tap layer so the button's active
+         highlight still reads on top of it. -->
+    <span
+      class="pointer-events-none absolute rounded-[2px]"
+      :class="courtSurface[sport]"
+      :style="matStyle"
+    />
+
     <!-- Tap layer: the entire half, one target per team. Sits beneath the
          read-only overlays (pointer-events-none) and the setup pills (which
          opt back in), so it stays a real button rather than wrapping one. -->
@@ -303,7 +365,8 @@ watch(
          sliced by the court frame's rounded corners (the frame is
          `rounded-lg overflow-hidden`), so the accent read as a clipped strip. -->
     <span
-      class="pointer-events-none absolute inset-[6px] z-[1] rounded-[2px] transition-colors"
+      class="pointer-events-none absolute z-[1] rounded-[2px] transition-colors"
+      :style="matStyle"
       :class="[
         'border-[1.5px]',
         isServing
@@ -322,6 +385,18 @@ watch(
       class="pointer-events-none absolute z-[1] bg-court-line"
       :style="centreLineStyle"
     />
+    <template v-if="isBadminton">
+      <span
+        v-for="(style, i) in sidelineStyles"
+        :key="i"
+        class="pointer-events-none absolute z-[1] bg-court-line"
+        :style="style"
+      />
+      <span
+        class="pointer-events-none absolute z-[1] bg-court-line"
+        :style="longServiceLineStyle"
+      />
+    </template>
 
     <!-- Read-only content, laid out along the court's own axis so the score
          takes the backcourt and names sit in their service courts. -->
