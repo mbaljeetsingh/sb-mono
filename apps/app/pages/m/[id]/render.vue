@@ -212,6 +212,20 @@ const addClipAtPlayhead = () => {
   ];
 };
 
+// Clips can carry the score bug or ship as clean footage — a reel edited in
+// Instagram often wants the clean cut, with the score added as a caption.
+const clipOverlay = ref(true);
+
+// "Someone's highlights": every point event knows which side won it, so
+// filtering by side is free — no video analysis. Manual clips have no side
+// and always pass. Doubles can't attribute a point to one partner (the log
+// doesn't know who hit it), so the filter is per team there.
+const sideFilter = ref<'all' | 'A' | 'B'>('all');
+const sideFilterLabel = (side: 'A' | 'B') => {
+  const name = teamNames.value[side === 'A' ? 'a' : 'b'];
+  return name || `Team ${side}`;
+};
+
 // Selection: everything is in by default; only explicit exclusions are
 // stored, so a recomputed clip list (new anchor, new manual clip) doesn't
 // reset choices already made.
@@ -241,7 +255,11 @@ type ClipCard = {
 const formatScore = (s: { a: number; b: number }) => `${s.a}–${s.b}`;
 
 const cards = computed<ClipCard[]>(() => {
-  const auto = videoClips.value.map((c) => ({
+  const filtered =
+    sideFilter.value === 'all'
+      ? videoClips.value
+      : videoClips.value.filter((c) => c.side === sideFilter.value);
+  const auto = filtered.map((c) => ({
     id: c.id,
     kind: c.kind,
     title:
@@ -273,6 +291,15 @@ const cards = computed<ClipCard[]>(() => {
 });
 
 const selectedCards = computed(() => cards.value.filter((c) => c.selected));
+const allSelected = computed(
+  () =>
+    cards.value.length > 0 && selectedCards.value.length === cards.value.length
+);
+const toggleSelectAll = () => {
+  excluded.value = allSelected.value
+    ? new Set(cards.value.map((c) => c.id))
+    : new Set();
+};
 const selectedTotalLabel = computed(() =>
   formatTime(
     selectedCards.value.reduce(
@@ -412,21 +439,26 @@ const downloadBlob = (blob: Blob, filename: string) => {
 const clipFilename = (card: ClipCard) => {
   const base = videoFile.value?.name.replace(/\.[^.]+$/, '') ?? 'match';
   const at = formatTime(card.videoStartMs).replace(':', 'm');
-  return `${base}-${card.kind}-${at}s.mp4`;
+  return `${base}-${card.kind}-${at}s${clipOverlay.value ? '' : '-clean'}.mp4`;
 };
 
 const renderClip = async (card: ClipCard) => {
   if (!videoFile.value || renderingClipId.value) return;
   const startSec = card.videoStartMs / 1000;
   const endSec = card.videoEndMs / 1000;
-  const subset = snapshotSubsetFor(startSec, endSec);
-  if (subset.length === 0) {
-    toast.error('Sync at least one game before rendering clips');
+  // Clean clips skip the overlay entirely — no snapshots to rasterize, so
+  // they don't need an anchor either (a manual clip on an unsynced stretch
+  // still exports clean).
+  const subset = clipOverlay.value ? snapshotSubsetFor(startSec, endSec) : [];
+  if (clipOverlay.value && subset.length === 0) {
+    toast.error('Sync at least one game before rendering clips with score');
     return;
   }
   renderingClipId.value = card.id;
   try {
-    const bitmaps = await collectOverlayBitmaps(subset);
+    const bitmaps = clipOverlay.value
+      ? await collectOverlayBitmaps(subset)
+      : [];
     const blob = await render({
       videoBlob: videoFile.value,
       overlaySnapshots: bitmaps,
@@ -885,10 +917,10 @@ const meta = computed(() => ({
         </div>
 
         <!-- Highlight reel: auto-picked clips + manual ones, each downloading
-             as its own MP4 with the score burned in. -->
+             as its own MP4 — score burned in, or clean footage. -->
         <template v-else>
           <div
-            v-if="cards.length === 0"
+            v-if="videoClips.length === 0 && manualClips.length === 0"
             class="rounded-lg border border-dashed border-border-strong bg-surface p-8 text-center text-sm text-fg-muted"
           >
             No highlights yet — sync a game above and clips will appear here, or
@@ -901,11 +933,56 @@ const meta = computed(() => ({
               >
                 Highlights
               </span>
-              <span class="text-xs text-fg-muted">
-                {{ selectedCards.length }} of {{ cards.length }} selected
-              </span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-fg-muted">
+                  {{ selectedCards.length }} of {{ cards.length }} selected
+                </span>
+                <Button variant="ghost" size="sm" @click="toggleSelectAll">
+                  {{ allSelected ? 'Clear' : 'Select all' }}
+                </Button>
+              </div>
             </div>
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
+            <!-- Who + how: side filter ("someone's highlights" — the log
+                 knows who won every point) and score-bug on/off per clip. -->
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                :model-value="sideFilter"
+                @update:model-value="
+                  (v) => v && (sideFilter = v as 'all' | 'A' | 'B')
+                "
+              >
+                <ToggleGroupItem value="all">All points</ToggleGroupItem>
+                <ToggleGroupItem value="A">
+                  {{ sideFilterLabel('A') }}
+                </ToggleGroupItem>
+                <ToggleGroupItem value="B">
+                  {{ sideFilterLabel('B') }}
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                :model-value="clipOverlay ? 'score' : 'clean'"
+                @update:model-value="(v) => v && (clipOverlay = v === 'score')"
+              >
+                <ToggleGroupItem value="score">With score</ToggleGroupItem>
+                <ToggleGroupItem value="clean">Clean footage</ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+
+            <div
+              v-if="cards.length === 0"
+              class="rounded-lg border border-dashed border-border bg-surface p-6 text-center text-sm text-fg-muted"
+            >
+              No clips won by {{ sideFilterLabel(sideFilter as 'A' | 'B') }} in
+              the synced games.
+            </div>
+            <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <HighlightCard
                 v-for="card in cards"
                 :key="card.id"
@@ -928,8 +1005,9 @@ const meta = computed(() => ({
                   selected
                 </span>
                 <span class="text-fg-subtle">
-                  · {{ selectedTotalLabel }} total · score burned in · each clip
-                  downloads as its own MP4
+                  · {{ selectedTotalLabel }} total ·
+                  {{ clipOverlay ? 'score burned in' : 'clean footage' }} · each
+                  clip downloads as its own MP4
                 </span>
               </div>
               <Button

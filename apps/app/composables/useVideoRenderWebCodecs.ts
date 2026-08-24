@@ -318,7 +318,10 @@ export function useVideoRenderWebCodecs() {
         'WebCodecs not supported in this browser — try Chrome/Edge or Safari 16.4+'
       );
     }
-    if (params.overlaySnapshots.length === 0) {
+    // A full render with no overlay states would just re-encode the source —
+    // refuse it. A CLIP with no snapshots is deliberate: clean footage, cut
+    // to the window, no score bug.
+    if (params.overlaySnapshots.length === 0 && !params.range) {
       throw new Error('no snapshots — sync at least one game first');
     }
     if (params.range && params.range.endSec <= params.range.startSec) {

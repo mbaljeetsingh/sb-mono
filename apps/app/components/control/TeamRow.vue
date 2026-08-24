@@ -135,11 +135,6 @@ const zoneFlow = computed(() => {
   }
 });
 
-// Painted markings. Table tennis has a centre line only — no service boxes.
-const hasServiceLine = computed(() => props.sport !== 'table-tennis');
-
-const SERVICE_INSET = '30%';
-
 // The mat floats on the app background (out-of-court surround) instead of
 // flooding the half edge-to-edge: 6px surround on the three outer sides, flush
 // against the net edge so the two halves read as one court split by the net.
@@ -155,79 +150,135 @@ const matStyle = computed(() => {
   return style;
 });
 
-// Badminton-only extra markings. The tramline sits 0.46m in on a 6.1m-wide
-// court (~7.5%); the doubles long service line 0.76m up a 6.7m half (~13%
-// once the surround offset is folded in). Other sports keep the shared
-// boundary/service/centre set until they get their own treatment.
-const isBadminton = computed(() => props.sport === 'badminton');
-const SIDELINE_INSET = '7.5%';
-const LONG_SERVICE_INSET = '13%';
+// Painted-marking geometry per sport, as fractions of the half. These place
+// LINES only — the content registers (score/name bands below) deliberately
+// stay at shared positions so a sport's line layout can never displace them.
+type CourtGeometry = {
+  /** Line parallel to the net (short service / kitchen / service line), inset
+   * from the net. null = none (table tennis). */
+  serviceLineFromNet: string | null;
+  /** Centre line span, as insets from each edge (mat surround included). */
+  centreLine: { fromNet: string; fromOuter: string } | null;
+  /** Side tramlines inset from the long edges. null = none. */
+  sidelineInset: string | null;
+  /** Second line parallel to the net, inset from the OUTER edge. */
+  longServiceFromOuter: string | null;
+};
+
+const courtGeometry: Record<SportId, CourtGeometry> = {
+  // BWF: short service line 1.98m of a 6.7m half (~30%); tramlines 0.46m of
+  // 6.1m width (~7.5%); doubles long service line 0.76m from the back (~13%
+  // with the surround folded in); centre line back boundary → short service.
+  badminton: {
+    serviceLineFromNet: '30%',
+    centreLine: { fromNet: '30%', fromOuter: MAT_INSET },
+    sidelineInset: '7.5%',
+    longServiceFromOuter: '13%',
+  },
+  // ITF: service line 6.4m of an 11.89m half (~54% from the net); the centre
+  // service line runs net → service line only (the back court has no centre
+  // line, just the baseline's centre mark — omitted at this scale); singles
+  // sidelines 1.37m of 10.97m doubles width (~12.5%).
+  tennis: {
+    serviceLineFromNet: '54%',
+    centreLine: { fromNet: '0px', fromOuter: '46%' },
+    sidelineInset: '12.5%',
+    longServiceFromOuter: null,
+  },
+  // USAP: non-volley (kitchen) line 2.13m of a 6.7m half (~32%); centre line
+  // baseline → kitchen; no tramlines.
+  pickleball: {
+    serviceLineFromNet: '32%',
+    centreLine: { fromNet: '32%', fromOuter: MAT_INSET },
+    sidelineInset: null,
+    longServiceFromOuter: null,
+  },
+  // A table, not a court: white edge boundary plus the doubles centre line
+  // along the full length. No service boxes.
+  'table-tennis': {
+    serviceLineFromNet: null,
+    centreLine: { fromNet: '0px', fromOuter: MAT_INSET },
+    sidelineInset: null,
+    longServiceFromOuter: null,
+  },
+};
+
+const geometry = computed(() => courtGeometry[props.sport]);
+const hasServiceLine = computed(
+  () => geometry.value.serviceLineFromNet !== null
+);
 
 const sidelineStyles = computed<Record<string, string>[]>(() => {
+  const inset = geometry.value.sidelineInset;
+  if (!inset) return [];
   const along: Record<string, string> = {
     [outerEdge.value]: MAT_INSET,
     [netEdge.value]: '0px',
   };
   return isStacked.value
     ? [
-        { ...along, width: '1.5px', left: SIDELINE_INSET },
-        { ...along, width: '1.5px', right: SIDELINE_INSET },
+        { ...along, width: '1.5px', left: inset },
+        { ...along, width: '1.5px', right: inset },
       ]
     : [
-        { ...along, height: '1.5px', top: SIDELINE_INSET },
-        { ...along, height: '1.5px', bottom: SIDELINE_INSET },
+        { ...along, height: '1.5px', top: inset },
+        { ...along, height: '1.5px', bottom: inset },
       ];
 });
 
-const longServiceLineStyle = computed(() =>
-  isStacked.value
+const longServiceLineStyle = computed(() => {
+  const inset = geometry.value.longServiceFromOuter;
+  if (!inset) return null;
+  return isStacked.value
     ? {
         left: MAT_INSET,
         right: MAT_INSET,
         height: '1.5px',
-        [outerEdge.value]: LONG_SERVICE_INSET,
+        [outerEdge.value]: inset,
       }
     : {
         top: MAT_INSET,
         bottom: MAT_INSET,
         width: '1.5px',
-        [outerEdge.value]: LONG_SERVICE_INSET,
-      }
-);
+        [outerEdge.value]: inset,
+      };
+});
 
-/** Short-service / kitchen line: parallel to the net, inset from it. */
-const serviceLineStyle = computed(() =>
-  isStacked.value
+/** Short-service / kitchen / service line: parallel to the net. */
+const serviceLineStyle = computed(() => {
+  const inset = geometry.value.serviceLineFromNet;
+  if (!inset) return null;
+  return isStacked.value
     ? {
         left: '6px',
         right: '6px',
         height: '1.5px',
-        [netEdge.value]: SERVICE_INSET,
+        [netEdge.value]: inset,
       }
     : {
         top: '6px',
         bottom: '6px',
         width: '1.5px',
-        [netEdge.value]: SERVICE_INSET,
-      }
-);
+        [netEdge.value]: inset,
+      };
+});
 
-/** Centre line: perpendicular to the net, from the outer edge to the service
- *  line (or the whole half for table tennis, which has no service line). */
+/** Centre line: perpendicular to the net, spanning the sport's stretch. */
 const centreLineStyle = computed(() => {
-  const stop = hasServiceLine.value ? SERVICE_INSET : '6px';
+  const span = geometry.value.centreLine;
+  if (!span) return null;
   return isStacked.value
     ? {
         left: '50%',
         width: '1.5px',
-        [outerEdge.value]: '6px',
-        [netEdge.value]: stop,
+        [outerEdge.value]: span.fromOuter,
+        [netEdge.value]: span.fromNet,
       }
     : {
         top: '50%',
         height: '1.5px',
-        [outerEdge.value]: '6px',
-        [netEdge.value]: stop,
+        [outerEdge.value]: span.fromOuter,
+        [netEdge.value]: span.fromNet,
       };
 });
 
@@ -245,7 +296,10 @@ const scoreBandStyle = computed(() => ({
 
 const zonesBandStyle = computed(() => ({
   [outerEdge.value]: hasServiceLine.value ? '42%' : '36%',
-  [netEdge.value]: hasServiceLine.value ? SERVICE_INSET : '45%',
+  // A shared front inset, NOT the sport's painted service line: tennis's
+  // service line sits at 54% from the net, and pinning the name band to it
+  // would crush the band to nothing.
+  [netEdge.value]: hasServiceLine.value ? '30%' : '45%',
 }));
 
 // Score size, derived from the score band's own box rather than the viewport.
@@ -377,26 +431,26 @@ watch(
       ]"
     />
     <span
-      v-if="hasServiceLine"
+      v-if="serviceLineStyle"
       class="pointer-events-none absolute z-[1] bg-court-line"
       :style="serviceLineStyle"
     />
     <span
+      v-if="centreLineStyle"
       class="pointer-events-none absolute z-[1] bg-court-line"
       :style="centreLineStyle"
     />
-    <template v-if="isBadminton">
-      <span
-        v-for="(style, i) in sidelineStyles"
-        :key="i"
-        class="pointer-events-none absolute z-[1] bg-court-line"
-        :style="style"
-      />
-      <span
-        class="pointer-events-none absolute z-[1] bg-court-line"
-        :style="longServiceLineStyle"
-      />
-    </template>
+    <span
+      v-for="(style, i) in sidelineStyles"
+      :key="i"
+      class="pointer-events-none absolute z-[1] bg-court-line"
+      :style="style"
+    />
+    <span
+      v-if="longServiceLineStyle"
+      class="pointer-events-none absolute z-[1] bg-court-line"
+      :style="longServiceLineStyle"
+    />
 
     <!-- Read-only content, laid out along the court's own axis so the score
          takes the backcourt and names sit in their service courts. -->
