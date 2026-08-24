@@ -115,6 +115,7 @@ export function useReplayState(
   return {
     state,
     config,
+    preset,
     events,
     loaded,
     matchStartedAt,

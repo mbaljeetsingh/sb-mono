@@ -303,6 +303,15 @@ export function useVideoRenderWebCodecs() {
   const render = async (params: {
     videoBlob: Blob;
     overlaySnapshots: OverlaySnapshot[];
+    /**
+     * Optional clip window in source-video seconds. When set, only this
+     * range is decoded/encoded (decode starts at the nearest keyframe at or
+     * before startSec; frames before the in-point are decoded but dropped)
+     * and output timestamps are rebased so the clip starts at 0. Overlay
+     * snapshots stay in FULL-video time — they're matched against the
+     * source timestamp before rebasing.
+     */
+    range?: { startSec: number; endSec: number };
   }): Promise<Blob> => {
     if (!isSupported.value) {
       throw new Error(
@@ -312,11 +321,46 @@ export function useVideoRenderWebCodecs() {
     if (params.overlaySnapshots.length === 0) {
       throw new Error('no snapshots — sync at least one game first');
     }
+    if (params.range && params.range.endSec <= params.range.startSec) {
+      throw new Error('clip range is empty');
+    }
     outputUrl.value = null;
 
     // 1) Demux source.
     progress.value = { stage: 'demuxing', message: 'Reading video…' };
     const demux = await demuxFile(params.videoBlob);
+
+    const range = params.range ?? null;
+    const rangeStartUs = range ? Math.max(0, range.startSec * 1_000_000) : 0;
+    const rangeEndUs = range
+      ? range.endSec * 1_000_000
+      : Number.POSITIVE_INFINITY;
+
+    // Clip renders feed a sample subset: from the last keyframe at or before
+    // the in-point (delta frames can't decode without it) through the last
+    // sample inside the window. Presentation order ~= decode order for
+    // phone/camera H.264; a B-frame right at the boundary costs at most one
+    // dropped frame, not corruption.
+    let feedSamples = demux.videoSamples;
+    if (range) {
+      const sampleUs = (cts: number) => (cts * 1_000_000) / demux.timescale;
+      let keyIdx = 0;
+      for (let i = 0; i < demux.videoSamples.length; i++) {
+        const s = demux.videoSamples[i]!;
+        if (sampleUs(s.cts) > rangeStartUs) break;
+        if (s.is_sync) keyIdx = i;
+      }
+      const subset: typeof demux.videoSamples = [];
+      for (let i = keyIdx; i < demux.videoSamples.length; i++) {
+        const s = demux.videoSamples[i]!;
+        if (sampleUs(s.cts) > rangeEndUs) break;
+        subset.push(s);
+      }
+      if (subset.length === 0) {
+        throw new Error('clip range contains no video samples');
+      }
+      feedSamples = subset;
+    }
 
     // 2) Set up muxer (video-only for now).
     progress.value = { stage: 'encoding', message: 'Encoding video…' };
@@ -420,7 +464,7 @@ export function useVideoRenderWebCodecs() {
     encoder.configure(encoderConfig);
 
     // 5) Decoder + compositor.
-    const total = demux.videoSamples.length;
+    const total = feedSamples.length;
     let processed = 0;
     const decoder = new VideoDecoder({
       output: (frame) => {
@@ -429,6 +473,12 @@ export function useVideoRenderWebCodecs() {
           // gets closed mid-iteration on some browsers.
           const timestamp = frame.timestamp;
           const duration = frame.duration ?? 33_333; // 30fps fallback in µs
+
+          // Clip render: frames decoded only to reach the in-point keyframe
+          // chain (or trailing past the out-point) are dropped, not encoded.
+          if (timestamp + duration <= rangeStartUs || timestamp > rangeEndUs) {
+            return;
+          }
 
           ctx.drawImage(frame, 0, 0, demux.width, demux.height);
           const active = pickActiveOverlay(
@@ -443,7 +493,7 @@ export function useVideoRenderWebCodecs() {
           // null (reading 'colorSpace')" throw on some Chromium versions when
           // the source VideoFrame's colorSpace metadata is missing.
           const composed = new VideoFrame(canvas, {
-            timestamp,
+            timestamp: Math.max(0, timestamp - rangeStartUs),
             duration,
             displayWidth: demux.width,
             displayHeight: demux.height,
@@ -487,7 +537,7 @@ export function useVideoRenderWebCodecs() {
     // until the browser kills the decoder with InvalidStateError.
     let decodedSampleCount = 0;
     let firstError: unknown = null;
-    for (const s of demux.videoSamples) {
+    for (const s of feedSamples) {
       while (decoder.decodeQueueSize > 20 || encoder.encodeQueueSize > 20) {
         await new Promise((r) => setTimeout(r, 10));
       }
@@ -546,14 +596,21 @@ export function useVideoRenderWebCodecs() {
     };
 
     // 7) Audio passthrough — raw chunks straight into the muxer. No decode,
-    //    no re-encode, no quality loss.
+    //    no re-encode, no quality loss. Clip render: keep only samples that
+    //    overlap the window and rebase them to the clip's zero (AAC frames
+    //    are independently decodable, so cutting on a frame boundary is safe).
     if (demux.audio) {
       const a = demux.audio;
+      const startAu = range ? range.startSec * a.timescale : 0;
+      const endAu = range
+        ? range.endSec * a.timescale
+        : Number.POSITIVE_INFINITY;
       for (const s of a.samples) {
+        if (s.cts + s.duration <= startAu || s.cts > endAu) continue;
         muxer.addAudioChunkRaw(
           s.data,
           s.is_sync ? 'key' : 'delta',
-          (s.cts * 1_000_000) / a.timescale,
+          (Math.max(0, s.cts - startAu) * 1_000_000) / a.timescale,
           (s.duration * 1_000_000) / a.timescale,
           {
             decoderConfig: {

@@ -6,11 +6,16 @@
 // finished. The /m/[id] hub only surfaces the entry point once state.matchOver
 // is true.
 
+import { getPreset } from '@sb/engine';
 import { Button } from '@sb/layer-ui/components/ui/button';
 import { Progress } from '@sb/layer-ui/components/ui/progress';
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from '@sb/layer-ui/components/ui/toggle-group';
 import { getErrorMessage } from '@sb/shared/errors';
 import { getTheme } from '@sb/themes';
-import { ArrowLeft, Download, Film, Upload } from 'lucide-vue-next';
+import { ArrowLeft, Download, Film, Plus, Upload } from 'lucide-vue-next';
 import { domToCanvas } from 'modern-screenshot';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
@@ -21,7 +26,12 @@ import {
   type OverlaySnapshot,
   useVideoRenderWebCodecs,
 } from '~/composables/useVideoRenderWebCodecs';
-import { type Anchor, buildSnapshotPlan } from '~/lib/snapshot-plan';
+import { buildHighlightClips, clipsToVideo } from '~/lib/highlight-clips';
+import {
+  type Anchor,
+  type SnapshotPlanEntry,
+  buildSnapshotPlan,
+} from '~/lib/snapshot-plan';
 
 definePageMeta({ layout: false });
 useSeoMeta({ title: 'Render · Scoreboard' });
@@ -90,7 +100,10 @@ const firstPointPerGame = computed<((typeof events.value)[number] | null)[]>(
 const totalGames = computed(() => firstPointPerGame.value.length);
 
 const replayTimeMs = ref(0);
-const { state, config, loaded, events } = useReplayState(matchId, replayTimeMs);
+const { state, config, preset, loaded, events } = useReplayState(
+  matchId,
+  replayTimeMs
+);
 
 // Active anchor = the latest anchor whose videoMs is <= current playhead.
 // Used so each game-segment of the video drives the overlay with its own
@@ -145,6 +158,306 @@ const clearAnchor = (gameIndex: number) => {
   anchors.value = next;
 };
 
+// ── Highlights mode ─────────────────────────────────────────────────────────
+// Same page, same anchors: "Full match" renders the whole file with the
+// overlay burned in; "Highlight reel" derives clips from the event log
+// (long rallies, game winners, match point — see lib/highlight-clips) plus
+// manually marked moments, and renders each selected clip as its own MP4.
+
+const mode = ref<'full' | 'highlights'>('full');
+
+const videoDurationMs = ref(0);
+const onLoadedMetadata = () => {
+  if (videoEl.value) {
+    videoDurationMs.value = (videoEl.value.duration || 0) * 1000;
+  }
+};
+
+const seekTo = (ms: number) => {
+  if (!videoEl.value) return;
+  videoEl.value.currentTime = ms / 1000;
+  videoTimeMs.value = ms;
+};
+
+const highlightClips = computed(() => {
+  if (!loaded.value) return [];
+  const entry = getPreset(preset.value);
+  return buildHighlightClips(events.value, entry.reducer, config.value);
+});
+
+const videoClips = computed(() =>
+  clipsToVideo(highlightClips.value, anchors.value)
+);
+
+// Manual clips live in video time only — they mark moments the log can't see
+// (the funny ones), so there is no event to anchor them to. Device-local and
+// session-local by design: marking happens while reviewing the file.
+type ManualClip = { id: string; videoStartMs: number; videoEndMs: number };
+const manualClips = ref<ManualClip[]>([]);
+const MANUAL_LOOKBACK_MS = 15_000;
+const MANUAL_POST_MS = 5_000;
+const addClipAtPlayhead = () => {
+  const at = videoTimeMs.value;
+  const end = Math.min(
+    videoDurationMs.value || at + MANUAL_POST_MS,
+    at + MANUAL_POST_MS
+  );
+  manualClips.value = [
+    ...manualClips.value,
+    {
+      id: `manual-${Math.round(at)}`,
+      videoStartMs: Math.max(0, at - MANUAL_LOOKBACK_MS),
+      videoEndMs: end,
+    },
+  ];
+};
+
+// Selection: everything is in by default; only explicit exclusions are
+// stored, so a recomputed clip list (new anchor, new manual clip) doesn't
+// reset choices already made.
+const excluded = ref(new Set<string>());
+const toggleCard = (id: string) => {
+  const next = new Set(excluded.value);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  excluded.value = next;
+};
+
+type ClipCard = {
+  id: string;
+  kind: 'match-point' | 'game-point' | 'long-rally' | 'manual';
+  title: string;
+  meta: string;
+  videoStartMs: number;
+  videoEndMs: number;
+  durationLabel: string;
+  thumbnail: string | null;
+  selected: boolean;
+};
+
+const formatScore = (s: { a: number; b: number }) => `${s.a}–${s.b}`;
+
+const cards = computed<ClipCard[]>(() => {
+  const auto = videoClips.value.map((c) => ({
+    id: c.id,
+    kind: c.kind,
+    title:
+      c.kind === 'match-point'
+        ? 'Match point'
+        : c.kind === 'game-point'
+          ? `Game ${c.gameIndex + 1} won`
+          : 'Long rally',
+    meta: `Game ${c.gameIndex + 1} · ${formatScore(c.scoreBefore)} → ${formatScore(c.scoreAfter)} · at ${formatTime(c.videoStartMs)}`,
+    videoStartMs: c.videoStartMs,
+    videoEndMs: c.videoEndMs,
+  }));
+  const manual = manualClips.value.map((m) => ({
+    id: m.id,
+    kind: 'manual' as const,
+    title: 'Added clip',
+    meta: `Marked on timeline · at ${formatTime(m.videoStartMs)}`,
+    videoStartMs: m.videoStartMs,
+    videoEndMs: m.videoEndMs,
+  }));
+  return [...auto, ...manual]
+    .sort((x, y) => x.videoStartMs - y.videoStartMs)
+    .map((c) => ({
+      ...c,
+      durationLabel: formatTime(c.videoEndMs - c.videoStartMs),
+      thumbnail: thumbnails.value[c.id] ?? null,
+      selected: !excluded.value.has(c.id),
+    }));
+});
+
+const selectedCards = computed(() => cards.value.filter((c) => c.selected));
+const selectedTotalLabel = computed(() =>
+  formatTime(
+    selectedCards.value.reduce(
+      (sum, c) => sum + (c.videoEndMs - c.videoStartMs),
+      0
+    )
+  )
+);
+
+const anchorTicks = computed(() =>
+  Object.entries(anchors.value)
+    .filter((entry): entry is [string, Anchor] => !!entry[1])
+    .map(([i, a]) => ({ gameIndex: Number(i), videoMs: a.videoMs }))
+);
+
+const timelineBands = computed(() =>
+  cards.value.map((c) => ({
+    id: c.id,
+    startMs: c.videoStartMs,
+    endMs: c.videoEndMs,
+    kind: c.kind,
+    selected: c.selected,
+  }))
+);
+
+const activeCardId = ref<string | null>(null);
+const previewCard = (id: string) => {
+  activeCardId.value = id;
+  const c = cards.value.find((x) => x.id === id);
+  if (c) seekTo(c.videoStartMs);
+};
+
+// ── Thumbnails ──────────────────────────────────────────────────────────────
+// A second, muted video element grabs a real frame per clip so capture never
+// jumps the operator's playhead. Sequential seek → 'seeked' → drawImage.
+const thumbVideoEl = ref<HTMLVideoElement | null>(null);
+const thumbnails = ref<Record<string, string>>({});
+let thumbQueueRunning = false;
+
+const captureThumbnails = async () => {
+  const video = thumbVideoEl.value;
+  if (!video || thumbQueueRunning) return;
+  thumbQueueRunning = true;
+  try {
+    const canvas = document.createElement('canvas');
+    // Re-read the pending list each pass — clips can appear mid-capture.
+    for (;;) {
+      const next = cards.value.find((c) => !thumbnails.value[c.id]);
+      if (!next) break;
+      // The rally's payoff sits just before the clip's post-roll tail.
+      const atSec = Math.max(next.videoStartMs, next.videoEndMs - 4_000) / 1000;
+      const seeked = await new Promise<boolean>((resolve) => {
+        const onSeeked = () => {
+          cleanup();
+          resolve(true);
+        };
+        const onError = () => {
+          cleanup();
+          resolve(false);
+        };
+        const cleanup = () => {
+          video.removeEventListener('seeked', onSeeked);
+          video.removeEventListener('error', onError);
+        };
+        video.addEventListener('seeked', onSeeked, { once: true });
+        video.addEventListener('error', onError, { once: true });
+        video.currentTime = atSec;
+      });
+      if (!seeked || !video.videoWidth) {
+        // Mark it so a broken seek can't loop forever; card falls back to
+        // the dark placeholder.
+        thumbnails.value = { ...thumbnails.value, [next.id]: '' };
+        continue;
+      }
+      canvas.width = 320;
+      canvas.height = Math.round((320 * video.videoHeight) / video.videoWidth);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) break;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      thumbnails.value = {
+        ...thumbnails.value,
+        [next.id]: canvas.toDataURL('image/jpeg', 0.7),
+      };
+    }
+  } finally {
+    thumbQueueRunning = false;
+  }
+};
+
+// Re-anchoring moves every auto clip, so cached frames no longer match.
+watch(anchors, () => {
+  thumbnails.value = {};
+});
+watch(
+  [() => cards.value.length, mode, anchors],
+  () => {
+    if (mode.value === 'highlights') void captureThumbnails();
+  },
+  { flush: 'post' }
+);
+
+// ── Per-clip render ─────────────────────────────────────────────────────────
+const renderingClipId = ref<string | null>(null);
+
+// Only the overlay states a clip can actually show: everything inside the
+// window plus the state already active when it opens.
+const snapshotSubsetFor = (
+  startSec: number,
+  endSec: number
+): SnapshotPlanEntry[] => {
+  const plan = snapshotPlan.value;
+  const before = plan.filter((p) => p.videoTimeSec <= startSec);
+  const opening = before.length
+    ? before[before.length - 1]!
+    : plan.length
+      ? plan[0]!
+      : null;
+  return [
+    ...(opening ? [opening] : []),
+    ...plan.filter(
+      (p) => p.videoTimeSec > startSec && p.videoTimeSec <= endSec
+    ),
+  ];
+};
+
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+};
+
+const clipFilename = (card: ClipCard) => {
+  const base = videoFile.value?.name.replace(/\.[^.]+$/, '') ?? 'match';
+  const at = formatTime(card.videoStartMs).replace(':', 'm');
+  return `${base}-${card.kind}-${at}s.mp4`;
+};
+
+const renderClip = async (card: ClipCard) => {
+  if (!videoFile.value || renderingClipId.value) return;
+  const startSec = card.videoStartMs / 1000;
+  const endSec = card.videoEndMs / 1000;
+  const subset = snapshotSubsetFor(startSec, endSec);
+  if (subset.length === 0) {
+    toast.error('Sync at least one game before rendering clips');
+    return;
+  }
+  renderingClipId.value = card.id;
+  try {
+    const bitmaps = await collectOverlayBitmaps(subset);
+    const blob = await render({
+      videoBlob: videoFile.value,
+      overlaySnapshots: bitmaps,
+      range: { startSec, endSec },
+    });
+    downloadBlob(blob, clipFilename(card));
+  } catch (err) {
+    snapshotting.value = false;
+    console.warn('[render] clip failed', err);
+    toast.error(`Clip render failed: ${getErrorMessage(err)}`);
+  } finally {
+    renderingClipId.value = null;
+  }
+};
+
+const downloadSelected = async () => {
+  for (const card of selectedCards.value) {
+    await renderClip(card);
+  }
+};
+
+const clipRenderRatio = (id: string): number | null => {
+  if (renderingClipId.value !== id) return null;
+  // Snapshotting is the short first phase; encode dominates.
+  if (snapshotting.value) {
+    const { done, total } = snapshotProgress.value;
+    return total ? (done / total) * 0.2 : 0;
+  }
+  return 0.2 + (progress.value.ratio ?? 0) * 0.8;
+};
+
 // WebCodecs render — accepts pre-collected overlay bitmaps from this page.
 // The page drives the snapshot loop itself (no video seek; just push the
 // reactive state forward) so snapshotting is dramatically faster.
@@ -187,7 +500,11 @@ const snapshotProgress = ref({ done: 0, total: 0 });
 // Rasterize the overlay at each plan point. Drives the reactive state via
 // `replayTimeMs` directly — the video element doesn't move, no expensive
 // seek, no decoder cache flush. Just push, await DOM, snapshot, repeat.
-const collectOverlayBitmaps = async (): Promise<OverlaySnapshot[]> => {
+// Takes the plan explicitly: the full render passes the whole plan, a clip
+// render passes just the entries its window can show.
+const collectOverlayBitmaps = async (
+  plan: SnapshotPlanEntry[]
+): Promise<OverlaySnapshot[]> => {
   const overlay = overlayEl.value;
   const video = videoEl.value;
   if (!overlay || !video) throw new Error('overlay or video not mounted');
@@ -197,11 +514,11 @@ const collectOverlayBitmaps = async (): Promise<OverlaySnapshot[]> => {
   const scale = overlayRect.width > 0 ? videoW / overlayRect.width : 1;
 
   snapshotting.value = true;
-  snapshotProgress.value = { done: 0, total: snapshotPlan.value.length };
+  snapshotProgress.value = { done: 0, total: plan.length };
 
   const out: OverlaySnapshot[] = [];
-  for (let i = 0; i < snapshotPlan.value.length; i++) {
-    const p = snapshotPlan.value[i]!;
+  for (let i = 0; i < plan.length; i++) {
+    const p = plan[i]!;
     replayTimeMs.value = p.replayTimeMs;
     await nextTick();
     const canvas = await domToCanvas(overlay, {
@@ -210,7 +527,7 @@ const collectOverlayBitmaps = async (): Promise<OverlaySnapshot[]> => {
     });
     const bitmap = await createImageBitmap(canvas);
     out.push({ videoTimeSec: p.videoTimeSec, bitmap });
-    snapshotProgress.value = { done: i + 1, total: snapshotPlan.value.length };
+    snapshotProgress.value = { done: i + 1, total: plan.length };
   }
   snapshotting.value = false;
   return out;
@@ -219,7 +536,7 @@ const collectOverlayBitmaps = async (): Promise<OverlaySnapshot[]> => {
 const onRender = async () => {
   if (!videoFile.value) return;
   try {
-    const bitmaps = await collectOverlayBitmaps();
+    const bitmaps = await collectOverlayBitmaps(snapshotPlan.value);
     await render({
       videoBlob: videoFile.value,
       overlaySnapshots: bitmaps,
@@ -327,6 +644,27 @@ const meta = computed(() => ({
 
       <!-- Stage: video + overlay -->
       <section v-else class="space-y-3">
+        <!-- Output picker: one anchoring session, two deliverables. -->
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            :model-value="mode"
+            @update:model-value="
+              (v) => v && (mode = v as 'full' | 'highlights')
+            "
+          >
+            <ToggleGroupItem value="full">Full match</ToggleGroupItem>
+            <ToggleGroupItem value="highlights">Highlight reel</ToggleGroupItem>
+          </ToggleGroup>
+          <span class="text-xs text-fg-muted">
+            {{ syncedCount }} of {{ totalGames }} game{{
+              totalGames === 1 ? '' : 's'
+            }}
+            synced
+          </span>
+        </div>
+
         <div
           class="relative aspect-video w-full overflow-hidden rounded-lg bg-black"
         >
@@ -337,6 +675,7 @@ const meta = computed(() => ({
             controls
             @timeupdate="onTimeUpdate"
             @seeked="onTimeUpdate"
+            @loadedmetadata="onLoadedMetadata"
           />
           <!-- Overlay layered on top. pointer-events:none so video controls
                stay tappable. `overlayEl` ref is what html-to-image snapshots
@@ -355,6 +694,49 @@ const meta = computed(() => ({
               :meta="meta"
             />
           </div>
+        </div>
+
+        <!-- Hidden sibling video: thumbnail capture seeks THIS element so the
+             operator's playhead never jumps. Same blob URL, no extra fetch. -->
+        <video
+          ref="thumbVideoEl"
+          :src="videoUrl"
+          muted
+          playsinline
+          preload="auto"
+          class="hidden"
+        />
+
+        <!-- Timeline strip: sync ticks + playhead always; clip bands in
+             highlight mode. Click seeks; clicking a band focuses its card. -->
+        <div class="rounded-lg border border-border bg-surface p-3">
+          <div class="flex items-center justify-between">
+            <span
+              class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle"
+            >
+              Timeline
+            </span>
+            <Button
+              v-if="mode === 'highlights'"
+              variant="secondary"
+              size="sm"
+              :disabled="!videoDurationMs"
+              @click="addClipAtPlayhead"
+            >
+              <Plus class="size-3.5" />
+              Add clip at playhead
+            </Button>
+          </div>
+          <HighlightTimeline
+            class="mt-1"
+            :duration-ms="videoDurationMs"
+            :current-ms="videoTimeMs"
+            :anchor-ticks="anchorTicks"
+            :bands="mode === 'highlights' ? timelineBands : []"
+            :active-band-id="activeCardId"
+            @seek="seekTo"
+            @select-band="previewCard"
+          />
         </div>
 
         <!-- Sync controls — one anchor per game. Single-game matches just
@@ -421,7 +803,10 @@ const meta = computed(() => ({
         <!-- Render — WebCodecs (hardware H.264) + modern-screenshot for the
              overlay rasterization. Only renders events whose game has a
              sync anchor. -->
-        <div class="rounded-lg border border-border bg-surface p-4 space-y-3">
+        <div
+          v-if="mode === 'full'"
+          class="rounded-lg border border-border bg-surface p-4 space-y-3"
+        >
           <div class="flex items-center gap-3 flex-wrap">
             <Button
               :disabled="
@@ -498,6 +883,71 @@ const meta = computed(() => ({
             time to encode; watch progress above.
           </p>
         </div>
+
+        <!-- Highlight reel: auto-picked clips + manual ones, each downloading
+             as its own MP4 with the score burned in. -->
+        <template v-else>
+          <div
+            v-if="cards.length === 0"
+            class="rounded-lg border border-dashed border-border-strong bg-surface p-8 text-center text-sm text-fg-muted"
+          >
+            No highlights yet — sync a game above and clips will appear here, or
+            scrub to a moment and add one at the playhead.
+          </div>
+          <template v-else>
+            <div class="flex items-center justify-between">
+              <span
+                class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle"
+              >
+                Highlights
+              </span>
+              <span class="text-xs text-fg-muted">
+                {{ selectedCards.length }} of {{ cards.length }} selected
+              </span>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <HighlightCard
+                v-for="card in cards"
+                :key="card.id"
+                :card="card"
+                :render-ratio="clipRenderRatio(card.id)"
+                :busy="!!renderingClipId"
+                @toggle="toggleCard(card.id)"
+                @preview="previewCard(card.id)"
+                @download="renderClip(card)"
+              />
+            </div>
+            <div
+              class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3"
+            >
+              <div class="text-[13px]">
+                <span class="font-semibold">
+                  {{ selectedCards.length }} clip{{
+                    selectedCards.length === 1 ? '' : 's'
+                  }}
+                  selected
+                </span>
+                <span class="text-fg-subtle">
+                  · {{ selectedTotalLabel }} total · score burned in · each clip
+                  downloads as its own MP4
+                </span>
+              </div>
+              <Button
+                :disabled="!selectedCards.length || !!renderingClipId"
+                @click="downloadSelected"
+              >
+                <Download class="size-4 mr-2" />
+                Download {{ selectedCards.length }} clip{{
+                  selectedCards.length === 1 ? '' : 's'
+                }}
+              </Button>
+            </div>
+            <p class="text-[11px] text-fg-subtle">
+              Clips export at the source aspect ratio — crop to 9:16 in the
+              Instagram editor for Reels.
+            </p>
+          </template>
+        </template>
       </section>
     </main>
   </div>
