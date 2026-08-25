@@ -15,6 +15,7 @@ import {
 } from '@sb/layer-ui/components/ui/toggle-group';
 import { getErrorMessage } from '@sb/shared/errors';
 import { getTheme } from '@sb/themes';
+import { useElementSize } from '@vueuse/core';
 import { ArrowLeft, Download, Film, Plus, Upload } from 'lucide-vue-next';
 import { domToCanvas } from 'modern-screenshot';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
@@ -628,6 +629,30 @@ const downloadOutput = () => {
 // Shared with the timeline strip — one clock format for the whole page.
 const formatTime = formatClockMs;
 
+// Overlay themes size themselves in px against OBS's 1920×1080 browser
+// source (broadcast-classic is a 620px panel ≈ ⅓ of that frame). The render
+// stage is ~1000px wide, so mounting the theme directly doubles the bug's
+// share of the frame — and the export snapshot preserves the on-screen ratio,
+// burning it in oversized. Render the theme inside a virtual broadcast-width
+// frame scaled down to the stage instead; the size option divides the virtual
+// width (wider virtual canvas = smaller bug), so every theme keeps its own
+// edge insets regardless of which corner it anchors to.
+const BROADCAST_WIDTH = 1920;
+const OVERLAY_SIZE_FACTOR = { s: 0.8, m: 1, l: 1.2 } as const;
+const overlaySize = ref<keyof typeof OVERLAY_SIZE_FACTOR>('m');
+const stageEl = ref<HTMLElement | null>(null);
+const { width: stageWidth, height: stageHeight } = useElementSize(stageEl);
+const overlayFrameStyle = computed(() => {
+  const frameW = BROADCAST_WIDTH / OVERLAY_SIZE_FACTOR[overlaySize.value];
+  const ratio =
+    stageWidth.value > 0 ? stageHeight.value / stageWidth.value : 9 / 16;
+  return {
+    width: `${frameW}px`,
+    height: `${frameW * ratio}px`,
+    transform: `scale(${stageWidth.value > 0 ? stageWidth.value / frameW : 0})`,
+  };
+});
+
 // Theme — reuse the overlay theme the operator chose for this match.
 const { overlay: overlayTheme } = useThemeChoice(matchId);
 const { teamNames, players, meta: matchMeta } = useMatchMeta(matchId);
@@ -719,15 +744,45 @@ const meta = computed(() => ({
             <ToggleGroupItem value="full">Full match</ToggleGroupItem>
             <ToggleGroupItem value="highlights">Highlight reel</ToggleGroupItem>
           </ToggleGroup>
-          <span class="text-xs text-fg-muted">
-            {{ syncedCount }} of {{ totalGames }} game{{
-              totalGames === 1 ? '' : 's'
-            }}
-            synced
-          </span>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+              <span
+                class="text-[11px] font-semibold tracking-wider uppercase text-fg-subtle"
+              >
+                Score size
+              </span>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                :model-value="overlaySize"
+                @update:model-value="
+                  (v) =>
+                    v && (overlaySize = v as keyof typeof OVERLAY_SIZE_FACTOR)
+                "
+              >
+                <ToggleGroupItem value="s" aria-label="Small score overlay">
+                  S
+                </ToggleGroupItem>
+                <ToggleGroupItem value="m" aria-label="Medium score overlay">
+                  M
+                </ToggleGroupItem>
+                <ToggleGroupItem value="l" aria-label="Large score overlay">
+                  L
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+            <span class="text-xs text-fg-muted">
+              {{ syncedCount }} of {{ totalGames }} game{{
+                totalGames === 1 ? '' : 's'
+              }}
+              synced
+            </span>
+          </div>
         </div>
 
         <div
+          ref="stageEl"
           class="relative aspect-video w-full overflow-hidden rounded-lg bg-black"
         >
           <video
@@ -741,20 +796,26 @@ const meta = computed(() => ({
           />
           <!-- Overlay layered on top. pointer-events:none so video controls
                stay tappable. `overlayEl` ref is what html-to-image snapshots
-               during render. -->
+               during render; the inner frame renders the theme at broadcast
+               proportions and scales down to the stage (see overlayFrameStyle). -->
           <div
             v-if="loaded && themeEntry"
             ref="overlayEl"
-            class="pointer-events-none absolute inset-0"
+            class="pointer-events-none absolute inset-0 overflow-hidden"
           >
-            <component
-              :is="themeEntry.component"
-              :state="state"
-              :config="config"
-              :team-names="teamNames"
-              :players="players"
-              :meta="meta"
-            />
+            <div
+              class="absolute left-0 top-0 origin-top-left"
+              :style="overlayFrameStyle"
+            >
+              <component
+                :is="themeEntry.component"
+                :state="state"
+                :config="config"
+                :team-names="teamNames"
+                :players="players"
+                :meta="meta"
+              />
+            </div>
           </div>
         </div>
 
