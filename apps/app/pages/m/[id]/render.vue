@@ -15,8 +15,16 @@ import {
 } from '@sb/layer-ui/components/ui/toggle-group';
 import { getErrorMessage } from '@sb/shared/errors';
 import { getTheme } from '@sb/themes';
-import { useElementSize, useStorage } from '@vueuse/core';
-import { ArrowLeft, Download, Film, Plus, Upload } from 'lucide-vue-next';
+import { useElementSize, useMouseInElement, useStorage } from '@vueuse/core';
+import {
+  ArrowLeft,
+  Download,
+  Film,
+  Pause,
+  Play,
+  Plus,
+  Upload,
+} from 'lucide-vue-next';
 import { domToCanvas } from 'modern-screenshot';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
@@ -38,6 +46,12 @@ import {
   type SnapshotPlanEntry,
   buildSnapshotPlan,
 } from '~/lib/snapshot-plan';
+import {
+  type RecordingTime,
+  assessRecordingFit,
+  rankRecordings,
+  readRecordingTime,
+} from '~/lib/video-metadata';
 
 definePageMeta({ layout: false });
 useSeoMeta({ title: 'Render · Scoreboard' });
@@ -60,20 +74,37 @@ const videoFile = ref<File | null>(null);
 const videoUrl = ref<string | null>(null);
 const videoEl = ref<HTMLVideoElement | null>(null);
 const overlayEl = ref<HTMLElement | null>(null);
+const stageEl = ref<HTMLElement | null>(null);
+// Hidden shared file input: the initial dropzone button and the post-mount
+// "Change video" button both open it, so a wrong auto-pick is always
+// recoverable without a page reload.
+const filePickerEl = ref<HTMLInputElement | null>(null);
 
-const onPickVideo = (e: Event) => {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  videoFile.value = file;
-  if (videoUrl.value) URL.revokeObjectURL(videoUrl.value);
-  videoUrl.value = URL.createObjectURL(file);
-};
-
-// Current video playhead in ms — drives the overlay state.
-const videoTimeMs = ref(0);
-const onTimeUpdate = () => {
-  if (videoEl.value) videoTimeMs.value = videoEl.value.currentTime * 1000;
-};
+// "Is this the right file for this match?" — the camera's own timestamp
+// (container metadata, survives any copy; filesystem mtime as fallback)
+// checked against the match's event window. A hint, never a blocker: clocks
+// skew and metadata gets stripped, so mismatches warn instead of rejecting.
+const recordingTime = ref<RecordingTime | null>(null);
+// Event bounds via min/max, not first/last: the log is ULID-ordered, and a
+// device-clock skew can make id order disagree with ts order.
+const matchWindow = computed(() => {
+  if (!loaded.value || events.value.length === 0) return null;
+  let startMs = Number.POSITIVE_INFINITY;
+  let endMs = Number.NEGATIVE_INFINITY;
+  for (const ev of events.value) {
+    if (ev.ts < startMs) startMs = ev.ts;
+    if (ev.ts > endMs) endMs = ev.ts;
+  }
+  return { startMs, endMs };
+});
+const recordingFit = computed(() =>
+  assessRecordingFit(
+    recordingTime.value,
+    videoDurationMs.value,
+    matchWindow.value?.startMs ?? null,
+    matchWindow.value?.endMs ?? null
+  )
+);
 
 // Per-game anchors. BO-N matches can be assembled from multiple recordings
 // concatenated with inter-game breaks trimmed — so the gap between game N
@@ -84,32 +115,212 @@ const anchors = ref<Record<number, Anchor | null>>({});
 
 // Anchors survive revisits: syncing means frame-hunting the end of the first
 // rally of every game, and losing that to a reload makes re-renders miserable.
-// Device-local (the video file itself lives on this device) and keyed to the
-// file's name+size — anchors are meaningless against any other recording, so
-// a different upload starts clean rather than inheriting a stale mapping.
-type StoredAnchors = { videoKey: string; anchors: Record<number, Anchor> };
-const storedAnchors = useStorage<StoredAnchors>(
+// Device-local (the video file itself lives on this device) and keyed per
+// file fingerprint (name+size) — a map, so switching files can never stomp
+// another recording's saved sync points. v1 stored a single {videoKey,
+// anchors} pair; toAnchorMap migrates it on read.
+type AnchorMap = Record<number, Anchor>;
+type StoredAnchorMap = Record<string, AnchorMap>;
+type LegacyStoredAnchors = { videoKey: string; anchors: AnchorMap };
+const isLegacyStore = (
+  v: StoredAnchorMap | LegacyStoredAnchors
+): v is LegacyStoredAnchors =>
+  typeof (v as LegacyStoredAnchors).videoKey === 'string';
+const toAnchorMap = (
+  v: StoredAnchorMap | LegacyStoredAnchors
+): StoredAnchorMap =>
+  isLegacyStore(v) ? (v.videoKey ? { [v.videoKey]: v.anchors } : {}) : v;
+const storedAnchors = useStorage<StoredAnchorMap | LegacyStoredAnchors>(
   computed(() => `sb:render-anchors:${matchId.value}`),
-  { videoKey: '', anchors: {} }
+  {} as StoredAnchorMap
 );
 const videoKey = computed(() =>
   videoFile.value ? `${videoFile.value.name}|${videoFile.value.size}` : null
 );
-watch(videoKey, (key) => {
-  if (!key || storedAnchors.value.videoKey !== key) return;
-  const saved = storedAnchors.value.anchors;
-  if (Object.keys(saved).length === 0) return;
-  anchors.value = { ...saved };
-  toast.info('Restored sync points from your last session');
-});
 watch(anchors, (a) => {
   if (!videoKey.value) return;
-  const kept: Record<number, Anchor> = {};
+  const kept: AnchorMap = {};
   for (const [i, anchor] of Object.entries(a)) {
     if (anchor) kept[Number(i)] = anchor;
   }
-  storedAnchors.value = { videoKey: videoKey.value, anchors: kept };
+  storedAnchors.value = {
+    ...toAnchorMap(storedAnchors.value),
+    [videoKey.value]: kept,
+  };
 });
+
+// Everything derived from the mounted file. Restores saved anchors for a
+// file we've synced before; otherwise starts clean — thumbnails, manual
+// clips, and anchors from another recording must never leak across files.
+const resetPerVideoState = (key: string) => {
+  manualClips.value = [];
+  excluded.value = new Set();
+  activeCardId.value = null;
+  thumbnails.value = {};
+  isPlaying.value = false;
+  videoTimeMs.value = 0;
+  videoDurationMs.value = 0;
+  if (outputUrl.value) {
+    URL.revokeObjectURL(outputUrl.value);
+    outputUrl.value = null;
+  }
+  const saved = toAnchorMap(storedAnchors.value)[key];
+  anchors.value = saved ? { ...saved } : {};
+  if (saved && Object.keys(saved).length > 0) {
+    toast.info('Restored sync points from your last session');
+  }
+};
+
+const mountVideo = (file: File, knownTime?: RecordingTime | null) => {
+  const previousKey = videoKey.value;
+  videoFile.value = file;
+  if (videoUrl.value) URL.revokeObjectURL(videoUrl.value);
+  videoUrl.value = URL.createObjectURL(file);
+  if (videoKey.value !== previousKey) resetPerVideoState(videoKey.value!);
+  if (knownTime !== undefined) {
+    // Multi-file pick already parsed this file during ranking — reuse it.
+    recordingTime.value = knownTime;
+    return;
+  }
+  recordingTime.value = null;
+  void readRecordingTime(file).then((t) => {
+    // Only publish if this file is still the mounted one.
+    if (videoFile.value === file) recordingTime.value = t;
+  });
+};
+
+// Guards the ranking await: a newer pick (single or multi) supersedes any
+// still-in-flight one, so a slow rank can't mount a stale file over it.
+let pickSeq = 0;
+
+const onPickVideo = async (e: Event) => {
+  const input = e.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []);
+  // Clear the input's own selection so re-picking the same file later still
+  // fires a change event.
+  input.value = '';
+  if (files.length === 0) return;
+  const gen = ++pickSeq;
+  if (files.length === 1) {
+    mountVideo(files[0]!);
+    return;
+  }
+  // Whole-session pick: with several files, load the one whose recording
+  // window covers this match's event window best. Container timestamps rank
+  // in milliseconds per file; nothing is decoded.
+  if (!matchWindow.value) {
+    // Events haven't loaded (or the match has none) — ranking has nothing to
+    // compare against. Never pretend files[0] was chosen by timing.
+    mountVideo(files[0]!);
+    toast.warning(
+      `Match data is still loading, so the ${files.length} files couldn't be ranked — loaded ${files[0]!.name}. Use "Change video" to re-pick.`
+    );
+    return;
+  }
+  const ranked = await rankRecordings(
+    files,
+    matchWindow.value.startMs,
+    matchWindow.value.endMs
+  );
+  if (gen !== pickSeq) return;
+  const best = ranked[0]!;
+  mountVideo(best.file, best.time);
+  if (best.fit && best.fit.verdict !== 'unlikely') {
+    toast.success(
+      `${best.file.name} fits this match's timing best of ${files.length} files.`
+    );
+  } else {
+    toast.warning(
+      `None of the ${files.length} files clearly match this match's timing — loaded ${best.file.name}. Check the banner below.`
+    );
+  }
+};
+
+const openFilePicker = () => filePickerEl.value?.click();
+
+const fmtStamp = (ms: number) =>
+  new Date(ms).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+const fmtClockOnly = (ms: number) =>
+  new Date(ms).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+// Timing banner, one string per verdict. Hedged when the window came from
+// the filesystem's modified date — copying can reset it, so a mismatch there
+// deserves less confidence than a camera-written container timestamp.
+const fitBanner = computed(() => {
+  const fit = recordingFit.value;
+  const win = matchWindow.value;
+  if (!fit || !win) return null;
+  const rec = `${fmtStamp(fit.recStartMs)}–${fmtClockOnly(fit.recEndMs)}`;
+  const match = `${fmtStamp(win.startMs)}–${fmtClockOnly(win.endMs)}`;
+  const hedge =
+    fit.source === 'file'
+      ? ' (going by the file’s modified date, which copying can reset)'
+      : '';
+  if (fit.verdict === 'likely') {
+    return {
+      tone: 'success' as const,
+      text: `Timing checks out — filmed ${rec}, this match ran ${match}${hedge}.`,
+    };
+  }
+  if (fit.verdict === 'partial') {
+    return {
+      tone: 'warning' as const,
+      text: `This recording covers ~${Math.round(fit.coverage * 100)}% of the match — filmed ${rec}, match ran ${match}${hedge}. Fine if the camera stopped early; suspicious if the number is small.`,
+    };
+  }
+  return {
+    tone: 'warning' as const,
+    text: `This may be the wrong file — it was filmed ${rec}, but this match was played ${match}${hedge}.`,
+  };
+});
+
+// Current video playhead in ms — drives the overlay state.
+const videoTimeMs = ref(0);
+const onTimeUpdate = () => {
+  if (videoEl.value) videoTimeMs.value = videoEl.value.currentTime * 1000;
+};
+
+// The score bug visually sits on top of the video's native control bar
+// (clicks pass through — the overlay is pointer-events-none — but you can't
+// SEE the play button under it). Fade the overlay while the mouse is over
+// the controls strip; touch pointers are ignored (touch: false) — a touch
+// operator uses the timeline strip's play/pause instead, and fading on
+// touch-drag would hide the bug they're inspecting. The zone scales with the
+// stage so it never swallows half a small-viewport frame. Preview-only by
+// construction: the fade lives on a wrapper AROUND overlayEl, and
+// domToCanvas snapshots overlayEl's subtree, so ancestor opacity can never
+// leak into an export.
+const CONTROLS_ZONE_PX = 90;
+const {
+  elementY: stagePointerY,
+  elementHeight: stagePointerHeight,
+  isOutside: isPointerOutsideStage,
+} = useMouseInElement(stageEl, { touch: false });
+const isControlsZoneHovered = computed(() => {
+  if (isPointerOutsideStage.value) return false;
+  const h = stagePointerHeight.value;
+  if (h <= 0) return false;
+  const zone = Math.min(CONTROLS_ZONE_PX, h * 0.25);
+  return h - stagePointerY.value < zone;
+});
+
+// The timeline strip carries its own play/pause — always visible, never
+// under the overlay — which is what touch operators use.
+const isPlaying = ref(false);
+const togglePlay = () => {
+  const v = videoEl.value;
+  if (!v) return;
+  if (v.paused) void v.play();
+  else v.pause();
+};
 
 // First `point` event of each game in the match. Game 0 = events before any
 // game.end. Game N (N>0) = events after the Nth game.end. We use the first
@@ -701,7 +912,6 @@ const formatTime = formatClockMs;
 const BROADCAST_WIDTH = 1920;
 const OVERLAY_SIZE_FACTOR = { s: 0.8, m: 1, l: 1.2 } as const;
 const overlaySize = ref<keyof typeof OVERLAY_SIZE_FACTOR>('m');
-const stageEl = ref<HTMLElement | null>(null);
 const { width: stageWidth, height: stageHeight } = useElementSize(stageEl);
 const overlayFrameStyle = computed(() => {
   const frameW = BROADCAST_WIDTH / OVERLAY_SIZE_FACTOR[overlaySize.value];
@@ -765,6 +975,18 @@ const meta = computed(() => ({
     </header>
 
     <main class="mx-auto max-w-5xl p-4 space-y-4">
+      <!-- Shared picker input: opened by the dropzone button and by
+           "Change video" after a mount, so a wrong auto-pick is always
+           recoverable. -->
+      <input
+        ref="filePickerEl"
+        type="file"
+        accept="video/*"
+        multiple
+        class="hidden"
+        @change="onPickVideo"
+      />
+
       <!-- File picker -->
       <section
         v-if="!videoUrl"
@@ -773,38 +995,36 @@ const meta = computed(() => ({
         <Upload class="mx-auto mb-3 size-8 text-fg-subtle" />
         <p class="mb-1 text-sm font-medium">Upload your gameplay video</p>
         <p class="mb-4 text-xs text-fg-muted">
-          Stays in your browser — never uploaded anywhere.
+          Stays in your browser — never uploaded anywhere. Filmed the whole
+          session? Select all the videos and the one matching this match's
+          timing loads automatically.
         </p>
-        <label class="inline-block">
-          <input
-            type="file"
-            accept="video/*"
-            class="hidden"
-            @change="onPickVideo"
-          />
-          <span
-            class="inline-flex items-center justify-center rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background hover:bg-foreground/90 cursor-pointer"
-          >
-            Choose video
-          </span>
-        </label>
+        <Button @click="openFilePicker">Choose video</Button>
       </section>
 
       <!-- Stage: video + overlay -->
       <section v-else class="space-y-3">
         <!-- Output picker: one anchoring session, two deliverables. -->
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            :model-value="mode"
-            @update:model-value="
-              (v) => v && (mode = v as 'full' | 'highlights')
-            "
-          >
-            <ToggleGroupItem value="full">Full match</ToggleGroupItem>
-            <ToggleGroupItem value="highlights">Highlight reel</ToggleGroupItem>
-          </ToggleGroup>
+          <div class="flex items-center gap-1">
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              :model-value="mode"
+              @update:model-value="
+                (v) => v && (mode = v as 'full' | 'highlights')
+              "
+            >
+              <ToggleGroupItem value="full">Full match</ToggleGroupItem>
+              <ToggleGroupItem value="highlights">
+                Highlight reel
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <Button variant="ghost" size="sm" @click="openFilePicker">
+              <Upload class="size-3.5" />
+              Change video
+            </Button>
+          </div>
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-2">
               <span
@@ -842,6 +1062,20 @@ const meta = computed(() => ({
           </div>
         </div>
 
+        <!-- Recording ↔ match timing check. Fires once metadata is readable;
+             silent when the file carries no usable timestamps. -->
+        <p
+          v-if="fitBanner"
+          class="rounded-md border px-3 py-2 text-xs"
+          :class="
+            fitBanner.tone === 'success'
+              ? 'border-success/40 bg-success-soft text-success'
+              : 'border-warning/40 bg-warning-soft text-warning'
+          "
+        >
+          {{ fitBanner.text }}
+        </p>
+
         <div
           ref="stageEl"
           class="relative aspect-video w-full overflow-hidden rounded-lg bg-black"
@@ -854,28 +1088,37 @@ const meta = computed(() => ({
             @timeupdate="onTimeUpdate"
             @seeked="onTimeUpdate"
             @loadedmetadata="onLoadedMetadata"
+            @play="isPlaying = true"
+            @pause="isPlaying = false"
           />
           <!-- Overlay layered on top. pointer-events:none so video controls
                stay tappable. `overlayEl` ref is what html-to-image snapshots
                during render; the inner frame renders the theme at broadcast
-               proportions and scales down to the stage (see overlayFrameStyle). -->
+               proportions and scales down to the stage (see overlayFrameStyle).
+               The fade wrapper reveals the native controls under the bug —
+               it must stay OUTSIDE overlayEl or it would burn into exports. -->
           <div
             v-if="loaded && themeEntry"
-            ref="overlayEl"
-            class="pointer-events-none absolute inset-0 overflow-hidden"
+            class="pointer-events-none absolute inset-0 transition-opacity duration-200"
+            :class="isControlsZoneHovered ? 'opacity-15' : 'opacity-100'"
           >
             <div
-              class="absolute left-0 top-0 origin-top-left"
-              :style="overlayFrameStyle"
+              ref="overlayEl"
+              class="pointer-events-none absolute inset-0 overflow-hidden"
             >
-              <component
-                :is="themeEntry.component"
-                :state="state"
-                :config="config"
-                :team-names="teamNames"
-                :players="players"
-                :meta="meta"
-              />
+              <div
+                class="absolute left-0 top-0 origin-top-left"
+                :style="overlayFrameStyle"
+              >
+                <component
+                  :is="themeEntry.component"
+                  :state="state"
+                  :config="config"
+                  :team-names="teamNames"
+                  :players="players"
+                  :meta="meta"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -895,11 +1138,23 @@ const meta = computed(() => ({
              highlight mode. Click seeks; clicking a band focuses its card. -->
         <div class="rounded-lg border border-border bg-surface p-3">
           <div class="flex items-center justify-between">
-            <span
-              class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle"
-            >
-              Timeline
-            </span>
+            <div class="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="icon-sm"
+                :aria-label="isPlaying ? 'Pause' : 'Play'"
+                :disabled="!videoDurationMs"
+                @click="togglePlay"
+              >
+                <Pause v-if="isPlaying" class="size-3.5" />
+                <Play v-else class="size-3.5" />
+              </Button>
+              <span
+                class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle"
+              >
+                Timeline
+              </span>
+            </div>
             <Button
               v-if="mode === 'highlights'"
               variant="secondary"
