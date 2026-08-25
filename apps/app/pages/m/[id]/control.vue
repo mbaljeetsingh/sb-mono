@@ -1043,62 +1043,77 @@ const swapLabelB = computed(() =>
            full-perimeter border. Render order follows `sidesSwapped` so the
            swap is a real DOM reorder, not just a CSS reverse — TeamRow's
            orientation prop then puts the net on each half's correct inner
-           edge. -->
-      <div
-        class="relative m-2 flex flex-1 gap-1 overflow-hidden rounded-lg bg-foreground/50"
-        :class="layout === 'sideBySide' ? 'flex-row' : 'flex-col'"
-      >
-        <template
-          v-for="team in sidesSwapped ? ['B', 'A'] : ['A', 'B']"
-          :key="team"
-        >
-          <TeamRow
-            v-if="team === 'A'"
-            team="A"
-            :sport="sport"
-            :surface-class="courtSurface"
-            :orientation="orientationA"
-            :score="score('A')"
-            :games-won="gamesWon.a"
-            :total-slots="config.gamesToWin + 1"
-            :is-match-point="state.matchPoint.a"
-            :is-game-point="state.gamePoint.a"
-            :cells="cellsA"
-            :match-over="state.matchOver"
-            :is-glowing="isGlowingA"
-            :last-winner="lastPointWinner === 'A'"
-            :cell-is-server="(court) => cellIsServer('A', court)"
-            :server-court="state.serverCourt"
-            :cards="state.cards.a"
-            :is-doubles="teamMeta.isDoubles"
-            :display-name="displayNameA"
-            @tap="onTap('A')"
-          />
-          <TeamRow
-            v-else
-            team="B"
-            :sport="sport"
-            :surface-class="courtSurface"
-            :orientation="orientationB"
-            :score="score('B')"
-            :games-won="gamesWon.b"
-            :total-slots="config.gamesToWin + 1"
-            :is-match-point="state.matchPoint.b"
-            :is-game-point="state.gamePoint.b"
-            :cells="cellsB"
-            :match-over="state.matchOver"
-            :is-glowing="isGlowingB"
-            :last-winner="lastPointWinner === 'B'"
-            :cell-is-server="(court) => cellIsServer('B', court)"
-            :server-court="state.serverCourt"
-            :cards="state.cards.b"
-            :is-doubles="teamMeta.isDoubles"
-            :display-name="displayNameB"
-            @tap="onTap('B')"
-          />
-        </template>
+           edge.
 
-        <!-- Pre-match setup pills. Centered between the two team rows.
+           Stacked layout carries a real court's proportions from `sm` up:
+           a badminton court is 6.1m × 13.4m, so the frame derives its width
+           from its height via aspect-[61/134] instead of filling the card —
+           a desktop viewport otherwise renders it near-square, twice as fat
+           as the ground it's depicting. Phones keep full width (thumb
+           targets beat realism mid-rally), min-w floors short landscape
+           windows, and max-w falls back to filling when height outruns the
+           card. Side-by-side stays full-bleed: umpire-chair mode wants the
+           biggest halves it can get. -->
+      <div class="m-2 flex min-h-0 flex-1 justify-center">
+        <div
+          class="relative flex h-full w-full gap-1 overflow-hidden rounded-lg bg-foreground/50"
+          :class="
+            layout === 'sideBySide'
+              ? 'flex-row'
+              : 'flex-col sm:w-auto sm:aspect-[61/134] sm:min-w-[20rem] sm:max-w-full'
+          "
+        >
+          <template
+            v-for="team in sidesSwapped ? ['B', 'A'] : ['A', 'B']"
+            :key="team"
+          >
+            <TeamRow
+              v-if="team === 'A'"
+              team="A"
+              :sport="sport"
+              :surface-class="courtSurface"
+              :orientation="orientationA"
+              :score="score('A')"
+              :games-won="gamesWon.a"
+              :total-slots="config.gamesToWin + 1"
+              :is-match-point="state.matchPoint.a"
+              :is-game-point="state.gamePoint.a"
+              :cells="cellsA"
+              :match-over="state.matchOver"
+              :is-glowing="isGlowingA"
+              :last-winner="lastPointWinner === 'A'"
+              :cell-is-server="(court) => cellIsServer('A', court)"
+              :server-court="state.serverCourt"
+              :cards="state.cards.a"
+              :is-doubles="teamMeta.isDoubles"
+              :display-name="displayNameA"
+              @tap="onTap('A')"
+            />
+            <TeamRow
+              v-else
+              team="B"
+              :sport="sport"
+              :surface-class="courtSurface"
+              :orientation="orientationB"
+              :score="score('B')"
+              :games-won="gamesWon.b"
+              :total-slots="config.gamesToWin + 1"
+              :is-match-point="state.matchPoint.b"
+              :is-game-point="state.gamePoint.b"
+              :cells="cellsB"
+              :match-over="state.matchOver"
+              :is-glowing="isGlowingB"
+              :last-winner="lastPointWinner === 'B'"
+              :cell-is-server="(court) => cellIsServer('B', court)"
+              :server-court="state.serverCourt"
+              :cards="state.cards.b"
+              :is-doubles="teamMeta.isDoubles"
+              :display-name="displayNameB"
+              @tap="onTap('B')"
+            />
+          </template>
+
+          <!-- Pre-match setup pills. Centered between the two team rows.
               • Swap sides — visible pre-match AND at deciding-game interval.
                 Pre-match: rewrites match.start (mirrors server) AND flips
                 visual ends. Mid-deciding: visual only (engine state
@@ -1107,30 +1122,33 @@ const swapLabelB = computed(() =>
                 match.start serverSide WITHOUT touching visual ends.
                 Single-tap correction for "I tapped the wrong team during
                 the toss" without forcing an ends flip too. -->
-        <!-- Take-over overlay. Sits above the court, dims it slightly, and
+          <!-- Take-over overlay. Sits above the court, dims it slightly, and
              intercepts taps with a "Score from this device" reclaim button.
              Pointer-events on the cells underneath are blocked by this
              layer; on-screen score stays visible so the read-only viewer
              still tracks the match. -->
-        <div
-          v-if="!isActive"
-          class="absolute inset-0 z-30 flex items-center justify-center bg-background/55 backdrop-blur-[1px]"
-        >
           <div
-            class="flex flex-col items-center gap-3 rounded-lg border border-border-strong bg-background/95 px-4 py-3 shadow-xl"
+            v-if="!isActive"
+            class="absolute inset-0 z-30 flex items-center justify-center bg-background/55 backdrop-blur-[1px]"
           >
-            <span
-              class="text-[11px] font-bold uppercase tracking-wider text-fg-muted"
+            <div
+              class="flex flex-col items-center gap-3 rounded-lg border border-border-strong bg-background/95 px-4 py-3 shadow-xl"
             >
-              Another device is scoring
-            </span>
-            <Button type="button" size="sm" @click="claimScoring">
-              Score from this device
-            </Button>
-            <span class="max-w-[16rem] text-center text-[10px] text-fg-subtle">
-              Taking over disables scoring on the other device until they
-              reclaim it.
-            </span>
+              <span
+                class="text-[11px] font-bold uppercase tracking-wider text-fg-muted"
+              >
+                Another device is scoring
+              </span>
+              <Button type="button" size="sm" @click="claimScoring">
+                Score from this device
+              </Button>
+              <span
+                class="max-w-[16rem] text-center text-[10px] text-fg-subtle"
+              >
+                Taking over disables scoring on the other device until they
+                reclaim it.
+              </span>
+            </div>
           </div>
         </div>
       </div>

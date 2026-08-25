@@ -64,6 +64,19 @@ const label = computed(() => `${nameA.value} vs ${nameB.value}`);
 const winnerSide = computed(() =>
   props.summary?.status === 'final' ? props.summary.winner : null
 );
+
+// What the status column shows. `ready` normally renders nothing (0–0 is not
+// a result) — except when the match is ON AIR: a stream is broadcasting this
+// scoreboard right now, so the row shows LIVE 0–0 instead of a blank edge
+// that reads as "no status". Presentation-only: the summary's `ready` stays
+// truthful for every other consumer.
+const displaySummary = computed(() => {
+  const s = props.summary;
+  if (!s) return null;
+  if (s.status !== 'ready') return s;
+  if (!props.onAir) return null;
+  return { status: 'live' as const, scoreline: '0–0', winner: null };
+});
 // The winner is emphasised by letting the loser recede — at 15px, medium vs
 // semibold alone is too small a step to read at a glance down a list.
 const sideClass = (side: 'A' | 'B') => {
@@ -166,14 +179,16 @@ const onDeleted = () => emit('deleted', props.id);
               </span>
             </span>
           </span>
-          <!-- Second line: identity metadata on the left, status + scoreline
-               pushed to the right edge.
+          <!-- Second line: identity metadata on the left; on narrow screens
+               the status + scoreline share this row too.
                The status block used to be a third column beside the names. At
                390px that left the names ~180px — "Chou Tien-chen vs Anders
                Antonsen" wrapped to three lines while the sport label truncated
                to "Badmin…" — and the scoreline lined up with nothing. Down here
                it shares a row that had spare width, and the names get the full
-               row back.
+               row back. From `md` up the squeeze doesn't exist, so the status
+               moves back out to a right-hand column (below) that centers
+               vertically in the row instead of hugging this baseline.
                Widths: the date is what you scan a history list by, so it holds
                its width; the sport / event / court labels give theirs up. -->
           <span
@@ -186,11 +201,11 @@ const onDeleted = () => emit('deleted', props.id);
               · {{ formattedDate }}
             </span>
             <span
-              v-if="summary && summary.status !== 'ready'"
-              class="ml-auto flex shrink-0 items-center gap-2"
+              v-if="displaySummary"
+              class="ml-auto flex shrink-0 items-center gap-2 md:hidden"
             >
               <span
-                v-if="summary.status === 'live'"
+                v-if="displaySummary.status === 'live'"
                 class="flex items-center gap-1.5 rounded-full bg-live-soft px-2 py-0.5 text-[10px] font-bold tracking-wider text-live"
               >
                 <span class="relative flex h-1.5 w-1.5">
@@ -210,12 +225,47 @@ const onDeleted = () => emit('deleted', props.id);
                 FINAL
               </span>
               <span
-                v-if="summary.scoreline"
+                v-if="displaySummary.scoreline"
                 class="font-mono text-sm font-semibold tabular-nums text-foreground"
               >
-                {{ summary.scoreline }}
+                {{ displaySummary.scoreline }}
               </span>
             </span>
+          </span>
+        </span>
+
+        <!-- md+ status column: same chip + scoreline as the meta-line variant
+             above (which is md:hidden), rendered as a sibling of the text
+             column so the row's items-center centers it vertically. -->
+        <span
+          v-if="displaySummary"
+          class="hidden shrink-0 items-center gap-2 md:flex"
+        >
+          <span
+            v-if="displaySummary.status === 'live'"
+            class="flex items-center gap-1.5 rounded-full bg-live-soft px-2 py-0.5 text-[10px] font-bold tracking-wider text-live"
+          >
+            <span class="relative flex h-1.5 w-1.5">
+              <span
+                class="absolute inline-flex h-full w-full animate-ping rounded-full bg-live opacity-75"
+              />
+              <span
+                class="relative inline-flex h-1.5 w-1.5 rounded-full bg-live"
+              />
+            </span>
+            LIVE
+          </span>
+          <span
+            v-else
+            class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold tracking-wider text-fg-muted"
+          >
+            FINAL
+          </span>
+          <span
+            v-if="displaySummary.scoreline"
+            class="font-mono text-sm font-semibold tabular-nums text-foreground"
+          >
+            {{ displaySummary.scoreline }}
           </span>
         </span>
       </NuxtLink>
