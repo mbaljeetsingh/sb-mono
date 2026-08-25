@@ -26,7 +26,12 @@ import {
   type OverlaySnapshot,
   useVideoRenderWebCodecs,
 } from '~/composables/useVideoRenderWebCodecs';
-import { buildHighlightClips, clipsToVideo } from '~/lib/highlight-clips';
+import {
+  type ClipKind,
+  buildHighlightClips,
+  clipsToVideo,
+  formatClockMs,
+} from '~/lib/highlight-clips';
 import {
   type Anchor,
   type SnapshotPlanEntry,
@@ -125,6 +130,11 @@ const activeAnchor = computed<Anchor | null>(() => {
 });
 
 watch([videoTimeMs, activeAnchor], () => {
+  // The snapshot loop owns replayTimeMs while it runs — a timeupdate or a
+  // card preview mid-render would otherwise overwrite the state between
+  // "set replay time" and "rasterize", burning the playhead's score into
+  // random frames of the export.
+  if (snapshotting.value) return;
   const a = activeAnchor.value;
   if (!a) return;
   replayTimeMs.value = a.eventTs + (videoTimeMs.value - a.videoMs);
@@ -194,6 +204,7 @@ const videoClips = computed(() =>
 // session-local by design: marking happens while reviewing the file.
 type ManualClip = { id: string; videoStartMs: number; videoEndMs: number };
 const manualClips = ref<ManualClip[]>([]);
+let manualClipSeq = 0;
 const MANUAL_LOOKBACK_MS = 15_000;
 const MANUAL_POST_MS = 5_000;
 const addClipAtPlayhead = () => {
@@ -205,7 +216,10 @@ const addClipAtPlayhead = () => {
   manualClips.value = [
     ...manualClips.value,
     {
-      id: `manual-${Math.round(at)}`,
+      // Counter, not just the timestamp: two taps on a paused playhead
+      // would otherwise mint the same id (duplicate v-for keys, shared
+      // selection/thumbnail state).
+      id: `manual-${manualClipSeq++}-${Math.round(at)}`,
       videoStartMs: Math.max(0, at - MANUAL_LOOKBACK_MS),
       videoEndMs: end,
     },
@@ -242,7 +256,7 @@ const toggleCard = (id: string) => {
 
 type ClipCard = {
   id: string;
-  kind: 'match-point' | 'game-point' | 'long-rally' | 'manual';
+  kind: ClipKind;
   title: string;
   meta: string;
   videoStartMs: number;
@@ -347,7 +361,11 @@ const captureThumbnails = async () => {
     const canvas = document.createElement('canvas');
     // Re-read the pending list each pass — clips can appear mid-capture.
     for (;;) {
-      const next = cards.value.find((c) => !thumbnails.value[c.id]);
+      // `=== undefined`, not falsiness: a failed capture is recorded as ''
+      // below, and a falsy check would re-select that card forever.
+      const next = cards.value.find(
+        (c) => thumbnails.value[c.id] === undefined
+      );
       if (!next) break;
       // The rally's payoff sits just before the clip's post-roll tail.
       const atSec = Math.max(next.videoStartMs, next.videoEndMs - 4_000) / 1000;
@@ -405,20 +423,20 @@ watch(
 const renderingClipId = ref<string | null>(null);
 
 // Only the overlay states a clip can actually show: everything inside the
-// window plus the state already active when it opens.
+// window plus the state already active when it opens. Deliberately NO
+// fallback to plan[0] when nothing precedes the window — plan[0] can belong
+// to a LATER game's footage (only-game-2-synced on a continuous recording),
+// and burning a future scoreline over earlier footage is worse than the
+// empty-subset guard refusing with its toast.
 const snapshotSubsetFor = (
   startSec: number,
   endSec: number
 ): SnapshotPlanEntry[] => {
   const plan = snapshotPlan.value;
   const before = plan.filter((p) => p.videoTimeSec <= startSec);
-  const opening = before.length
-    ? before[before.length - 1]!
-    : plan.length
-      ? plan[0]!
-      : null;
+  const opening = before.length ? [before[before.length - 1]!] : [];
   return [
-    ...(opening ? [opening] : []),
+    ...opening,
     ...plan.filter(
       (p) => p.videoTimeSec > startSec && p.videoTimeSec <= endSec
     ),
@@ -464,6 +482,13 @@ const renderClip = async (card: ClipCard) => {
       overlaySnapshots: bitmaps,
       range: { startSec, endSec },
     });
+    // The composable publishes every render on `outputUrl`, which feeds the
+    // FULL-match section's preview + download button — a clip must not pose
+    // as the full render there, and each abandoned URL pins its MP4 blob.
+    if (outputUrl.value) {
+      URL.revokeObjectURL(outputUrl.value);
+      outputUrl.value = null;
+    }
     downloadBlob(blob, clipFilename(card));
   } catch (err) {
     snapshotting.value = false;
@@ -475,6 +500,12 @@ const renderClip = async (card: ClipCard) => {
 };
 
 const downloadSelected = async () => {
+  // Every save after the first happens minutes outside the click gesture,
+  // which Chromium gates behind an "allow multiple downloads" permission —
+  // warn once so a dismissed prompt doesn't silently swallow clips 2..n.
+  if (selectedCards.value.length > 1) {
+    toast.info('If your browser asks to allow multiple downloads, allow it.');
+  }
   for (const card of selectedCards.value) {
     await renderClip(card);
   }
@@ -540,6 +571,9 @@ const collectOverlayBitmaps = async (
   const overlay = overlayEl.value;
   const video = videoEl.value;
   if (!overlay || !video) throw new Error('overlay or video not mounted');
+  // A playing video would keep firing timeupdate against the guarded watcher
+  // above; pause so the operator's playback can't race the snapshot loop.
+  video.pause();
 
   const overlayRect = overlay.getBoundingClientRect();
   const videoW = video.videoWidth || overlayRect.width;
@@ -591,12 +625,8 @@ const downloadOutput = () => {
   a.remove();
 };
 
-const formatTime = (ms: number) => {
-  const total = Math.round(ms / 1000);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-};
+// Shared with the timeline strip — one clock format for the whole page.
+const formatTime = formatClockMs;
 
 // Theme — reuse the overlay theme the operator chose for this match.
 const { overlay: overlayTheme } = useThemeChoice(matchId);

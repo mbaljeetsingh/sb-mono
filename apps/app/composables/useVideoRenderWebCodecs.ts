@@ -292,6 +292,8 @@ const pickActiveOverlay = (
 export function useVideoRenderWebCodecs() {
   const progress = ref<RenderProgress>({ stage: 'idle' });
   const outputUrl = ref<string | null>(null);
+  // See render() step 1 — one demux per file, not per clip.
+  let cachedDemux: { blob: Blob; result: DemuxResult } | null = null;
 
   const isSupported = computed(
     () =>
@@ -329,9 +331,17 @@ export function useVideoRenderWebCodecs() {
     }
     outputUrl.value = null;
 
-    // 1) Demux source.
+    // 1) Demux source. Cached per blob: sample tables don't change between
+    // renders of the same file, and per-clip downloads would otherwise
+    // re-read and re-parse a multi-GB recording once per clip.
     progress.value = { stage: 'demuxing', message: 'Reading video…' };
-    const demux = await demuxFile(params.videoBlob);
+    let demux: DemuxResult;
+    if (cachedDemux && cachedDemux.blob === params.videoBlob) {
+      demux = cachedDemux.result;
+    } else {
+      demux = await demuxFile(params.videoBlob);
+      cachedDemux = { blob: params.videoBlob, result: demux };
+    }
 
     const range = params.range ?? null;
     const rangeStartUs = range ? Math.max(0, range.startSec * 1_000_000) : 0;
@@ -347,6 +357,21 @@ export function useVideoRenderWebCodecs() {
     let feedSamples = demux.videoSamples;
     if (range) {
       const sampleUs = (cts: number) => (cts * 1_000_000) / demux.timescale;
+      // A window that starts past the footage's end would otherwise slip
+      // through: the keyframe walk-back yields the tail GOP (non-empty
+      // subset), every decoded frame is then range-dropped, and the run
+      // dies with the misleading "no encoded chunks" error. The event log
+      // can legitimately outrun the recording (camera died early).
+      const last = demux.videoSamples[demux.videoSamples.length - 1];
+      if (
+        !last ||
+        sampleUs(last.cts) + (last.duration * 1_000_000) / demux.timescale <=
+          rangeStartUs
+      ) {
+        throw new Error(
+          'clip starts after the recording ends — the video is shorter than the match'
+        );
+      }
       let keyIdx = 0;
       for (let i = 0; i < demux.videoSamples.length; i++) {
         const s = demux.videoSamples[i]!;

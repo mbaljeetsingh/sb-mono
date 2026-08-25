@@ -7,10 +7,11 @@
 import { Button } from '@sb/layer-ui/components/ui/button';
 import { Progress } from '@sb/layer-ui/components/ui/progress';
 import { Check, Download, Play } from 'lucide-vue-next';
+import { type ClipKind, clipKindMeta } from '~/lib/highlight-clips';
 
 export type HighlightCardModel = {
   id: string;
-  kind: 'match-point' | 'game-point' | 'long-rally' | 'manual';
+  kind: ClipKind;
   title: string;
   meta: string;
   durationLabel: string;
@@ -31,28 +32,6 @@ const emit = defineEmits<{
   (e: 'preview'): void;
   (e: 'download'): void;
 }>();
-
-const chip: Record<
-  HighlightCardModel['kind'],
-  { label: string; class: string }
-> = {
-  'match-point': {
-    label: 'Match point',
-    class: 'text-match-point border-match-point/40 bg-match-point/15',
-  },
-  'game-point': {
-    label: 'Game point',
-    class: 'text-game-point border-game-point/40 bg-game-point/15',
-  },
-  'long-rally': {
-    label: 'Long rally',
-    class: 'text-primary border-primary/40 bg-primary/15',
-  },
-  manual: {
-    label: 'Added by you',
-    class: 'text-info border-info/40 bg-info/15',
-  },
-};
 </script>
 
 <template>
@@ -74,9 +53,9 @@ const chip: Record<
       />
       <span
         class="absolute left-2 top-2 inline-flex h-5 items-center rounded-md border px-2 text-[10px] font-bold uppercase tracking-wider"
-        :class="chip[card.kind].class"
+        :class="clipKindMeta[card.kind].chipClass"
       >
-        {{ chip[card.kind].label }}
+        {{ clipKindMeta[card.kind].label }}
       </span>
       <span
         class="absolute bottom-2 right-2 rounded bg-black/65 px-1.5 py-0.5 font-mono text-[10px] text-white"

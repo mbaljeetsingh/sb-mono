@@ -3,15 +3,22 @@
 // controls (which stay — fullscreen/keyboard/iOS come free) and adds what
 // they can't show: per-game sync ticks, highlight-clip bands colored by kind,
 // and a playhead. Click/tap seeks; clicking a band also tells the parent
-// which clip it is so the card list can follow.
+// which clip it is so the card list can follow. Deliberately NOT a slider
+// role: it isn't keyboard-operable, and keyboard seeking already exists on
+// the native video controls — an inert "slider" would lie to assistive tech.
 
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
+import {
+  type ClipKind,
+  clipKindMeta,
+  formatClockMs,
+} from '~/lib/highlight-clips';
 
 export type TimelineBand = {
   id: string;
   startMs: number;
   endMs: number;
-  kind: 'match-point' | 'game-point' | 'long-rally' | 'manual';
+  kind: ClipKind;
   selected: boolean;
 };
 
@@ -45,19 +52,7 @@ const bandStyle = (b: TimelineBand) => ({
   width: `max(8px, calc(${pct(b.endMs)} - ${pct(b.startMs)}))`,
 });
 
-const bandColor: Record<TimelineBand['kind'], string> = {
-  'match-point': 'bg-match-point',
-  'game-point': 'bg-game-point',
-  'long-rally': 'bg-primary',
-  manual: 'bg-info',
-};
-
-const legend = computed(() => [
-  { label: 'Match point', class: 'bg-match-point' },
-  { label: 'Game point', class: 'bg-game-point' },
-  { label: 'Long rally', class: 'bg-primary' },
-  { label: 'Added by you', class: 'bg-info' },
-]);
+const legend = Object.values(clipKindMeta);
 
 const onTrackClick = (e: MouseEvent) => {
   const el = track.value;
@@ -72,27 +67,11 @@ const onBandClick = (b: TimelineBand, e: MouseEvent) => {
   emit('select-band', b.id);
   emit('seek', b.startMs);
 };
-
-const formatTime = (ms: number) => {
-  const total = Math.round(ms / 1000);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-};
 </script>
 
 <template>
   <div>
-    <div
-      ref="track"
-      class="relative h-12 cursor-pointer"
-      role="slider"
-      aria-label="Video timeline"
-      :aria-valuemin="0"
-      :aria-valuemax="Math.round(durationMs / 1000)"
-      :aria-valuenow="Math.round(currentMs / 1000)"
-      @click="onTrackClick"
-    >
+    <div ref="track" class="relative h-12 cursor-pointer" @click="onTrackClick">
       <!-- Per-game sync ticks -->
       <template v-for="tick in anchorTicks" :key="tick.gameIndex">
         <span
@@ -119,12 +98,12 @@ const formatTime = (ms: number) => {
         type="button"
         class="absolute top-6 h-4 rounded-[3px] transition-opacity"
         :class="[
-          bandColor[b.kind],
+          clipKindMeta[b.kind].bandClass,
           b.selected ? 'opacity-100' : 'opacity-35',
           b.id === activeBandId ? 'ring-2 ring-foreground/50' : '',
         ]"
         :style="bandStyle(b)"
-        :aria-label="`Jump to clip at ${formatTime(b.startMs)}`"
+        :aria-label="`Jump to clip at ${formatClockMs(b.startMs)}`"
         @click="onBandClick(b, $event)"
       />
 
@@ -143,12 +122,12 @@ const formatTime = (ms: number) => {
           :key="item.label"
           class="flex items-center gap-1.5"
         >
-          <span class="size-2 rounded-full" :class="item.class" />
+          <span class="size-2 rounded-full" :class="item.bandClass" />
           <span class="text-[10px] text-fg-subtle">{{ item.label }}</span>
         </span>
       </div>
       <span class="font-mono text-[10px] text-fg-subtle">
-        {{ formatTime(durationMs) }}
+        {{ formatClockMs(durationMs) }}
       </span>
     </div>
   </div>

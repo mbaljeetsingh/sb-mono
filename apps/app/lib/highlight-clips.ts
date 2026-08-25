@@ -30,6 +30,47 @@ export type RacquetReducer = (
 
 export type HighlightKind = 'match-point' | 'game-point' | 'long-rally';
 
+/** Everything a card/band can be: engine-derived kinds plus operator-added. */
+export type ClipKind = HighlightKind | 'manual';
+
+/** Shared presentation metadata per kind — one source for the timeline
+ * bands, the legend, and the card chips, so adding or recoloring a kind is
+ * a one-place change. Band/chip classes are Tailwind utilities backed by
+ * theme tokens. */
+export const clipKindMeta: Record<
+  ClipKind,
+  { label: string; bandClass: string; chipClass: string }
+> = {
+  'match-point': {
+    label: 'Match point',
+    bandClass: 'bg-match-point',
+    chipClass: 'text-match-point border-match-point/40 bg-match-point/15',
+  },
+  'game-point': {
+    label: 'Game point',
+    bandClass: 'bg-game-point',
+    chipClass: 'text-game-point border-game-point/40 bg-game-point/15',
+  },
+  'long-rally': {
+    label: 'Long rally',
+    bandClass: 'bg-primary',
+    chipClass: 'text-primary border-primary/40 bg-primary/15',
+  },
+  manual: {
+    label: 'Added by you',
+    bandClass: 'bg-info',
+    chipClass: 'text-info border-info/40 bg-info/15',
+  },
+};
+
+/** m:ss for video positions/durations. */
+export const formatClockMs = (ms: number): string => {
+  const total = Math.round(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
+
 export type GamePair = { a: number; b: number };
 
 export type HighlightClip = {
