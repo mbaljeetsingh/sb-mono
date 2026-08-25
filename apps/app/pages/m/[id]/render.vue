@@ -6,11 +6,17 @@
 // finished. The /m/[id] hub only surfaces the entry point once state.matchOver
 // is true.
 
+import { getPreset } from '@sb/engine';
 import { Button } from '@sb/layer-ui/components/ui/button';
 import { Progress } from '@sb/layer-ui/components/ui/progress';
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from '@sb/layer-ui/components/ui/toggle-group';
 import { getErrorMessage } from '@sb/shared/errors';
 import { getTheme } from '@sb/themes';
-import { ArrowLeft, Download, Film, Upload } from 'lucide-vue-next';
+import { useElementSize, useStorage } from '@vueuse/core';
+import { ArrowLeft, Download, Film, Plus, Upload } from 'lucide-vue-next';
 import { domToCanvas } from 'modern-screenshot';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
@@ -21,7 +27,17 @@ import {
   type OverlaySnapshot,
   useVideoRenderWebCodecs,
 } from '~/composables/useVideoRenderWebCodecs';
-import { type Anchor, buildSnapshotPlan } from '~/lib/snapshot-plan';
+import {
+  type ClipKind,
+  buildHighlightClips,
+  clipsToVideo,
+  formatClockMs,
+} from '~/lib/highlight-clips';
+import {
+  type Anchor,
+  type SnapshotPlanEntry,
+  buildSnapshotPlan,
+} from '~/lib/snapshot-plan';
 
 definePageMeta({ layout: false });
 useSeoMeta({ title: 'Render · Scoreboard' });
@@ -66,6 +82,35 @@ const onTimeUpdate = () => {
 // is whichever anchor's videoMs is most recently <= current playhead.
 const anchors = ref<Record<number, Anchor | null>>({});
 
+// Anchors survive revisits: syncing means frame-hunting the end of the first
+// rally of every game, and losing that to a reload makes re-renders miserable.
+// Device-local (the video file itself lives on this device) and keyed to the
+// file's name+size — anchors are meaningless against any other recording, so
+// a different upload starts clean rather than inheriting a stale mapping.
+type StoredAnchors = { videoKey: string; anchors: Record<number, Anchor> };
+const storedAnchors = useStorage<StoredAnchors>(
+  computed(() => `sb:render-anchors:${matchId.value}`),
+  { videoKey: '', anchors: {} }
+);
+const videoKey = computed(() =>
+  videoFile.value ? `${videoFile.value.name}|${videoFile.value.size}` : null
+);
+watch(videoKey, (key) => {
+  if (!key || storedAnchors.value.videoKey !== key) return;
+  const saved = storedAnchors.value.anchors;
+  if (Object.keys(saved).length === 0) return;
+  anchors.value = { ...saved };
+  toast.info('Restored sync points from your last session');
+});
+watch(anchors, (a) => {
+  if (!videoKey.value) return;
+  const kept: Record<number, Anchor> = {};
+  for (const [i, anchor] of Object.entries(a)) {
+    if (anchor) kept[Number(i)] = anchor;
+  }
+  storedAnchors.value = { videoKey: videoKey.value, anchors: kept };
+});
+
 // First `point` event of each game in the match. Game 0 = events before any
 // game.end. Game N (N>0) = events after the Nth game.end. We use the first
 // point of each game as the natural anchor (first visible rally outcome).
@@ -90,7 +135,10 @@ const firstPointPerGame = computed<((typeof events.value)[number] | null)[]>(
 const totalGames = computed(() => firstPointPerGame.value.length);
 
 const replayTimeMs = ref(0);
-const { state, config, loaded, events } = useReplayState(matchId, replayTimeMs);
+const { state, config, preset, loaded, events } = useReplayState(
+  matchId,
+  replayTimeMs
+);
 
 // Active anchor = the latest anchor whose videoMs is <= current playhead.
 // Used so each game-segment of the video drives the overlay with its own
@@ -112,6 +160,11 @@ const activeAnchor = computed<Anchor | null>(() => {
 });
 
 watch([videoTimeMs, activeAnchor], () => {
+  // The snapshot loop owns replayTimeMs while it runs — a timeupdate or a
+  // card preview mid-render would otherwise overwrite the state between
+  // "set replay time" and "rasterize", burning the playhead's score into
+  // random frames of the export.
+  if (snapshotting.value) return;
   const a = activeAnchor.value;
   if (!a) return;
   replayTimeMs.value = a.eventTs + (videoTimeMs.value - a.videoMs);
@@ -143,6 +196,391 @@ const clearAnchor = (gameIndex: number) => {
   const next = { ...anchors.value };
   delete next[gameIndex];
   anchors.value = next;
+};
+
+// ── Highlights mode ─────────────────────────────────────────────────────────
+// Same page, same anchors: "Full match" renders the whole file with the
+// overlay burned in; "Highlight reel" derives clips from the event log
+// (long rallies, game winners, match point — see lib/highlight-clips) plus
+// manually marked moments, and renders each selected clip as its own MP4.
+
+const mode = ref<'full' | 'highlights'>('full');
+
+const videoDurationMs = ref(0);
+const onLoadedMetadata = () => {
+  if (videoEl.value) {
+    videoDurationMs.value = (videoEl.value.duration || 0) * 1000;
+  }
+};
+
+const seekTo = (ms: number) => {
+  if (!videoEl.value) return;
+  videoEl.value.currentTime = ms / 1000;
+  videoTimeMs.value = ms;
+};
+
+const highlightClips = computed(() => {
+  if (!loaded.value) return [];
+  const entry = getPreset(preset.value);
+  return buildHighlightClips(events.value, entry.reducer, config.value);
+});
+
+const videoClips = computed(() =>
+  clipsToVideo(highlightClips.value, anchors.value)
+);
+
+// Manual clips live in video time only — they mark moments the log can't see
+// (the funny ones), so there is no event to anchor them to. Device-local and
+// session-local by design: marking happens while reviewing the file.
+type ManualClip = { id: string; videoStartMs: number; videoEndMs: number };
+const manualClips = ref<ManualClip[]>([]);
+let manualClipSeq = 0;
+const MANUAL_LOOKBACK_MS = 15_000;
+const MANUAL_POST_MS = 5_000;
+const addClipAtPlayhead = () => {
+  const at = videoTimeMs.value;
+  const end = Math.min(
+    videoDurationMs.value || at + MANUAL_POST_MS,
+    at + MANUAL_POST_MS
+  );
+  manualClips.value = [
+    ...manualClips.value,
+    {
+      // Counter, not just the timestamp: two taps on a paused playhead
+      // would otherwise mint the same id (duplicate v-for keys, shared
+      // selection/thumbnail state).
+      id: `manual-${manualClipSeq++}-${Math.round(at)}`,
+      videoStartMs: Math.max(0, at - MANUAL_LOOKBACK_MS),
+      videoEndMs: end,
+    },
+  ];
+};
+
+const removeManualClip = (id: string) => {
+  const removed = manualClips.value.find((m) => m.id === id);
+  if (!removed) return;
+  manualClips.value = manualClips.value.filter((m) => m.id !== id);
+  // Drop the card's residue so a later clip can't inherit it: its exclusion
+  // entry and its focus (a removed card must not stay the active band).
+  if (excluded.value.has(id)) {
+    const next = new Set(excluded.value);
+    next.delete(id);
+    excluded.value = next;
+  }
+  if (activeCardId.value === id) activeCardId.value = null;
+  // Same pattern as recent-player chip removal: no confirm dialog, an undo
+  // toast instead. Restoring reuses the id — the thumbnail cache entry is
+  // still keyed to it, so undo doesn't re-trigger a capture.
+  toast('Clip removed', {
+    action: {
+      label: 'Undo',
+      onClick: () => {
+        if (manualClips.value.some((m) => m.id === removed.id)) return;
+        manualClips.value = [...manualClips.value, removed];
+      },
+    },
+  });
+};
+
+// Clips can carry the score bug or ship as clean footage — a reel edited in
+// Instagram often wants the clean cut, with the score added as a caption.
+const clipOverlay = ref(true);
+
+// "Someone's highlights": every point event knows which side won it, so
+// filtering by side is free — no video analysis. Manual clips have no side
+// and always pass. Doubles can't attribute a point to one partner (the log
+// doesn't know who hit it), so the filter is per team there.
+const sideFilter = ref<'all' | 'A' | 'B'>('all');
+const sideFilterLabel = (side: 'A' | 'B') => {
+  const name = teamNames.value[side === 'A' ? 'a' : 'b'];
+  return name || `Team ${side}`;
+};
+
+// Selection: everything is in by default; only explicit exclusions are
+// stored, so a recomputed clip list (new anchor, new manual clip) doesn't
+// reset choices already made.
+const excluded = ref(new Set<string>());
+const toggleCard = (id: string) => {
+  const next = new Set(excluded.value);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  excluded.value = next;
+};
+
+type ClipCard = {
+  id: string;
+  kind: ClipKind;
+  title: string;
+  meta: string;
+  videoStartMs: number;
+  videoEndMs: number;
+  durationLabel: string;
+  thumbnail: string | null;
+  selected: boolean;
+};
+
+const formatScore = (s: { a: number; b: number }) => `${s.a}–${s.b}`;
+
+const cards = computed<ClipCard[]>(() => {
+  const filtered =
+    sideFilter.value === 'all'
+      ? videoClips.value
+      : videoClips.value.filter((c) => c.side === sideFilter.value);
+  const auto = filtered.map((c) => ({
+    id: c.id,
+    kind: c.kind,
+    title:
+      c.kind === 'match-point'
+        ? 'Match point'
+        : c.kind === 'game-point'
+          ? `Game ${c.gameIndex + 1} won`
+          : c.kind === 'point-saved'
+            ? c.saved === 'match'
+              ? 'Match point saved'
+              : 'Game point saved'
+            : c.kind === 'clutch'
+              ? 'Clutch point'
+              : 'Long rally',
+    meta: `Game ${c.gameIndex + 1} · ${formatScore(c.scoreBefore)} → ${formatScore(c.scoreAfter)} · at ${formatTime(c.videoStartMs)}`,
+    videoStartMs: c.videoStartMs,
+    videoEndMs: c.videoEndMs,
+  }));
+  const manual = manualClips.value.map((m) => ({
+    id: m.id,
+    kind: 'manual' as const,
+    title: 'Added clip',
+    meta: `Marked on timeline · at ${formatTime(m.videoStartMs)}`,
+    videoStartMs: m.videoStartMs,
+    videoEndMs: m.videoEndMs,
+  }));
+  return [...auto, ...manual]
+    .sort((x, y) => x.videoStartMs - y.videoStartMs)
+    .map((c) => ({
+      ...c,
+      durationLabel: formatTime(c.videoEndMs - c.videoStartMs),
+      thumbnail: thumbnails.value[c.id] ?? null,
+      selected: !excluded.value.has(c.id),
+    }));
+});
+
+const selectedCards = computed(() => cards.value.filter((c) => c.selected));
+const allSelected = computed(
+  () =>
+    cards.value.length > 0 && selectedCards.value.length === cards.value.length
+);
+const toggleSelectAll = () => {
+  excluded.value = allSelected.value
+    ? new Set(cards.value.map((c) => c.id))
+    : new Set();
+};
+const selectedTotalLabel = computed(() =>
+  formatTime(
+    selectedCards.value.reduce(
+      (sum, c) => sum + (c.videoEndMs - c.videoStartMs),
+      0
+    )
+  )
+);
+
+const anchorTicks = computed(() =>
+  Object.entries(anchors.value)
+    .filter((entry): entry is [string, Anchor] => !!entry[1])
+    .map(([i, a]) => ({ gameIndex: Number(i), videoMs: a.videoMs }))
+);
+
+const timelineBands = computed(() =>
+  cards.value.map((c) => ({
+    id: c.id,
+    startMs: c.videoStartMs,
+    endMs: c.videoEndMs,
+    kind: c.kind,
+    selected: c.selected,
+  }))
+);
+
+const activeCardId = ref<string | null>(null);
+const previewCard = (id: string) => {
+  activeCardId.value = id;
+  const c = cards.value.find((x) => x.id === id);
+  if (c) seekTo(c.videoStartMs);
+};
+
+// ── Thumbnails ──────────────────────────────────────────────────────────────
+// A second, muted video element grabs a real frame per clip so capture never
+// jumps the operator's playhead. Sequential seek → 'seeked' → drawImage.
+const thumbVideoEl = ref<HTMLVideoElement | null>(null);
+const thumbnails = ref<Record<string, string>>({});
+let thumbQueueRunning = false;
+
+const captureThumbnails = async () => {
+  const video = thumbVideoEl.value;
+  if (!video || thumbQueueRunning) return;
+  thumbQueueRunning = true;
+  try {
+    const canvas = document.createElement('canvas');
+    // Re-read the pending list each pass — clips can appear mid-capture.
+    for (;;) {
+      // `=== undefined`, not falsiness: a failed capture is recorded as ''
+      // below, and a falsy check would re-select that card forever.
+      const next = cards.value.find(
+        (c) => thumbnails.value[c.id] === undefined
+      );
+      if (!next) break;
+      // The rally's payoff sits just before the clip's post-roll tail.
+      const atSec = Math.max(next.videoStartMs, next.videoEndMs - 4_000) / 1000;
+      const seeked = await new Promise<boolean>((resolve) => {
+        const onSeeked = () => {
+          cleanup();
+          resolve(true);
+        };
+        const onError = () => {
+          cleanup();
+          resolve(false);
+        };
+        const cleanup = () => {
+          video.removeEventListener('seeked', onSeeked);
+          video.removeEventListener('error', onError);
+        };
+        video.addEventListener('seeked', onSeeked, { once: true });
+        video.addEventListener('error', onError, { once: true });
+        video.currentTime = atSec;
+      });
+      if (!seeked || !video.videoWidth) {
+        // Mark it so a broken seek can't loop forever; card falls back to
+        // the dark placeholder.
+        thumbnails.value = { ...thumbnails.value, [next.id]: '' };
+        continue;
+      }
+      canvas.width = 320;
+      canvas.height = Math.round((320 * video.videoHeight) / video.videoWidth);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) break;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      thumbnails.value = {
+        ...thumbnails.value,
+        [next.id]: canvas.toDataURL('image/jpeg', 0.7),
+      };
+    }
+  } finally {
+    thumbQueueRunning = false;
+  }
+};
+
+// Re-anchoring moves every auto clip, so cached frames no longer match.
+watch(anchors, () => {
+  thumbnails.value = {};
+});
+watch(
+  [() => cards.value.length, mode, anchors],
+  () => {
+    if (mode.value === 'highlights') void captureThumbnails();
+  },
+  { flush: 'post' }
+);
+
+// ── Per-clip render ─────────────────────────────────────────────────────────
+const renderingClipId = ref<string | null>(null);
+
+// Only the overlay states a clip can actually show: everything inside the
+// window plus the state already active when it opens. Deliberately NO
+// fallback to plan[0] when nothing precedes the window — plan[0] can belong
+// to a LATER game's footage (only-game-2-synced on a continuous recording),
+// and burning a future scoreline over earlier footage is worse than the
+// empty-subset guard refusing with its toast.
+const snapshotSubsetFor = (
+  startSec: number,
+  endSec: number
+): SnapshotPlanEntry[] => {
+  const plan = snapshotPlan.value;
+  const before = plan.filter((p) => p.videoTimeSec <= startSec);
+  const opening = before.length ? [before[before.length - 1]!] : [];
+  return [
+    ...opening,
+    ...plan.filter(
+      (p) => p.videoTimeSec > startSec && p.videoTimeSec <= endSec
+    ),
+  ];
+};
+
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+};
+
+const clipFilename = (card: ClipCard) => {
+  const base = videoFile.value?.name.replace(/\.[^.]+$/, '') ?? 'match';
+  const at = formatTime(card.videoStartMs).replace(':', 'm');
+  return `${base}-${card.kind}-${at}s${clipOverlay.value ? '' : '-clean'}.mp4`;
+};
+
+const renderClip = async (card: ClipCard) => {
+  if (!videoFile.value || renderingClipId.value) return;
+  const startSec = card.videoStartMs / 1000;
+  const endSec = card.videoEndMs / 1000;
+  // Clean clips skip the overlay entirely — no snapshots to rasterize, so
+  // they don't need an anchor either (a manual clip on an unsynced stretch
+  // still exports clean).
+  const subset = clipOverlay.value ? snapshotSubsetFor(startSec, endSec) : [];
+  if (clipOverlay.value && subset.length === 0) {
+    toast.error('Sync at least one game before rendering clips with score');
+    return;
+  }
+  renderingClipId.value = card.id;
+  try {
+    const bitmaps = clipOverlay.value
+      ? await collectOverlayBitmaps(subset)
+      : [];
+    const blob = await render({
+      videoBlob: videoFile.value,
+      overlaySnapshots: bitmaps,
+      range: { startSec, endSec },
+    });
+    // The composable publishes every render on `outputUrl`, which feeds the
+    // FULL-match section's preview + download button — a clip must not pose
+    // as the full render there, and each abandoned URL pins its MP4 blob.
+    if (outputUrl.value) {
+      URL.revokeObjectURL(outputUrl.value);
+      outputUrl.value = null;
+    }
+    downloadBlob(blob, clipFilename(card));
+  } catch (err) {
+    snapshotting.value = false;
+    console.warn('[render] clip failed', err);
+    toast.error(`Clip render failed: ${getErrorMessage(err)}`);
+  } finally {
+    renderingClipId.value = null;
+  }
+};
+
+const downloadSelected = async () => {
+  // Every save after the first happens minutes outside the click gesture,
+  // which Chromium gates behind an "allow multiple downloads" permission —
+  // warn once so a dismissed prompt doesn't silently swallow clips 2..n.
+  if (selectedCards.value.length > 1) {
+    toast.info('If your browser asks to allow multiple downloads, allow it.');
+  }
+  for (const card of selectedCards.value) {
+    await renderClip(card);
+  }
+};
+
+const clipRenderRatio = (id: string): number | null => {
+  if (renderingClipId.value !== id) return null;
+  // Snapshotting is the short first phase; encode dominates.
+  if (snapshotting.value) {
+    const { done, total } = snapshotProgress.value;
+    return total ? (done / total) * 0.2 : 0;
+  }
+  return 0.2 + (progress.value.ratio ?? 0) * 0.8;
 };
 
 // WebCodecs render — accepts pre-collected overlay bitmaps from this page.
@@ -187,21 +625,28 @@ const snapshotProgress = ref({ done: 0, total: 0 });
 // Rasterize the overlay at each plan point. Drives the reactive state via
 // `replayTimeMs` directly — the video element doesn't move, no expensive
 // seek, no decoder cache flush. Just push, await DOM, snapshot, repeat.
-const collectOverlayBitmaps = async (): Promise<OverlaySnapshot[]> => {
+// Takes the plan explicitly: the full render passes the whole plan, a clip
+// render passes just the entries its window can show.
+const collectOverlayBitmaps = async (
+  plan: SnapshotPlanEntry[]
+): Promise<OverlaySnapshot[]> => {
   const overlay = overlayEl.value;
   const video = videoEl.value;
   if (!overlay || !video) throw new Error('overlay or video not mounted');
+  // A playing video would keep firing timeupdate against the guarded watcher
+  // above; pause so the operator's playback can't race the snapshot loop.
+  video.pause();
 
   const overlayRect = overlay.getBoundingClientRect();
   const videoW = video.videoWidth || overlayRect.width;
   const scale = overlayRect.width > 0 ? videoW / overlayRect.width : 1;
 
   snapshotting.value = true;
-  snapshotProgress.value = { done: 0, total: snapshotPlan.value.length };
+  snapshotProgress.value = { done: 0, total: plan.length };
 
   const out: OverlaySnapshot[] = [];
-  for (let i = 0; i < snapshotPlan.value.length; i++) {
-    const p = snapshotPlan.value[i]!;
+  for (let i = 0; i < plan.length; i++) {
+    const p = plan[i]!;
     replayTimeMs.value = p.replayTimeMs;
     await nextTick();
     const canvas = await domToCanvas(overlay, {
@@ -210,7 +655,7 @@ const collectOverlayBitmaps = async (): Promise<OverlaySnapshot[]> => {
     });
     const bitmap = await createImageBitmap(canvas);
     out.push({ videoTimeSec: p.videoTimeSec, bitmap });
-    snapshotProgress.value = { done: i + 1, total: snapshotPlan.value.length };
+    snapshotProgress.value = { done: i + 1, total: plan.length };
   }
   snapshotting.value = false;
   return out;
@@ -219,7 +664,7 @@ const collectOverlayBitmaps = async (): Promise<OverlaySnapshot[]> => {
 const onRender = async () => {
   if (!videoFile.value) return;
   try {
-    const bitmaps = await collectOverlayBitmaps();
+    const bitmaps = await collectOverlayBitmaps(snapshotPlan.value);
     await render({
       videoBlob: videoFile.value,
       overlaySnapshots: bitmaps,
@@ -242,12 +687,32 @@ const downloadOutput = () => {
   a.remove();
 };
 
-const formatTime = (ms: number) => {
-  const total = Math.round(ms / 1000);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-};
+// Shared with the timeline strip — one clock format for the whole page.
+const formatTime = formatClockMs;
+
+// Overlay themes size themselves in px against OBS's 1920×1080 browser
+// source (broadcast-classic is a 620px panel ≈ ⅓ of that frame). The render
+// stage is ~1000px wide, so mounting the theme directly doubles the bug's
+// share of the frame — and the export snapshot preserves the on-screen ratio,
+// burning it in oversized. Render the theme inside a virtual broadcast-width
+// frame scaled down to the stage instead; the size option divides the virtual
+// width (wider virtual canvas = smaller bug), so every theme keeps its own
+// edge insets regardless of which corner it anchors to.
+const BROADCAST_WIDTH = 1920;
+const OVERLAY_SIZE_FACTOR = { s: 0.8, m: 1, l: 1.2 } as const;
+const overlaySize = ref<keyof typeof OVERLAY_SIZE_FACTOR>('m');
+const stageEl = ref<HTMLElement | null>(null);
+const { width: stageWidth, height: stageHeight } = useElementSize(stageEl);
+const overlayFrameStyle = computed(() => {
+  const frameW = BROADCAST_WIDTH / OVERLAY_SIZE_FACTOR[overlaySize.value];
+  const ratio =
+    stageWidth.value > 0 ? stageHeight.value / stageWidth.value : 9 / 16;
+  return {
+    width: `${frameW}px`,
+    height: `${frameW * ratio}px`,
+    transform: `scale(${stageWidth.value > 0 ? stageWidth.value / frameW : 0})`,
+  };
+});
 
 // Theme — reuse the overlay theme the operator chose for this match.
 const { overlay: overlayTheme } = useThemeChoice(matchId);
@@ -327,7 +792,58 @@ const meta = computed(() => ({
 
       <!-- Stage: video + overlay -->
       <section v-else class="space-y-3">
+        <!-- Output picker: one anchoring session, two deliverables. -->
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            :model-value="mode"
+            @update:model-value="
+              (v) => v && (mode = v as 'full' | 'highlights')
+            "
+          >
+            <ToggleGroupItem value="full">Full match</ToggleGroupItem>
+            <ToggleGroupItem value="highlights">Highlight reel</ToggleGroupItem>
+          </ToggleGroup>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+              <span
+                class="text-[11px] font-semibold tracking-wider uppercase text-fg-subtle"
+              >
+                Score size
+              </span>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                :model-value="overlaySize"
+                @update:model-value="
+                  (v) =>
+                    v && (overlaySize = v as keyof typeof OVERLAY_SIZE_FACTOR)
+                "
+              >
+                <ToggleGroupItem value="s" aria-label="Small score overlay">
+                  S
+                </ToggleGroupItem>
+                <ToggleGroupItem value="m" aria-label="Medium score overlay">
+                  M
+                </ToggleGroupItem>
+                <ToggleGroupItem value="l" aria-label="Large score overlay">
+                  L
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+            <span class="text-xs text-fg-muted">
+              {{ syncedCount }} of {{ totalGames }} game{{
+                totalGames === 1 ? '' : 's'
+              }}
+              synced
+            </span>
+          </div>
+        </div>
+
         <div
+          ref="stageEl"
           class="relative aspect-video w-full overflow-hidden rounded-lg bg-black"
         >
           <video
@@ -337,24 +853,74 @@ const meta = computed(() => ({
             controls
             @timeupdate="onTimeUpdate"
             @seeked="onTimeUpdate"
+            @loadedmetadata="onLoadedMetadata"
           />
           <!-- Overlay layered on top. pointer-events:none so video controls
                stay tappable. `overlayEl` ref is what html-to-image snapshots
-               during render. -->
+               during render; the inner frame renders the theme at broadcast
+               proportions and scales down to the stage (see overlayFrameStyle). -->
           <div
             v-if="loaded && themeEntry"
             ref="overlayEl"
-            class="pointer-events-none absolute inset-0"
+            class="pointer-events-none absolute inset-0 overflow-hidden"
           >
-            <component
-              :is="themeEntry.component"
-              :state="state"
-              :config="config"
-              :team-names="teamNames"
-              :players="players"
-              :meta="meta"
-            />
+            <div
+              class="absolute left-0 top-0 origin-top-left"
+              :style="overlayFrameStyle"
+            >
+              <component
+                :is="themeEntry.component"
+                :state="state"
+                :config="config"
+                :team-names="teamNames"
+                :players="players"
+                :meta="meta"
+              />
+            </div>
           </div>
+        </div>
+
+        <!-- Hidden sibling video: thumbnail capture seeks THIS element so the
+             operator's playhead never jumps. Same blob URL, no extra fetch. -->
+        <video
+          ref="thumbVideoEl"
+          :src="videoUrl"
+          muted
+          playsinline
+          preload="auto"
+          class="hidden"
+        />
+
+        <!-- Timeline strip: sync ticks + playhead always; clip bands in
+             highlight mode. Click seeks; clicking a band focuses its card. -->
+        <div class="rounded-lg border border-border bg-surface p-3">
+          <div class="flex items-center justify-between">
+            <span
+              class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle"
+            >
+              Timeline
+            </span>
+            <Button
+              v-if="mode === 'highlights'"
+              variant="secondary"
+              size="sm"
+              :disabled="!videoDurationMs"
+              @click="addClipAtPlayhead"
+            >
+              <Plus class="size-3.5" />
+              Add clip at playhead
+            </Button>
+          </div>
+          <HighlightTimeline
+            class="mt-1"
+            :duration-ms="videoDurationMs"
+            :current-ms="videoTimeMs"
+            :anchor-ticks="anchorTicks"
+            :bands="mode === 'highlights' ? timelineBands : []"
+            :active-band-id="activeCardId"
+            @seek="seekTo"
+            @select-band="previewCard"
+          />
         </div>
 
         <!-- Sync controls — one anchor per game. Single-game matches just
@@ -421,7 +987,10 @@ const meta = computed(() => ({
         <!-- Render — WebCodecs (hardware H.264) + modern-screenshot for the
              overlay rasterization. Only renders events whose game has a
              sync anchor. -->
-        <div class="rounded-lg border border-border bg-surface p-4 space-y-3">
+        <div
+          v-if="mode === 'full'"
+          class="rounded-lg border border-border bg-surface p-4 space-y-3"
+        >
           <div class="flex items-center gap-3 flex-wrap">
             <Button
               :disabled="
@@ -498,6 +1067,119 @@ const meta = computed(() => ({
             time to encode; watch progress above.
           </p>
         </div>
+
+        <!-- Highlight reel: auto-picked clips + manual ones, each downloading
+             as its own MP4 — score burned in, or clean footage. -->
+        <template v-else>
+          <div
+            v-if="videoClips.length === 0 && manualClips.length === 0"
+            class="rounded-lg border border-dashed border-border-strong bg-surface p-8 text-center text-sm text-fg-muted"
+          >
+            No highlights yet — sync a game above and clips will appear here, or
+            scrub to a moment and add one at the playhead.
+          </div>
+          <template v-else>
+            <div class="flex items-center justify-between">
+              <span
+                class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle"
+              >
+                Highlights
+              </span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-fg-muted">
+                  {{ selectedCards.length }} of {{ cards.length }} selected
+                </span>
+                <Button variant="ghost" size="sm" @click="toggleSelectAll">
+                  {{ allSelected ? 'Clear' : 'Select all' }}
+                </Button>
+              </div>
+            </div>
+
+            <!-- Who + how: side filter ("someone's highlights" — the log
+                 knows who won every point) and score-bug on/off per clip. -->
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                :model-value="sideFilter"
+                @update:model-value="
+                  (v) => v && (sideFilter = v as 'all' | 'A' | 'B')
+                "
+              >
+                <ToggleGroupItem value="all">All points</ToggleGroupItem>
+                <ToggleGroupItem value="A">
+                  {{ sideFilterLabel('A') }}
+                </ToggleGroupItem>
+                <ToggleGroupItem value="B">
+                  {{ sideFilterLabel('B') }}
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                :model-value="clipOverlay ? 'score' : 'clean'"
+                @update:model-value="(v) => v && (clipOverlay = v === 'score')"
+              >
+                <ToggleGroupItem value="score">With score</ToggleGroupItem>
+                <ToggleGroupItem value="clean">Clean footage</ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+
+            <div
+              v-if="cards.length === 0"
+              class="rounded-lg border border-dashed border-border bg-surface p-6 text-center text-sm text-fg-muted"
+            >
+              No clips won by {{ sideFilterLabel(sideFilter as 'A' | 'B') }} in
+              the synced games.
+            </div>
+            <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <HighlightCard
+                v-for="card in cards"
+                :key="card.id"
+                :card="card"
+                :render-ratio="clipRenderRatio(card.id)"
+                :busy="!!renderingClipId"
+                :removable="card.kind === 'manual'"
+                @toggle="toggleCard(card.id)"
+                @preview="previewCard(card.id)"
+                @download="renderClip(card)"
+                @remove="removeManualClip(card.id)"
+              />
+            </div>
+            <div
+              class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3"
+            >
+              <div class="text-[13px]">
+                <span class="font-semibold">
+                  {{ selectedCards.length }} clip{{
+                    selectedCards.length === 1 ? '' : 's'
+                  }}
+                  selected
+                </span>
+                <span class="text-fg-subtle">
+                  · {{ selectedTotalLabel }} total ·
+                  {{ clipOverlay ? 'score burned in' : 'clean footage' }} · each
+                  clip downloads as its own MP4
+                </span>
+              </div>
+              <Button
+                :disabled="!selectedCards.length || !!renderingClipId"
+                @click="downloadSelected"
+              >
+                <Download class="size-4 mr-2" />
+                Download {{ selectedCards.length }} clip{{
+                  selectedCards.length === 1 ? '' : 's'
+                }}
+              </Button>
+            </div>
+            <p class="text-[11px] text-fg-subtle">
+              Clips export at the source aspect ratio — crop to 9:16 in the
+              Instagram editor for Reels.
+            </p>
+          </template>
+        </template>
       </section>
     </main>
   </div>

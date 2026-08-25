@@ -1,6 +1,6 @@
 {
   "name": "@sb/app",
-  "version": "0.5.22",
+  "version": "0.5.31",
   "private": true,
   "type": "module",
   "scripts": {

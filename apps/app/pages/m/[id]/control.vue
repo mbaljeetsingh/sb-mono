@@ -6,13 +6,21 @@ import {
   reduceRacquet,
 } from '@sb/engine';
 import { Button } from '@sb/layer-ui/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@sb/layer-ui/components/ui/dropdown-menu';
 import { onLongPress, useStorage, useVibrate, useWakeLock } from '@vueuse/core';
 import {
   ArrowLeft,
   ArrowLeftRight,
   ArrowUpDown,
+  Check,
   Columns3,
   MoreHorizontal,
+  Palette,
   PencilLine,
   Repeat,
   Rows3,
@@ -28,6 +36,7 @@ import MatchStateSheet from '~/components/control/MatchStateSheet.vue';
 import ScoreCorrectSheet from '~/components/control/ScoreCorrectSheet.vue';
 import TeamRow from '~/components/control/TeamRow.vue';
 import TossSheet from '~/components/control/TossSheet.vue';
+import { courtColorVariants, courtSurfaceClass } from '~/lib/court-colors';
 import { swapTeamPlayers } from '~/lib/partner-swap';
 import { sportIdFromPreset } from '~/lib/sports';
 
@@ -655,6 +664,16 @@ const layout = useStorage<ControlLayout>(
   'stacked'
 );
 
+// Court color — device-local like the layout: sport → variant id, global
+// across matches (the operator's venue doesn't change per match).
+const courtColorChoice = useStorage<Record<string, string>>(
+  'sb:court-color',
+  {}
+);
+const courtSurface = computed(() =>
+  courtSurfaceClass(sport.value, courtColorChoice.value[sport.value])
+);
+
 // Sheets ────────────────────────────────────────────────────────────────────
 type SheetKind = 'matchState' | 'scoreCorrect' | 'format' | null;
 const openSheet = ref<SheetKind>(null);
@@ -952,6 +971,43 @@ const swapLabelB = computed(() =>
           <span v-else class="text-[11px] text-fg-muted">
             {{ presetLabel }} · {{ seriesLabel }}
           </span>
+          <!-- Court color — device-local, per sport (a screen preference like
+               the layout toggle, so it never syncs to other scorers). -->
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                class="size-6"
+                title="Court color"
+                aria-label="Change court color"
+              >
+                <Palette class="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                v-for="variant in courtColorVariants[sport]"
+                :key="variant.id"
+                @click="
+                  courtColorChoice = {
+                    ...courtColorChoice,
+                    [sport]: variant.id,
+                  }
+                "
+              >
+                <span
+                  class="size-3 rounded-full border border-border-strong"
+                  :class="variant.class"
+                />
+                {{ variant.label }}
+                <Check
+                  v-if="courtSurface === variant.class"
+                  class="ml-auto size-3.5"
+                />
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -976,16 +1032,20 @@ const swapLabelB = computed(() =>
         </div>
       </div>
 
-      <!-- Court frame. Two team halves separated by the net — a 1px line of
-           the wrapper background showing through `gap-px` (--border-strong,
-           not foreground/30: foreground is near-white in dark mode, which lit
-           the frame up). No border of its own: each half paints its own court
-           boundary, so anything here would stack a third line around them.
-           Render order follows `sidesSwapped` so the swap is a real DOM
-           reorder, not just a CSS reverse — TeamRow's orientation prop then
-           puts the net on each half's correct inner edge. -->
+      <!-- Court frame. Two team halves separated by the net — a 4px band of
+           the wrapper background showing through `gap`, painted with
+           foreground/50 so it reads as a real net against the mats, which
+           sit flush against this edge (the translucent --court-line washed
+           out to a faint seam here, and TeamRow suppresses its boundary on
+           the net edge so a serving team's tint can't overpaint the net).
+           foreground is safe now that only the 4px gap shows it — the old
+           warning about foreground lighting the frame up applied to a
+           full-perimeter border. Render order follows `sidesSwapped` so the
+           swap is a real DOM reorder, not just a CSS reverse — TeamRow's
+           orientation prop then puts the net on each half's correct inner
+           edge. -->
       <div
-        class="relative m-2 flex flex-1 gap-px overflow-hidden rounded-lg bg-border-strong"
+        class="relative m-2 flex flex-1 gap-1 overflow-hidden rounded-lg bg-foreground/50"
         :class="layout === 'sideBySide' ? 'flex-row' : 'flex-col'"
       >
         <template
@@ -996,6 +1056,7 @@ const swapLabelB = computed(() =>
             v-if="team === 'A'"
             team="A"
             :sport="sport"
+            :surface-class="courtSurface"
             :orientation="orientationA"
             :score="score('A')"
             :games-won="gamesWon.a"
@@ -1017,6 +1078,7 @@ const swapLabelB = computed(() =>
             v-else
             team="B"
             :sport="sport"
+            :surface-class="courtSurface"
             :orientation="orientationB"
             :score="score('B')"
             :games-won="gamesWon.b"

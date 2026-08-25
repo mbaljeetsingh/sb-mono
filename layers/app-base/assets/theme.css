@@ -84,6 +84,14 @@
   --color-court-pickleball: var(--court-pickleball);
   --color-court-line: var(--court-line);
 
+  /* Generic mat colors for the operator's court-color choice on /control
+   * (device-local, per sport — see lib/court-colors.ts). Venue surfaces come
+   * in more colors than one per sport: BWF event mats are blue, TT tables
+   * red, tennis clay exists. */
+  --color-court-blue: var(--court-blue);
+  --color-court-red: var(--court-red);
+  --color-court-clay: var(--court-clay);
+
   /* Per-sport *foreground* accents — for glyphs, chips and labels. The
    * --court-* values above are playing surfaces (a dark mat in dark mode), so
    * they are unreadable as text/icon colors: #1c3327 on #151a16 is 1.30:1.
@@ -200,6 +208,9 @@
   --court-tabletennis: #d8e6f5;
   --court-tennis: #e4e0d2;
   --court-pickleball: #dbe8e4;
+  --court-blue: #d8e6f5;
+  --court-red: #f2dad6;
+  --court-clay: #eddbc9;
   --court-line: rgba(20, 20, 19, 0.28);
 
   /* Per-sport foregrounds (glyphs / chips), ≥6:1 on --card */
@@ -269,6 +280,9 @@
   --court-tabletennis: #14406e;
   --court-tennis: #2b4a63;
   --court-pickleball: #1f4a40;
+  --court-blue: #14406e;
+  --court-red: #6e1d14;
+  --court-clay: #7c4426;
   --court-line: rgba(255, 255, 255, 0.3);
 
   /* Per-sport foregrounds (glyphs / chips), ≥9:1 on --card */
