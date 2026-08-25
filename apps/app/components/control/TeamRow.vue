@@ -252,6 +252,27 @@ const servingBarStyle = computed(() => {
       };
 });
 
+// The bar's bloom: a short team-colored gradient rising from the baseline.
+// Rendered with mix-blend screen in dark mode so it LIGHTENS the mat —
+// normal alpha blending mixed orange into green and browned out (which is
+// why the first wash attempt was dropped). Light mode keeps normal blending:
+// screen over pale mats washes to invisible, while alpha tint over a pale
+// surface doesn't mud the way it does over a dark one.
+const servingGlowStyle = computed(() => {
+  if (!isServing.value || props.matchOver) return null;
+  const toward: Record<string, string> = {
+    top: 'to top',
+    bottom: 'to bottom',
+    left: 'to left',
+    right: 'to right',
+  };
+  const glow = props.team === 'A' ? 'var(--team-a-glow)' : 'var(--team-b-glow)';
+  return {
+    ...matStyle.value,
+    background: `linear-gradient(${toward[netEdge.value]}, ${glow} 0%, transparent 38%)`,
+  };
+});
+
 const sidelineStyles = computed<Record<string, string>[]>(() => {
   const inset = geometry.value.sidelineInset;
   if (!inset) return [];
@@ -465,6 +486,11 @@ watch(
     <span
       class="pointer-events-none absolute z-[1] rounded-[2px] border-court-line"
       :style="boundaryStyle"
+    />
+    <span
+      v-if="servingGlowStyle"
+      class="pointer-events-none absolute z-[1] rounded-[2px] opacity-60 dark:mix-blend-screen"
+      :style="servingGlowStyle"
     />
     <span
       v-if="servingBarStyle"
