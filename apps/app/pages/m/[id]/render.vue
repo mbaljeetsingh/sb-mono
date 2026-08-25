@@ -15,7 +15,7 @@ import {
 } from '@sb/layer-ui/components/ui/toggle-group';
 import { getErrorMessage } from '@sb/shared/errors';
 import { getTheme } from '@sb/themes';
-import { useElementSize } from '@vueuse/core';
+import { useElementSize, useStorage } from '@vueuse/core';
 import { ArrowLeft, Download, Film, Plus, Upload } from 'lucide-vue-next';
 import { domToCanvas } from 'modern-screenshot';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
@@ -81,6 +81,35 @@ const onTimeUpdate = () => {
 // gap in the video (zero). Each game gets its own anchor; the active one
 // is whichever anchor's videoMs is most recently <= current playhead.
 const anchors = ref<Record<number, Anchor | null>>({});
+
+// Anchors survive revisits: syncing means frame-hunting the end of the first
+// rally of every game, and losing that to a reload makes re-renders miserable.
+// Device-local (the video file itself lives on this device) and keyed to the
+// file's name+size — anchors are meaningless against any other recording, so
+// a different upload starts clean rather than inheriting a stale mapping.
+type StoredAnchors = { videoKey: string; anchors: Record<number, Anchor> };
+const storedAnchors = useStorage<StoredAnchors>(
+  computed(() => `sb:render-anchors:${matchId.value}`),
+  { videoKey: '', anchors: {} }
+);
+const videoKey = computed(() =>
+  videoFile.value ? `${videoFile.value.name}|${videoFile.value.size}` : null
+);
+watch(videoKey, (key) => {
+  if (!key || storedAnchors.value.videoKey !== key) return;
+  const saved = storedAnchors.value.anchors;
+  if (Object.keys(saved).length === 0) return;
+  anchors.value = { ...saved };
+  toast.info('Restored sync points from your last session');
+});
+watch(anchors, (a) => {
+  if (!videoKey.value) return;
+  const kept: Record<number, Anchor> = {};
+  for (const [i, anchor] of Object.entries(a)) {
+    if (anchor) kept[Number(i)] = anchor;
+  }
+  storedAnchors.value = { videoKey: videoKey.value, anchors: kept };
+});
 
 // First `point` event of each game in the match. Game 0 = events before any
 // game.end. Game N (N>0) = events after the Nth game.end. We use the first
@@ -227,6 +256,32 @@ const addClipAtPlayhead = () => {
   ];
 };
 
+const removeManualClip = (id: string) => {
+  const removed = manualClips.value.find((m) => m.id === id);
+  if (!removed) return;
+  manualClips.value = manualClips.value.filter((m) => m.id !== id);
+  // Drop the card's residue so a later clip can't inherit it: its exclusion
+  // entry and its focus (a removed card must not stay the active band).
+  if (excluded.value.has(id)) {
+    const next = new Set(excluded.value);
+    next.delete(id);
+    excluded.value = next;
+  }
+  if (activeCardId.value === id) activeCardId.value = null;
+  // Same pattern as recent-player chip removal: no confirm dialog, an undo
+  // toast instead. Restoring reuses the id — the thumbnail cache entry is
+  // still keyed to it, so undo doesn't re-trigger a capture.
+  toast('Clip removed', {
+    action: {
+      label: 'Undo',
+      onClick: () => {
+        if (manualClips.value.some((m) => m.id === removed.id)) return;
+        manualClips.value = [...manualClips.value, removed];
+      },
+    },
+  });
+};
+
 // Clips can carry the score bug or ship as clean footage — a reel edited in
 // Instagram often wants the clean cut, with the score added as a caption.
 const clipOverlay = ref(true);
@@ -282,7 +337,13 @@ const cards = computed<ClipCard[]>(() => {
         ? 'Match point'
         : c.kind === 'game-point'
           ? `Game ${c.gameIndex + 1} won`
-          : 'Long rally',
+          : c.kind === 'point-saved'
+            ? c.saved === 'match'
+              ? 'Match point saved'
+              : 'Game point saved'
+            : c.kind === 'clutch'
+              ? 'Clutch point'
+              : 'Long rally',
     meta: `Game ${c.gameIndex + 1} · ${formatScore(c.scoreBefore)} → ${formatScore(c.scoreAfter)} · at ${formatTime(c.videoStartMs)}`,
     videoStartMs: c.videoStartMs,
     videoEndMs: c.videoEndMs,
@@ -1080,9 +1141,11 @@ const meta = computed(() => ({
                 :card="card"
                 :render-ratio="clipRenderRatio(card.id)"
                 :busy="!!renderingClipId"
+                :removable="card.kind === 'manual'"
                 @toggle="toggleCard(card.id)"
                 @preview="previewCard(card.id)"
                 @download="renderClip(card)"
+                @remove="removeManualClip(card.id)"
               />
             </div>
             <div

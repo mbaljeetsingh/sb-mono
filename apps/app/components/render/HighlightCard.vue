@@ -6,7 +6,7 @@
 
 import { Button } from '@sb/layer-ui/components/ui/button';
 import { Progress } from '@sb/layer-ui/components/ui/progress';
-import { Check, Download, Play } from 'lucide-vue-next';
+import { Check, Download, Play, X } from 'lucide-vue-next';
 import { type ClipKind, clipKindMeta } from '~/lib/highlight-clips';
 
 export type HighlightCardModel = {
@@ -25,12 +25,15 @@ defineProps<{
   renderRatio: number | null;
   /** Disable actions while another clip renders. */
   busy: boolean;
+  /** Manual clips can be deleted outright; derived clips only deselected. */
+  removable?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'toggle'): void;
   (e: 'preview'): void;
   (e: 'download'): void;
+  (e: 'remove'): void;
 }>();
 </script>
 
@@ -73,6 +76,16 @@ const emit = defineEmits<{
           Preview
         </Button>
         <div class="flex items-center gap-1.5">
+          <Button
+            v-if="removable"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Remove clip"
+            :disabled="busy"
+            @click="emit('remove')"
+          >
+            <X class="size-4" />
+          </Button>
           <Button
             variant="outline"
             size="sm"

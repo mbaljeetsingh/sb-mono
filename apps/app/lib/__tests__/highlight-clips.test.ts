@@ -102,6 +102,64 @@ describe('buildHighlightClips', () => {
     expect(gameWinner!.eventTs - gameWinner!.startTs).toBe(12_000);
   });
 
+  it('classifies saves and clutch points through a deuce battle', () => {
+    // Game 1: 19–19 built point by point, then a finish that walks through
+    // every clutch shape: 20–19 (A at GP) → B saves → 20–20 deuce → A wins a
+    // clutch point → 21–20 (A at GP again) → B saves → 21–21 deuce → clutch
+    // point for A → 22–21 → A converts 23–21. Game 2: A to 20–0 (match
+    // point), B saves one, A converts.
+    seq = 0;
+    const events: RacquetEvent[] = [
+      ev(0, { type: 'match.start', serverSide: 'A', serverCourt: 'right' }),
+    ];
+    let t = 10;
+    const point = (side: 'A' | 'B') => {
+      t += 20;
+      events.push(ev(t, { type: 'point', side }));
+    };
+    for (let i = 0; i < 19; i++) point('A');
+    for (let i = 0; i < 19; i++) point('B');
+    point('A'); // 20–19
+    point('B'); // save → 20–20
+    point('A'); // clutch → 21–20
+    point('B'); // save → 21–21
+    point('A'); // clutch → 22–21
+    point('A'); // game point → 23–21
+    t += 120;
+    events.push(ev(t, { type: 'game.end' }));
+    for (let i = 0; i < 20; i++) point('A'); // 20–0, match point
+    point('B'); // match point saved → 20–1
+    point('A'); // match won → 21–1
+
+    const clips = buildHighlightClips(events, reducer, config, {
+      maxRallies: 0,
+    });
+    expect(clips.map((c) => c.kind)).toEqual([
+      'point-saved',
+      'clutch',
+      'point-saved',
+      'clutch',
+      'game-point',
+      'point-saved',
+      'match-point',
+    ]);
+    expect(clips.map((c) => c.saved)).toEqual([
+      'game',
+      undefined,
+      'game',
+      undefined,
+      undefined,
+      'match',
+      undefined,
+    ]);
+    // Saves credit the rally winner, not the side whose point was erased.
+    expect(clips[0]!.side).toBe('B');
+    expect(clips[0]!.scoreBefore).toEqual({ a: 20, b: 19 });
+    expect(clips[0]!.scoreAfter).toEqual({ a: 20, b: 20 });
+    expect(clips[5]!.gameIndex).toBe(1);
+    expect(clips[5]!.scoreBefore).toEqual({ a: 20, b: 0 });
+  });
+
   it("a game's first point uses the default lookback and reports no gap", () => {
     // Make game 2's first point slow enough to be a rally candidate — it
     // must not be one, because there is no previous point to measure from.

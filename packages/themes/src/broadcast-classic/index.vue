@@ -45,6 +45,11 @@ const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const isLive = computed(() => props.meta?.isLive !== false);
 const withStanding = computed(() => showStanding(props.config));
 
+// Single-game formats get no per-game cells: with the live game excluded from
+// GameCells, a BO1's cell column is empty all match and then — at FINAL —
+// prints the one finished game right next to the same score in big numerals.
+const withGameCells = computed(() => props.config.gamesToWin > 1);
+
 const playersOf = (side: 'a' | 'b') =>
   side === 'a' ? playersA.value : playersB.value;
 
@@ -52,7 +57,13 @@ const playersOf = (side: 'a' | 'b') =>
 // Previously each row sized its own `auto` columns from its own content, which
 // let the two big numerals sit at different x positions.
 const columns = computed(() =>
-  ['5px', 'minmax(0,1fr)', 'auto', withStanding.value ? 'auto' : null, '74px']
+  [
+    '5px',
+    'minmax(0,1fr)',
+    withGameCells.value ? 'auto' : null,
+    withStanding.value ? 'auto' : null,
+    '74px',
+  ]
     .filter(Boolean)
     .join(' ')
 );
@@ -171,6 +182,7 @@ const columns = computed(() =>
              big numerals two columns right, and printing it twice made the
              panel read as two different scores. -->
         <GameCells
+          v-if="withGameCells"
           :state="state"
           :side="side"
           :color="teamColor(side)"

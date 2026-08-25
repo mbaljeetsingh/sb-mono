@@ -14,6 +14,11 @@
 // What counts as a highlight, with zero video analysis:
 //   - match-point  — the point that ends the match (endReason 'normal').
 //   - game-point   — the point that wins a game (except the match winner).
+//   - point-saved  — the losing side of a game/match point wins the rally
+//                    instead (engine's side-attributed gamePoint/matchPoint).
+//   - clutch       — a point played from deuce (engine isDeuce: 20–20 for
+//                    BWF-21 etc.). Deuce is mutually exclusive with GP/MP by
+//                    construction, so clutch never shadows a save or a winner.
 //   - long-rally   — top N points by time since the previous point in the same
 //                    game. The gap is rally length + reset time, so a long gap
 //                    is a long rally; shot counts don't exist in the log.
@@ -28,7 +33,8 @@ export type RacquetReducer = (
   cfg: RacquetConfig
 ) => RacquetState;
 
-export type HighlightKind = 'match-point' | 'game-point' | 'long-rally';
+export type HighlightKind =
+  'match-point' | 'game-point' | 'point-saved' | 'clutch' | 'long-rally';
 
 /** Everything a card/band can be: engine-derived kinds plus operator-added. */
 export type ClipKind = HighlightKind | 'manual';
@@ -50,6 +56,16 @@ export const clipKindMeta: Record<
     label: 'Game point',
     bandClass: 'bg-game-point',
     chipClass: 'text-game-point border-game-point/40 bg-game-point/15',
+  },
+  'point-saved': {
+    label: 'Saved',
+    bandClass: 'bg-success',
+    chipClass: 'text-success border-success/40 bg-success/15',
+  },
+  clutch: {
+    label: 'Clutch',
+    bandClass: 'bg-warning',
+    chipClass: 'text-warning border-warning/40 bg-warning/15',
   },
   'long-rally': {
     label: 'Long rally',
@@ -90,6 +106,8 @@ export type HighlightClip = {
   side: 'A' | 'B';
   /** ms since the previous point in the same game; null for a game's first point. */
   gapMs: number | null;
+  /** point-saved only: whether the point erased a game point or a match point. */
+  saved?: 'game' | 'match';
 };
 
 export type VideoHighlightClip = HighlightClip & {
@@ -180,10 +198,20 @@ export const buildHighlightClips = (
       nextState.gamesWon.a + nextState.gamesWon.b >
       prevState.gamesWon.a + prevState.gamesWon.b;
 
+    // The loser of this rally, prevState-keyed: if THEY were a point from the
+    // game/match and the winner took the rally anyway, that's a save.
+    const loser = ev.side === 'A' ? 'b' : 'a';
+
     if (wonMatch) {
       winners.push({ ...clip, kind: 'match-point' });
     } else if (wonGame) {
       winners.push({ ...clip, kind: 'game-point' });
+    } else if (prevState.matchPoint[loser]) {
+      winners.push({ ...clip, kind: 'point-saved', saved: 'match' });
+    } else if (prevState.gamePoint[loser]) {
+      winners.push({ ...clip, kind: 'point-saved', saved: 'game' });
+    } else if (prevState.isDeuce) {
+      winners.push({ ...clip, kind: 'clutch' });
     } else if (gapMs !== null && gapMs >= LONG_RALLY_MIN_GAP_MS) {
       rallyCandidates.push({ ...clip, kind: 'long-rally' });
     }
