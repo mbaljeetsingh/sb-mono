@@ -6,13 +6,21 @@ import {
   reduceRacquet,
 } from '@sb/engine';
 import { Button } from '@sb/layer-ui/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@sb/layer-ui/components/ui/dropdown-menu';
 import { onLongPress, useStorage, useVibrate, useWakeLock } from '@vueuse/core';
 import {
   ArrowLeft,
   ArrowLeftRight,
   ArrowUpDown,
+  Check,
   Columns3,
   MoreHorizontal,
+  Palette,
   PencilLine,
   Repeat,
   Rows3,
@@ -28,6 +36,7 @@ import MatchStateSheet from '~/components/control/MatchStateSheet.vue';
 import ScoreCorrectSheet from '~/components/control/ScoreCorrectSheet.vue';
 import TeamRow from '~/components/control/TeamRow.vue';
 import TossSheet from '~/components/control/TossSheet.vue';
+import { courtColorVariants, courtSurfaceClass } from '~/lib/court-colors';
 import { swapTeamPlayers } from '~/lib/partner-swap';
 import { sportIdFromPreset } from '~/lib/sports';
 
@@ -655,6 +664,16 @@ const layout = useStorage<ControlLayout>(
   'stacked'
 );
 
+// Court color — device-local like the layout: sport → variant id, global
+// across matches (the operator's venue doesn't change per match).
+const courtColorChoice = useStorage<Record<string, string>>(
+  'sb:court-color',
+  {}
+);
+const courtSurface = computed(() =>
+  courtSurfaceClass(sport.value, courtColorChoice.value[sport.value])
+);
+
 // Sheets ────────────────────────────────────────────────────────────────────
 type SheetKind = 'matchState' | 'scoreCorrect' | 'format' | null;
 const openSheet = ref<SheetKind>(null);
@@ -952,6 +971,43 @@ const swapLabelB = computed(() =>
           <span v-else class="text-[11px] text-fg-muted">
             {{ presetLabel }} · {{ seriesLabel }}
           </span>
+          <!-- Court color — device-local, per sport (a screen preference like
+               the layout toggle, so it never syncs to other scorers). -->
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                class="size-6"
+                title="Court color"
+                aria-label="Change court color"
+              >
+                <Palette class="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                v-for="variant in courtColorVariants[sport]"
+                :key="variant.id"
+                @click="
+                  courtColorChoice = {
+                    ...courtColorChoice,
+                    [sport]: variant.id,
+                  }
+                "
+              >
+                <span
+                  class="size-3 rounded-full border border-border-strong"
+                  :class="variant.class"
+                />
+                {{ variant.label }}
+                <Check
+                  v-if="courtSurface === variant.class"
+                  class="ml-auto size-3.5"
+                />
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -1000,6 +1056,7 @@ const swapLabelB = computed(() =>
             v-if="team === 'A'"
             team="A"
             :sport="sport"
+            :surface-class="courtSurface"
             :orientation="orientationA"
             :score="score('A')"
             :games-won="gamesWon.a"
@@ -1021,6 +1078,7 @@ const swapLabelB = computed(() =>
             v-else
             team="B"
             :sport="sport"
+            :surface-class="courtSurface"
             :orientation="orientationB"
             :score="score('B')"
             :games-won="gamesWon.b"

@@ -60,6 +60,9 @@ const props = defineProps<{
   // would misattribute the action. On-screen names come from `cells`.
   isDoubles?: boolean;
   displayName?: string;
+  /** Mat color override (operator's court-color choice); defaults to the
+   * sport's standard surface. */
+  surfaceClass?: string;
 }>();
 
 const emit = defineEmits<(e: 'tap') => void>();
@@ -223,6 +226,30 @@ const boundaryStyle = computed(() => {
     borderWidth: '1.5px',
     [edgeProp[netEdge.value]!]: '0px',
   };
+});
+
+// Serving signal: a solid team-colored bar along the serving half's
+// BASELINE. Replaces the tinted boundary — a border with its net edge
+// removed dead-ended into the net band and read as clipped, and a tinted
+// gradient wash muddied against the mat color (orange over green browned
+// out). The baseline is the one edge that can never collide with the net,
+// and a crisp bar reads as "possession" at a glance; the SERVES pill stays
+// the precise marker.
+const servingBarStyle = computed(() => {
+  if (!isServing.value || props.matchOver) return null;
+  return isStacked.value
+    ? {
+        left: MAT_INSET,
+        right: MAT_INSET,
+        height: '5px',
+        [outerEdge.value]: MAT_INSET,
+      }
+    : {
+        top: MAT_INSET,
+        bottom: MAT_INSET,
+        width: '5px',
+        [outerEdge.value]: MAT_INSET,
+      };
 });
 
 const sidelineStyles = computed<Record<string, string>[]>(() => {
@@ -415,7 +442,7 @@ watch(
          highlight still reads on top of it. -->
     <span
       class="pointer-events-none absolute rounded-[2px]"
-      :class="courtSurface[sport]"
+      :class="surfaceClass ?? courtSurface[sport]"
       :style="matStyle"
     />
 
@@ -436,15 +463,14 @@ watch(
          sliced by the court frame's rounded corners (the frame is
          `rounded-lg overflow-hidden`), so the accent read as a clipped strip. -->
     <span
-      class="pointer-events-none absolute z-[1] rounded-[2px] transition-colors"
+      class="pointer-events-none absolute z-[1] rounded-[2px] border-court-line"
       :style="boundaryStyle"
-      :class="[
-        isServing
-          ? team === 'A'
-            ? 'border-team-a'
-            : 'border-team-b'
-          : 'border-court-line',
-      ]"
+    />
+    <span
+      v-if="servingBarStyle"
+      class="pointer-events-none absolute z-[2] rounded-full transition-colors"
+      :class="team === 'A' ? 'bg-team-a' : 'bg-team-b'"
+      :style="servingBarStyle"
     />
     <span
       v-if="serviceLineStyle"
