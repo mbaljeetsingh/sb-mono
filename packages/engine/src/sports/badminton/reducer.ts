@@ -540,7 +540,15 @@ function sideOutFlags(
 /**
  * A red card under side-out scoring. `applyPoint` would read the opponent as
  * the rally winner and produce a side-out instead of a point, so the tally is
- * credited directly and the serve is left where the referee found it.
+ * credited directly and the serve stays with whoever held it.
+ *
+ * When the beneficiary IS the serving side the point has to move them exactly
+ * as a won rally would — partners swap and the server crosses to the other
+ * court. `serverCourt` is maintained transitionally rather than re-derived, so
+ * crediting the point without that step left it one step behind the team's
+ * score parity, and `applySideOutPoint` then flipped it relative to the stale
+ * value on every later rally: the serve pill sat on the wrong player, in the
+ * wrong court, for the rest of the game.
  */
 function awardSideOutPenaltyPoint(
   state: RacquetState,
@@ -555,6 +563,17 @@ function awardSideOutPenaltyPoint(
       : { a: cur.a, b: cur.b + 1 };
   const newGames = [...state.games.slice(0, gameIdx), next];
   const winner = isGameWon(next, cfg);
+  // Only the serving side's own positions are touched by their point; a point
+  // handed to the receivers changes nobody's court.
+  const scoredOnServe = state.servingSide === beneficiary;
+  const partnerAfterPoint = scoredOnServe
+    ? rotatePartners(state, beneficiary, true, cfg)
+    : state.partnerOnRight;
+  const courtAfterPoint: 'right' | 'left' = scoredOnServe
+    ? state.serverCourt === 'right'
+      ? 'left'
+      : 'right'
+    : state.serverCourt;
   if (!winner) {
     const wouldWin = wouldWinGameWithPoint(next, beneficiary, cfg);
     const wouldWinMatch =
@@ -566,6 +585,13 @@ function awardSideOutPenaltyPoint(
     return {
       ...state,
       games: newGames,
+      partnerOnRight: partnerAfterPoint,
+      serverCourt: courtAfterPoint,
+      serverSlot: slotInCourt(
+        partnerAfterPoint,
+        state.servingSide,
+        courtAfterPoint
+      ),
       isGamePoint: wouldWin,
       isMatchPoint: wouldWinMatch,
       gamePoint: flag(wouldWin),
@@ -587,8 +613,9 @@ function awardSideOutPenaltyPoint(
     matchOver,
     winner: matchOver ? (gamesWon.a > gamesWon.b ? 'A' : 'B') : null,
     serverNumber: matchOver ? state.serverNumber : cfg.doubles ? 2 : 1,
-    serverCourt: matchOver ? state.serverCourt : 'right',
-    partnerOnRight: matchOver ? state.partnerOnRight : { a: 1, b: 1 },
+    serverCourt: matchOver ? courtAfterPoint : 'right',
+    partnerOnRight: matchOver ? partnerAfterPoint : { a: 1, b: 1 },
+    serverSlot: matchOver ? state.serverSlot : 1,
     isGamePoint: false,
     isMatchPoint: false,
     gamePoint: { a: false, b: false },
@@ -886,11 +913,33 @@ function applyCorrection(
         )
       : state.servingSide;
   const serverScore = servingSide === 'A' ? cur.a : cur.b;
-  const serverCourt: 'right' | 'left' =
+  const parityCourt: 'right' | 'left' =
     serverScore % 2 === 0 ? 'right' : 'left';
   const partnerOnRight = atGameStart
     ? ({ a: 1, b: 1 } as RacquetState['partnerOnRight'])
     : state.partnerOnRight;
+  // A game back at 0–0 re-opens on the "0–0–2" convention; otherwise the
+  // correction is only about the score and the service turn carries on.
+  const serverNumber: 1 | 2 =
+    cfg.scoring !== 'side-out'
+      ? state.serverNumber
+      : atGameStart && cfg.doubles
+        ? 2
+        : state.serverNumber;
+  // Score parity places the FIRST server of a side-out turn. The second server
+  // is their partner, standing in the other court — so re-deriving the court
+  // from parity alone while keeping `serverNumber: 2` produced a state that
+  // contradicted itself, and rendered "SERVES · 2" on the first server.
+  const isSecondServer =
+    cfg.scoring === 'side-out' &&
+    !!cfg.doubles &&
+    serverNumber === 2 &&
+    !atGameStart;
+  const serverCourt: 'right' | 'left' = isSecondServer
+    ? parityCourt === 'right'
+      ? 'left'
+      : 'right'
+    : parityCourt;
   // A correction can land the match straight onto game/match point (the
   // operator fixes a mis-scored rally to 20–5). Recompute from the
   // corrected score instead of clearing — otherwise the chip and status
@@ -916,10 +965,7 @@ function applyCorrection(
     serverCourt,
     partnerOnRight,
     serverSlot: slotInCourt(partnerOnRight, servingSide, serverCourt),
-    serverNumber:
-      atGameStart && cfg.scoring === 'side-out' && cfg.doubles
-        ? 2
-        : state.serverNumber,
+    serverNumber,
     matchOver,
     winner: matchOver ? (ev.gamesWon.a > ev.gamesWon.b ? 'A' : 'B') : null,
     endReason: matchOver ? 'normal' : null,

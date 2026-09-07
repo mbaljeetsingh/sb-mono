@@ -197,6 +197,110 @@ describe('pickleball side-out — penalties', () => {
     expect(s.servingSide).toBe('B');
     expect(s.cards.b.red).toBe(1);
   });
+
+  it('a point handed to the RECEIVERS leaves the serving positions alone', () => {
+    const before = play(doubles, ['B', 'B']);
+    const after = reduce(
+      [
+        start('A'),
+        point('B'),
+        point('B'),
+        ev('penalty', { side: 'B', card: 'red' }),
+      ],
+      doubles
+    );
+    expect(after.games[0]).toEqual({ a: 1, b: 1 });
+    expect(after.serverCourt).toBe(before.serverCourt);
+    expect(after.partnerOnRight).toEqual(before.partnerOnRight);
+  });
+
+  it('a point handed to the SERVERS moves them like a won rally', () => {
+    // B serving at 0-2 from the right court (even). The card takes them to 3,
+    // so the server must cross to the left court with their partner —
+    // serverCourt is tracked transitionally, and leaving it behind put the
+    // serve pill on the wrong player, in the wrong court, for the rest of the
+    // game as each later rally flipped it from the stale value.
+    const rallies: SideId[] = ['B', 'B', 'B'];
+    const before = play(doubles, rallies);
+    expect(before.games[0]).toEqual({ a: 0, b: 2 });
+    expect(before.serverCourt).toBe('right');
+
+    const after = reduce(
+      [
+        start('A'),
+        ...rallies.map(point),
+        ev('penalty', { side: 'A', card: 'red' }),
+      ],
+      doubles
+    );
+    expect(after.games[0]).toEqual({ a: 0, b: 3 });
+    // Odd score → the server is in the left court, and it is the same human.
+    expect(after.serverCourt).toBe('left');
+    expect(after.serverSlot).toBe(before.serverSlot);
+    expect(after.partnerOnRight.b).not.toBe(before.partnerOnRight.b);
+    expect(after.servingSide).toBe('B');
+  });
+});
+
+describe('pickleball side-out — score corrections', () => {
+  it('keeps the second server in their own court, not the parity court', () => {
+    // A faults away the opening serve, then B's first server faults too, so B
+    // is on server 2 — standing in the court OPPOSITE their score parity.
+    const base = [start('A'), point('B'), point('A')];
+    const before = reduce(base, doubles);
+    expect(before.serverNumber).toBe(2);
+    expect(before.serverCourt).toBe('left');
+
+    const after = reduce(
+      [
+        ...base,
+        ev('score.correct', {
+          games: [{ a: 0, b: 4 }],
+          gamesWon: { a: 0, b: 0 },
+        }),
+      ],
+      doubles
+    );
+    expect(after.games[0]).toEqual({ a: 0, b: 4 });
+    expect(after.serverNumber).toBe(2);
+    // Parity of 4 is the right court, so server 2 stands in the left one.
+    expect(after.serverCourt).toBe('left');
+    expect(after.serverSlot).toBe(2);
+  });
+
+  it('a correction back to 0-0 re-opens the game on 0-0-2', () => {
+    const s = reduce(
+      [
+        start('A'),
+        point('A'),
+        ev('score.correct', {
+          games: [{ a: 0, b: 0 }],
+          gamesWon: { a: 0, b: 0 },
+        }),
+      ],
+      doubles
+    );
+    expect(s.serverNumber).toBe(2);
+    expect(s.serverCourt).toBe('right');
+    expect(s.serverSlot).toBe(1);
+  });
+
+  it('singles is unaffected by the second-server rule', () => {
+    const s = reduce(
+      [
+        start('A'),
+        point('A'),
+        ev('score.correct', {
+          games: [{ a: 3, b: 1 }],
+          gamesWon: { a: 0, b: 0 },
+        }),
+      ],
+      singles
+    );
+    expect(s.serverNumber).toBe(1);
+    // A serving on 3 (odd) → left court.
+    expect(s.serverCourt).toBe('left');
+  });
 });
 
 describe('pickleball rally variant (simplified) is unaffected', () => {

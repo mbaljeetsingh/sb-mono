@@ -538,8 +538,6 @@ type ClipCard = {
   selected: boolean;
 };
 
-const formatScore = (s: { a: number; b: number }) => `${s.a}–${s.b}`;
-
 const cards = computed<ClipCard[]>(() => {
   const filtered =
     sideFilter.value === 'all'
@@ -552,7 +550,7 @@ const cards = computed<ClipCard[]>(() => {
       c.kind === 'match-point'
         ? 'Match point'
         : c.kind === 'game-point'
-          ? `Game ${c.gameIndex + 1} won`
+          ? `${c.unit === 'set' ? 'Set' : 'Game'} ${c.gameIndex + 1} won`
           : c.kind === 'point-saved'
             ? c.saved === 'match'
               ? 'Match point saved'
@@ -560,7 +558,7 @@ const cards = computed<ClipCard[]>(() => {
             : c.kind === 'clutch'
               ? 'Clutch point'
               : 'Long rally',
-    meta: `Game ${c.gameIndex + 1} · ${formatScore(c.scoreBefore)} → ${formatScore(c.scoreAfter)} · at ${formatTime(c.videoStartMs)}`,
+    meta: `${c.unit === 'set' ? 'Set' : 'Game'} ${c.gameIndex + 1} · ${c.scoreText.before} → ${c.scoreText.after} · at ${formatTime(c.videoStartMs)}`,
     videoStartMs: c.videoStartMs,
     videoEndMs: c.videoEndMs,
   }));
