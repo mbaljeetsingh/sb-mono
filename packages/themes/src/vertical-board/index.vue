@@ -36,7 +36,8 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
+  showsPointTier,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -44,7 +45,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
@@ -194,7 +196,7 @@ const panelStyle = (side: 'a' | 'b') => ({
         <div
           class="score flex min-h-0 flex-1 items-center justify-center leading-[0.82] tabular-nums portrait:text-[clamp(110px,min(26vh,54vw),340px)] landscape:text-[clamp(96px,min(46vh,26vw),300px)]"
         >
-          {{ currentGame[side] }}
+          {{ primaryScore(side) }}
         </div>
 
         <!-- Per-game history pinned to the panel foot, with the standing number
@@ -206,7 +208,7 @@ const panelStyle = (side: 'a' | 'b') => ({
             :side="side"
             :color="teamColor(side)"
             size="lg"
-            :include-current="false"
+            :include-current="showsPointTier"
           />
           <span v-else aria-hidden="true" />
           <span

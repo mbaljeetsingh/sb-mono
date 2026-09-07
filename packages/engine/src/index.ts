@@ -18,13 +18,18 @@ export type {
   Tiebreak,
 } from './sports/racquet-shared';
 
-// Scoring-mode helpers the UI layer needs to render a score it did not compute:
-// `pointLabel` maps a tennis/padel rally tally onto 0/15/30/40/AD, and
-// `isTiebreakScore` / `gameTierOf` let a surface describe the format in words.
+// Scoring-mode helpers the UI layer needs to render a score it did not compute.
+// `pointLabel` maps a tennis/padel rally tally onto 0/15/30/40/AD; the
+// `format*` pair and `unitNoun` describe a format in the operator's language,
+// which has to live here because the config fields mean different things per
+// scoring mode (see formatHeadline).
 export {
+  formatDetail,
+  formatHeadline,
   gameTierOf,
   isTiebreakScore,
   pointLabel,
+  unitNoun,
 } from './sports/racquet-shared';
 
 // Badminton

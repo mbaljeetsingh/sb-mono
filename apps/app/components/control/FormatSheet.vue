@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import type { SportPresetId } from '@sb/engine';
+import {
+  type RacquetConfig,
+  type SportPresetId,
+  formatDetail,
+  formatHeadline,
+  unitNoun,
+} from '@sb/engine';
 import { Button } from '@sb/layer-ui/components/ui/button';
 import { Label } from '@sb/layer-ui/components/ui/label';
 import {
@@ -7,6 +13,7 @@ import {
   ToggleGroupItem,
 } from '@sb/layer-ui/components/ui/toggle-group';
 import { Minus, Plus } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 const props = defineProps<{
   preset: SportPresetId;
@@ -14,14 +21,17 @@ const props = defineProps<{
   options: {
     id: SportPresetId;
     displayName: string;
-    config: {
-      pointsPerGame: number;
-      cap?: number | null;
-      winBy: number;
-      intervalAt?: number | null;
-    };
+    config: RacquetConfig;
   }[];
 }>();
+
+// "Games" is the wrong noun for tennis and padel, where a games-to-win of 2
+// means two SETS — and the sheet is where an operator goes to check exactly
+// that. Read off the active preset, so it tracks the toggle above it.
+const noun = computed(() => {
+  const active = props.options.find((o) => o.id === props.preset);
+  return active ? unitNoun(active.config) : 'game';
+});
 
 const emit = defineEmits<{
   (e: 'update:preset', id: SportPresetId): void;
@@ -48,7 +58,7 @@ const matchLength = (v: 'single' | 'best-of') =>
       <Label
         class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
       >
-        Points per game
+        Scoring
       </Label>
       <ToggleGroup
         type="single"
@@ -66,14 +76,10 @@ const matchLength = (v: 'single' | 'best-of') =>
           class="flex-1 flex-col gap-0 h-11 whitespace-normal"
         >
           <span class="text-sm font-semibold">
-            {{ p.config.pointsPerGame }} · {{ p.displayName }}
+            {{ formatHeadline(p.config) }}
           </span>
           <span class="block text-[10px] font-medium opacity-60 mt-0.5">
-            {{
-              p.config.cap ? `cap ${p.config.cap}` : `win-by ${p.config.winBy}`
-            }}{{
-              p.config.intervalAt ? ` · interval ${p.config.intervalAt}` : ''
-            }}
+            {{ formatDetail(p.config) }}
           </span>
         </ToggleGroupItem>
       </ToggleGroup>
@@ -93,7 +99,7 @@ const matchLength = (v: 'single' | 'best-of') =>
         @update:model-value="(v) => v && matchLength(v as 'single' | 'best-of')"
       >
         <ToggleGroupItem value="single" class="flex-1 h-11">
-          Single match
+          Single {{ noun }}
         </ToggleGroupItem>
         <ToggleGroupItem value="best-of" class="flex-1 h-11">
           Best of {{ props.gamesToWin >= 2 ? props.gamesToWin * 2 - 1 : 3 }}
@@ -118,7 +124,7 @@ const matchLength = (v: 'single' | 'best-of') =>
             Best of {{ props.gamesToWin * 2 - 1 }}
           </span>
           <span class="block text-[11px] text-fg-subtle mt-0.5">
-            first to {{ props.gamesToWin }} games
+            first to {{ props.gamesToWin }} {{ noun }}s
           </span>
         </div>
         <Button

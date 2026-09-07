@@ -2,7 +2,10 @@
 import {
   type SportPresetId,
   defaultPresetBySport,
+  formatHeadline,
+  presetsForSport,
   sportPresets,
+  unitNoun,
 } from '@sb/engine';
 import { markCreated } from '@sb/layer-app-base/lib/eventStore';
 import { Button } from '@sb/layer-ui/components/ui/button';
@@ -24,7 +27,7 @@ import SportPicker from '~/components/match/SportPicker.vue';
 import ThemePickerDialog from '~/components/match/ThemePickerDialog.vue';
 import { joinNames } from '~/lib/partner-swap';
 import { namesInPlay } from '~/lib/recent-players';
-import { SPORTS, type SportId } from '~/lib/sports';
+import { SPORTS, type SportId, isDoublesOnly } from '~/lib/sports';
 import { useUserStore } from '~/stores/user';
 
 useSeoMeta({ title: 'New match' });
@@ -101,15 +104,19 @@ const seedBestOf =
     : 3;
 
 const sport = ref<SportId>(seedSport);
-// TT can't do doubles yet (see supportsDoubles below). This guard is NOT
-// redundant with that watcher: `watch` isn't `immediate`, so a restored
-// TT-plus-doubles state never transitions and never fires it — and the Type
-// toggle is hidden for TT, so the user would be left with four required name
-// fields and no control to get back to singles. Unreachable while TT is
-// disabled (seedSport only accepts enabled sports), but it has to hold the
-// day TT ships.
+// A restored format can contradict the sport's own constraint, and this guard
+// is NOT redundant with the watcher below: `watch` isn't `immediate`, so a
+// restored state that already violates the rule never transitions and never
+// fires it — and the Type toggle is hidden for those sports, leaving the user
+// with no control to fix it. TT would strand them on four required name fields
+// with no way back to singles; padel would let them score a doubles-only sport
+// as singles.
 const isDoubles = ref(
-  seedSport === 'table-tennis' ? false : !!stored.isDoubles
+  seedSport === 'table-tennis'
+    ? false
+    : isDoublesOnly(seedSport)
+      ? true
+      : !!stored.isDoubles
 );
 const formatPreset = ref<SportPresetId>(seedPreset);
 const matchLength = ref<MatchLength>(
@@ -168,12 +175,29 @@ const courtLabel = ref('');
 // a rematch prefill brought any of the three fields back populated.
 const showTournamentDetails = ref(false);
 
-// TT doubles uses a 4-player rotation that the shared (BWF) reducer doesn't
-// implement. Force singles for TT until a TT-specific reducer ships.
+// Two sports don't get a choice, for opposite reasons.
+//
+// Table tennis doubles uses a 4-player service rotation the shared (BWF)
+// reducer doesn't implement — the serve must go to a designated opponent and
+// the pairs rotate — so it stays singles until a TT-specific reducer ships.
+//
+// Padel has no singles format at all: the court is built for four and FIP
+// publishes no singles rules, so the toggle would offer a format that doesn't
+// exist.
+const supportsSingles = computed(() => !isDoublesOnly(sport.value));
 const supportsDoubles = computed(() => sport.value !== 'table-tennis');
-watch(supportsDoubles, (ok) => {
-  if (!ok) isDoubles.value = false;
-});
+/** Hide the toggle when only one answer is legal for this sport. */
+const showTypeToggle = computed(
+  () => supportsSingles.value && supportsDoubles.value
+);
+watch(
+  [supportsSingles, supportsDoubles],
+  ([singlesOk, doublesOk]) => {
+    if (!doublesOk) isDoubles.value = false;
+    else if (!singlesOk) isDoubles.value = true;
+  },
+  { immediate: true }
+);
 
 // When sport changes, snap preset + match length to that sport's natural
 // defaults (table tennis → BO5, badminton → Single, etc.).
@@ -206,10 +230,9 @@ const gamesToWin = computed(() =>
 );
 
 // Presets within the active sport — sub-toggle when there's a real choice
-// (badminton 21/15, pickleball classic/rally).
-const presetsInSport = computed(() =>
-  Object.values(sportPresets).filter((p) => p.sport === sport.value)
-);
+// (badminton 21/15, pickleball official/rally, padel advantage/golden point).
+// Official ruleset first, which is also the default the sport watcher picks.
+const presetsInSport = computed(() => presetsForSport(sport.value));
 
 // /new uses local refs for theme choice rather than `useThemeChoice` —
 // the matches row doesn't exist yet, so there's nothing to sync. Avoids
@@ -317,12 +340,18 @@ const showFormat = ref(false);
 
 const formatSummary = computed(() => {
   const sportLabel = SPORTS.find((s) => s.id === sport.value)?.label ?? '';
-  const points = sportPresets[formatPreset.value]?.config.pointsPerGame;
+  const cfg = sportPresets[formatPreset.value]?.config;
+  // `formatHeadline` rather than a bare `${pointsPerGame} pt`: under tennis
+  // scoring that field counts games per SET, so the generic phrasing billed a
+  // tennis match as "6 pt".
+  const noun = cfg ? unitNoun(cfg) : 'game';
   const length =
-    matchLength.value === 'single' ? 'single game' : `best of ${bestOfN.value}`;
+    matchLength.value === 'single'
+      ? `single ${noun}`
+      : `best of ${bestOfN.value}`;
   return [
     sportLabel,
-    points ? `${points} pt` : null,
+    cfg ? formatHeadline(cfg).toLowerCase() : null,
     isDoubles.value ? 'doubles' : 'singles',
     length,
   ]
@@ -488,7 +517,7 @@ const createMatch = async () => {
             <SportPicker v-model="sport" />
           </section>
 
-          <section v-if="supportsDoubles">
+          <section v-if="showTypeToggle">
             <Label
               class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
             >

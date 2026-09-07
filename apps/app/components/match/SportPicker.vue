@@ -27,6 +27,7 @@ const tint: Record<SportId, string> = {
   'table-tennis': 'text-court-tabletennis-accent',
   tennis: 'text-court-tennis-accent',
   pickleball: 'text-court-pickleball-accent',
+  padel: 'text-court-padel-accent',
 };
 </script>
 
@@ -38,7 +39,7 @@ const tint: Record<SportId, string> = {
     type="single"
     :model-value="props.modelValue"
     variant="outline"
-    class="grid grid-cols-2 gap-2 w-full"
+    class="grid grid-cols-2 gap-2 w-full sm:grid-cols-3"
     @update:model-value="(v) => v && $emit('update:modelValue', v as SportId)"
   >
     <ToggleGroupItem

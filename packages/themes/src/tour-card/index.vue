@@ -40,7 +40,7 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -48,7 +48,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const status = useStatusPill(toRef(props, 'state'));
@@ -234,7 +235,7 @@ const columns = computed(() =>
         <span
           class="score text-right text-[48px] leading-none text-white tabular-nums"
         >
-          {{ currentGame[side] }}
+          {{ primaryScore(side) }}
         </span>
       </div>
     </div>

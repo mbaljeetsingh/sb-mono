@@ -3,6 +3,7 @@ import {
   type RacquetEvent,
   type SideId,
   applyRacquetUndo,
+  pointLabel,
   reduceRacquet,
 } from '@sb/engine';
 import { Button } from '@sb/layer-ui/components/ui/button';
@@ -38,7 +39,7 @@ import TeamRow from '~/components/control/TeamRow.vue';
 import TossSheet from '~/components/control/TossSheet.vue';
 import { courtColorVariants, courtSurfaceClass } from '~/lib/court-colors';
 import { swapTeamPlayers } from '~/lib/partner-swap';
-import { sportIdFromPreset } from '~/lib/sports';
+import { courtAspectClass, sportIdFromPreset } from '~/lib/sports';
 
 definePageMeta({ layout: false });
 
@@ -77,6 +78,10 @@ watch([accessLoaded, canScore], ([l, ok]) => {
 });
 
 const { meta: matchMeta } = useMatchMeta(matchId);
+// Doubles reaches the engine through the format config: side-out pickleball
+// gives a doubles team two servers per turn, so the reducer can't score the
+// sport without it.
+const isDoublesRef = computed(() => matchMeta.value.isDoubles ?? false);
 const {
   preset,
   gamesToWin,
@@ -84,7 +89,7 @@ const {
   sportPresetOptions,
   presetLabel,
   seriesLabel,
-} = useFormat(matchId);
+} = useFormat(matchId, { isDoubles: isDoublesRef });
 const {
   events,
   append,
@@ -315,9 +320,48 @@ const onTossCommit = (payload: {
 
 const onTossSkip = () => markTossSeen();
 
-const score = (side: SideId) => {
+/** The current entry of `state.games` — the live game, or the live SET under
+ *  tennis scoring. */
+const currentUnit = (side: SideId) => {
   const last = state.value.games[state.value.games.length - 1];
   return last ? (side === 'A' ? last.a : last.b) : 0;
+};
+
+/**
+ * The big numeral on this team's half.
+ *
+ * Under tennis/padel scoring that is the rally tally on the 0/15/30/40 ladder
+ * (or a plain integer inside a tiebreak) rather than the game count — the
+ * number an umpire calls. Every other format's big numeral IS the game score.
+ */
+const score = (side: SideId): string | number => {
+  if (config.value.scoring !== 'tennis') return currentUnit(side);
+  return pointLabel(
+    state.value.points,
+    side,
+    state.value.inTiebreak,
+    config.value
+  );
+};
+
+/** Games in the current set — the secondary number tennis needs beside the
+ *  point score, and nothing at all for the formats without a point tier. */
+const setGames = (side: SideId): number | null =>
+  config.value.scoring === 'tennis' ? currentUnit(side) : null;
+
+/**
+ * Pickleball's server number, for the serving team only — it is meaningless
+ * for the receivers and reads as a stray digit on their half. Undefined
+ * everywhere else, including singles, which has no second server.
+ */
+const serverNumberFor = (side: SideId): 1 | 2 | undefined => {
+  if (config.value.scoring !== 'side-out' || !teamMeta.value.isDoubles) {
+    return undefined;
+  }
+  if (state.value.servingSide !== side || state.value.matchOver) {
+    return undefined;
+  }
+  return state.value.serverNumber;
 };
 
 const { vibrate } = useVibrate();
@@ -1046,11 +1090,13 @@ const swapLabelB = computed(() =>
            edge.
 
            Stacked layout carries a real court's proportions from `sm` up:
-           a badminton court is 6.1m × 13.4m, so the frame derives its width
-           from its height via aspect-[61/134] instead of filling the card —
+           the frame derives its width from its height via the sport's own
+           aspect ratio (see `courtAspectClass`) instead of filling the card —
            a desktop viewport otherwise renders it near-square, twice as fat
-           as the ground it's depicting. Phones keep full width (thumb
-           targets beat realism mid-rally), min-w floors short landscape
+           as the ground it's depicting. Per-sport because these courts are
+           genuinely different shapes: badminton is 6.1 × 13.4m, padel a clean
+           10 × 20m, a table tennis table 1.525 × 2.74m. Phones keep full width
+           (thumb targets beat realism mid-rally), min-w floors short landscape
            windows, and max-w falls back to filling when height outruns the
            card. Side-by-side stays full-bleed: umpire-chair mode wants the
            biggest halves it can get. -->
@@ -1060,7 +1106,10 @@ const swapLabelB = computed(() =>
           :class="
             layout === 'sideBySide'
               ? 'flex-row'
-              : 'flex-col sm:w-auto sm:aspect-[61/134] sm:min-w-[20rem] sm:max-w-full'
+              : [
+                  'flex-col sm:w-auto sm:min-w-[20rem] sm:max-w-full',
+                  courtAspectClass[sport],
+                ]
           "
         >
           <template
@@ -1074,6 +1123,7 @@ const swapLabelB = computed(() =>
               :surface-class="courtSurface"
               :orientation="orientationA"
               :score="score('A')"
+              :set-games="setGames('A')"
               :games-won="gamesWon.a"
               :total-slots="config.gamesToWin + 1"
               :is-match-point="state.matchPoint.a"
@@ -1084,6 +1134,7 @@ const swapLabelB = computed(() =>
               :last-winner="lastPointWinner === 'A'"
               :cell-is-server="(court) => cellIsServer('A', court)"
               :server-court="state.serverCourt"
+              :server-number="serverNumberFor('A')"
               :cards="state.cards.a"
               :is-doubles="teamMeta.isDoubles"
               :display-name="displayNameA"
@@ -1096,6 +1147,7 @@ const swapLabelB = computed(() =>
               :surface-class="courtSurface"
               :orientation="orientationB"
               :score="score('B')"
+              :set-games="setGames('B')"
               :games-won="gamesWon.b"
               :total-slots="config.gamesToWin + 1"
               :is-match-point="state.matchPoint.b"
@@ -1106,6 +1158,7 @@ const swapLabelB = computed(() =>
               :last-winner="lastPointWinner === 'B'"
               :cell-is-server="(court) => cellIsServer('B', court)"
               :server-court="state.serverCourt"
+              :server-number="serverNumberFor('B')"
               :cards="state.cards.b"
               :is-doubles="teamMeta.isDoubles"
               :display-name="displayNameB"

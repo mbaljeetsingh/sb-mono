@@ -29,7 +29,8 @@ const props = defineProps<ThemeProps>();
 const {
   playersA,
   playersB,
-  currentGame,
+  primaryScore,
+  showsPointTier,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -38,7 +39,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
@@ -220,7 +222,7 @@ const formatLine = computed(() => {
         <div
           class="score leading-[0.9] mt-1 text-[clamp(72px,min(24vh,30vw),200px)] portrait:text-[clamp(96px,min(28vh,38vw),260px)]"
         >
-          {{ currentGame[side] }}
+          {{ primaryScore(side) }}
         </div>
         <!-- Completed games as boxed cells, directly under this side's numeral.
              They used to live in a single shared "HISTORY G1 21–18" line in the
@@ -244,7 +246,7 @@ const formatLine = computed(() => {
             :side="side"
             :color="teamColor(side)"
             size="md"
-            :include-current="false"
+            :include-current="showsPointTier"
           />
           <GamesWonPlate
             v-if="withStanding"

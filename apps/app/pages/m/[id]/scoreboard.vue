@@ -14,8 +14,14 @@ const themeId = computed(
   () => String(route.query.theme ?? '') || scoreboardTheme.value || 'filmable'
 );
 
-const { state, config } = useMatchState(matchId);
 const { teamNames, players, meta: matchMeta } = useMatchMeta(matchId);
+// `isDoubles` has to reach the reducer: side-out pickleball scores differently
+// in singles and doubles, so a surface reducing the same log with the wrong
+// value would show a different score from the operator's.
+const isDoublesRef = computed(() => matchMeta.value.isDoubles ?? false);
+const { state, config } = useMatchState(matchId, {
+  isDoubles: isDoublesRef,
+});
 const meta = computed(() => ({
   sportLabel: matchMeta.value.eventName?.trim().toUpperCase() || undefined,
   courtLabel: matchMeta.value.courtLabel?.trim() || null,

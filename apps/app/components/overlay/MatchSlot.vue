@@ -19,8 +19,21 @@ const emit = defineEmits<{ ready: [matchId: string] }>();
 const route = useRoute();
 const matchIdRef = computed(() => props.matchId);
 
-const { state, config, loaded: eventsLoaded } = useMatchState(matchIdRef);
-const { teamNames, players, loaded: metaLoaded } = useMatchMeta(matchIdRef);
+const {
+  teamNames,
+  players,
+  meta: slotMeta,
+  loaded: metaLoaded,
+} = useMatchMeta(matchIdRef);
+// `isDoubles` has to reach the reducer: side-out pickleball scores differently
+// in singles and doubles, so a surface reducing the same log with the wrong
+// value would show a different score from the operator's.
+const isDoublesRef = computed(() => slotMeta.value.isDoubles ?? false);
+const {
+  state,
+  config,
+  loaded: eventsLoaded,
+} = useMatchState(matchIdRef, { isDoubles: isDoublesRef });
 const { overlay: overlayTheme, loaded: themeLoaded } =
   useThemeChoice(matchIdRef);
 

@@ -40,7 +40,12 @@ const props = defineProps<{
   team: 'A' | 'B';
   sport: SportId;
   orientation: 'top' | 'bottom' | 'left' | 'right';
-  score: number;
+  /** The big numeral. A string under tennis/padel scoring, where the umpire's
+   *  call is "40" or "AD" rather than a rally count. */
+  score: string | number;
+  /** Games won in the current SET — tennis/padel only, null elsewhere. Drawn
+   *  as a small figure beside the point score, the way a broadcast does. */
+  setGames?: number | null;
   gamesWon: number;
   totalSlots: number;
   /** THIS team is a point away from the match / game (side-attributed —
@@ -53,6 +58,13 @@ const props = defineProps<{
   lastWinner: boolean;
   cellIsServer: (court: 'left' | 'right') => boolean;
   serverCourt?: 'left' | 'right';
+  /**
+   * Side-out doubles (pickleball): which of this team's two servers is up —
+   * the third number in the "5–3–2" call. Rendered on the Serves pill rather
+   * than as a third numeral, because the two halves already say whose score is
+   * whose and the operator only needs it for the team currently serving.
+   */
+  serverNumber?: 1 | 2;
   cards?: { yellow: number; red: number; black: number };
   // Feed headerLabel, which is only spoken, not shown: it becomes the tap
   // button's aria-label ("Score a point for <name>"). Singles uses the player
@@ -201,6 +213,16 @@ const courtGeometry: Record<SportId, CourtGeometry> = {
   'table-tennis': {
     serviceLineFromNet: null,
     centreLine: { fromNet: '0px', fromOuter: MAT_INSET },
+    sidelineInset: null,
+    longServiceFromOuter: null,
+  },
+  // FIP: the service line sits 6.95m from the net on a 10m half (~69.5%) —
+  // much deeper than tennis's, which is why a padel court reads as mostly
+  // service box. The centre line splits net → service line; no tramlines, and
+  // the glass walls have no floor marking to draw.
+  padel: {
+    serviceLineFromNet: '69.5%',
+    centreLine: { fromNet: '0px', fromOuter: '30.5%' },
     sidelineInset: null,
     longServiceFromOuter: null,
   },
@@ -355,9 +377,17 @@ const centreLineStyle = computed(() => {
  *  the net stopped reading as "floating on the net". Inline styles so they can
  *  override the `inset-0` utility on the overlays. Table tennis has no service
  *  line, so it gets a synthetic split. */
-const scoreBandStyle = computed(() => ({
-  [netEdge.value]: hasServiceLine.value ? '55%' : '60%',
-}));
+const scoreBandStyle = computed(() => {
+  const line = geometry.value.serviceLineFromNet;
+  const pct = line ? Number.parseFloat(line) : Number.NaN;
+  // 55% is a tuned inset, not the painted line: it keeps the numeral clear of
+  // the service box for every shallow line (badminton 30%, pickleball 32%,
+  // tennis 54%) while still using most of the back court. Padel's line is
+  // 69.5% from the net, so the tuned value would drop the score inside the box
+  // — there, the real line is the better bound.
+  const inset = pct > 55 ? line! : hasServiceLine.value ? '55%' : '60%';
+  return { [netEdge.value]: inset };
+});
 
 const zonesBandStyle = computed(() => ({
   [outerEdge.value]: hasServiceLine.value ? '42%' : '36%',
@@ -416,6 +446,7 @@ const courtSurface: Record<SportId, string> = {
   'table-tennis': 'bg-court-tabletennis',
   tennis: 'bg-court-tennis',
   pickleball: 'bg-court-pickleball',
+  padel: 'bg-court-padel',
 };
 
 // Score tick — a brief scale-pop when a point lands. The score is now the
@@ -428,7 +459,14 @@ let tickTimer: ReturnType<typeof setTimeout> | undefined;
 watch(
   () => props.score,
   (next, prev) => {
-    if (next <= (prev ?? 0)) return;
+    // Any change pops, rather than only an increase. Tennis's ladder is not
+    // monotonic in a comparable way — "40" → "AD" → "40" on a lost advantage,
+    // and a won game drops the numeral back to "0" — so the numeric guard that
+    // suppressed resets under rally scoring would suppress most of tennis.
+    if (prev === undefined || next === prev) return;
+    if (typeof next === 'number' && typeof prev === 'number' && next < prev) {
+      return;
+    }
     ticking.value = true;
     clearTimeout(tickTimer);
     tickTimer = setTimeout(() => {
@@ -593,6 +631,21 @@ watch(
         >
           {{ score }}
         </span>
+        <!-- Games in the current set, tennis/padel only. Set apart and much
+             smaller: the point score is what changes rally to rally, and a
+             second full-size numeral would make the operator read twice to
+             find it. Sets already show as pips on the status strip. -->
+        <span
+          v-if="setGames !== null && setGames !== undefined"
+          class="score ml-2 self-center text-[0.42em] leading-none tabular-nums text-fg-muted"
+          :style="
+            scoreFontPx
+              ? { fontSize: `${Math.round(scoreFontPx * 0.42)}px` }
+              : undefined
+          "
+        >
+          {{ setGames }}
+        </span>
       </div>
 
       <!-- The players' strip (service line → net), identical in singles and
@@ -647,6 +700,11 @@ watch(
               >
                 <span class="size-[5px] rounded-full bg-current opacity-70" />
                 Serves
+                <!-- Pickleball's second server. Only meaningful for the team
+                     holding the serve, which is the only place this renders. -->
+                <span v-if="serverNumber" class="opacity-80"
+                  >· {{ serverNumber }}</span
+                >
               </span>
             </Transition>
             <!-- Doubles only: with two opponents on court the diagonal-only

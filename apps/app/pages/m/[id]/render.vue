@@ -346,9 +346,14 @@ const firstPointPerGame = computed<((typeof events.value)[number] | null)[]>(
 const totalGames = computed(() => firstPointPerGame.value.length);
 
 const replayTimeMs = ref(0);
+// Declared up here rather than beside the other theme/meta plumbing below,
+// because the replay reducer needs `isDoubles` in its config — see useFormat.
+const { teamNames, players, meta: matchMeta } = useMatchMeta(matchId);
+const isDoublesRef = computed(() => matchMeta.value.isDoubles ?? false);
 const { state, config, preset, loaded, events } = useReplayState(
   matchId,
-  replayTimeMs
+  replayTimeMs,
+  { isDoubles: isDoublesRef }
 );
 
 // Active anchor = the latest anchor whose videoMs is <= current playhead.
@@ -926,7 +931,6 @@ const overlayFrameStyle = computed(() => {
 
 // Theme — reuse the overlay theme the operator chose for this match.
 const { overlay: overlayTheme } = useThemeChoice(matchId);
-const { teamNames, players, meta: matchMeta } = useMatchMeta(matchId);
 const themeEntry = computed(() =>
   getTheme(overlayTheme.value || 'broadcast-classic', 'overlay')
 );

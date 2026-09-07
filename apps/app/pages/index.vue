@@ -30,6 +30,7 @@ type RecentMatch = {
   id: string;
   sport_preset: string;
   config: { gamesToWin?: number } | null;
+  is_doubles: boolean | null;
   team_name_a: string | null;
   team_name_b: string | null;
   ended_at: string | null;
@@ -55,7 +56,8 @@ const recentLabel = computed(() => {
 });
 
 onMounted(async () => {
-  const cols = 'id, sport_preset, config, team_name_a, team_name_b, ended_at';
+  const cols =
+    'id, sport_preset, config, is_doubles, team_name_a, team_name_b, ended_at';
   let row: RecentMatch | null = null;
   if (userStore.isAuthenticated && userStore.currentUser?.id) {
     const { data } = await supabase

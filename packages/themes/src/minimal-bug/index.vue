@@ -20,12 +20,19 @@ import {
 } from '../use-theme-state';
 
 const props = defineProps<ThemeProps>();
-const { cards, currentGame, isServingSide, isWinningSide, playersA, playersB } =
-  useThemeState(
-    toRef(props, 'state'),
-    toRef(props, 'teamNames'),
-    toRef(props, 'players')
-  );
+const {
+  cards,
+  primaryScore,
+  isServingSide,
+  isWinningSide,
+  playersA,
+  playersB,
+} = useThemeState(
+  toRef(props, 'state'),
+  toRef(props, 'teamNames'),
+  toRef(props, 'players'),
+  toRef(props, 'config')
+);
 const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
 
@@ -75,7 +82,7 @@ const initials = computed(() => ({
       <span
         class="score text-[19px] text-neutral-50 w-[28px]"
         :class="side === 'a' ? 'text-right' : 'text-left'"
-        >{{ currentGame[side] }}</span
+        >{{ primaryScore(side) }}</span
       >
       <PenaltyCards :cards="cards(side)" size="xs" class="shrink-0" />
       <span

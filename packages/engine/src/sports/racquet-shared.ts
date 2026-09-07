@@ -468,6 +468,57 @@ export const pointLabel = (
   return '40';
 };
 
+// ---------------------------------------------------------------------------
+// Format copy
+// ---------------------------------------------------------------------------
+
+/**
+ * Two lines describing a format in the operator's language, for the pickers on
+ * /new and in the control sheet.
+ *
+ * Here rather than in the app layer because the fields mean different things
+ * per scoring mode and the mapping is the engine's business: `pointsPerGame`
+ * is a point target under rally scoring but a GAMES-per-set target under
+ * tennis, so a generic "N pt" renders tennis as "6 pt" — which reads as a
+ * six-point game. Same reason `cap: 7` must print as "tiebreak at 6–6" rather
+ * than "cap 7".
+ */
+export const formatHeadline = (cfg: RacquetConfig): string => {
+  switch (cfg.scoring) {
+    case 'tennis':
+      return `Sets to ${cfg.pointsPerGame}`;
+    case 'side-out':
+      return `Side-out to ${cfg.pointsPerGame}`;
+    default:
+      return `${cfg.pointsPerGame} pt`;
+  }
+};
+
+export const formatDetail = (cfg: RacquetConfig): string => {
+  if (cfg.scoring === 'tennis') {
+    const tier = gameTierOf(cfg);
+    // The one thing a player actually asks before a padel match starts.
+    const deuce = tier.winBy === 1 ? 'golden point' : 'advantage';
+    const tb = cfg.tiebreak
+      ? `tiebreak at ${cfg.tiebreak.atGames}–${cfg.tiebreak.atGames}`
+      : 'no tiebreak';
+    return [deuce, tb].join(' · ');
+  }
+  const parts = [
+    cfg.cap ? `cap ${cfg.cap}` : `win-by ${cfg.winBy}`,
+    cfg.intervalAt ? `interval ${cfg.intervalAt}` : null,
+    cfg.scoring === 'side-out' ? 'serving side scores' : null,
+    cfg.serveRule === 'alternate'
+      ? `serve every ${cfg.serveTurnLength ?? 2}`
+      : null,
+  ];
+  return parts.filter(Boolean).join(' · ');
+};
+
+/** What one entry of `state.games` is called in this format. */
+export const unitNoun = (cfg: RacquetConfig): 'set' | 'game' =>
+  cfg.scoring === 'tennis' ? 'set' : 'game';
+
 /**
  * Trim the most recent state-changing event so callers can re-reduce for a true undo.
  *

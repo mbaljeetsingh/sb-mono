@@ -24,7 +24,8 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
+  showsPointTier,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -32,7 +33,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const isLive = computed(() => props.meta?.isLive !== false);
@@ -126,22 +128,22 @@ const playersOf = (side: 'a' | 'b') =>
         side="a"
         :color="teamColor('a')"
         size="sm"
-        :include-current="false"
+        :include-current="showsPointTier"
       />
       <span
         class="score text-[50px] text-neutral-50 tabular-nums w-[66px] text-right"
-        >{{ currentGame.a }}</span
+        >{{ primaryScore('a') }}</span
       >
       <span class="text-xl text-neutral-600 font-medium">—</span>
       <span class="score text-[50px] text-neutral-50 tabular-nums w-[66px]">{{
-        currentGame.b
+        primaryScore('b')
       }}</span>
       <GameCells
         :state="state"
         side="b"
         :color="teamColor('b')"
         size="sm"
-        :include-current="false"
+        :include-current="showsPointTier"
       />
       <GamesWonPlate
         v-if="withStanding"

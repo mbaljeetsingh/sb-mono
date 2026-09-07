@@ -53,8 +53,14 @@ const { isAdmin } = useRolePermissions();
 
 const route = useRoute();
 const matchId = computed(() => String(route.params.id ?? ''));
-const { state, config, events } = useMatchState(matchId);
 const { meta, teamNames, players, flush: flushMeta } = useMatchMeta(matchId);
+// `isDoubles` has to reach the reducer: side-out pickleball scores differently
+// in singles and doubles, so a surface reducing the same log with the wrong
+// value would show a different score from the operator's.
+const isDoublesRef = computed(() => meta.value.isDoubles ?? false);
+const { state, config, events } = useMatchState(matchId, {
+  isDoubles: isDoublesRef,
+});
 const { remember: rememberPlayers } = useRecentPlayers();
 
 // Explicit handler — relying on `v-model:meta="meta"` to auto-translate

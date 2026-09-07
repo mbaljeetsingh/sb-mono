@@ -82,6 +82,7 @@
   --color-court-tabletennis: var(--court-tabletennis);
   --color-court-tennis: var(--court-tennis);
   --color-court-pickleball: var(--court-pickleball);
+  --color-court-padel: var(--court-padel);
   --color-court-line: var(--court-line);
 
   /* Generic mat colors for the operator's court-color choice on /control
@@ -91,6 +92,7 @@
   --color-court-blue: var(--court-blue);
   --color-court-red: var(--court-red);
   --color-court-clay: var(--court-clay);
+  --color-court-turf: var(--court-turf);
 
   /* Per-sport *foreground* accents — for glyphs, chips and labels. The
    * --court-* values above are playing surfaces (a dark mat in dark mode), so
@@ -101,6 +103,7 @@
   --color-court-tabletennis-accent: var(--court-tabletennis-accent);
   --color-court-tennis-accent: var(--court-tennis-accent);
   --color-court-pickleball-accent: var(--court-pickleball-accent);
+  --color-court-padel-accent: var(--court-padel-accent);
 
   /* Radius scale (shadcn-vue ladder) */
   --radius-sm: calc(var(--radius) - 4px);
@@ -208,9 +211,11 @@
   --court-tabletennis: #d8e6f5;
   --court-tennis: #e4e0d2;
   --court-pickleball: #dbe8e4;
+  --court-padel: #d6e4ee;
   --court-blue: #d8e6f5;
   --court-red: #f2dad6;
   --court-clay: #eddbc9;
+  --court-turf: #d9e8dc;
   --court-line: rgba(20, 20, 19, 0.28);
 
   /* Per-sport foregrounds (glyphs / chips), ≥6:1 on --card */
@@ -218,6 +223,7 @@
   --court-tabletennis-accent: #1a5f96;
   --court-tennis-accent: #46617a;
   --court-pickleball-accent: #2a6b5c;
+  --court-padel-accent: #3a6285;
 }
 
 /* Dark — the default mode. Evening league play, dim halls and OBS operators
@@ -280,9 +286,11 @@
   --court-tabletennis: #14406e;
   --court-tennis: #2b4a63;
   --court-pickleball: #1f4a40;
+  --court-padel: #16324d;
   --court-blue: #14406e;
   --court-red: #6e1d14;
   --court-clay: #7c4426;
+  --court-turf: #1d4231;
   --court-line: rgba(255, 255, 255, 0.3);
 
   /* Per-sport foregrounds (glyphs / chips), ≥9:1 on --card */
@@ -290,6 +298,7 @@
   --court-tabletennis-accent: #7dd3fc;
   --court-tennis-accent: #a8c8e8;
   --court-pickleball-accent: #7fd0be;
+  --court-padel-accent: #93c5e8;
 }
 
 /* Default border colour.

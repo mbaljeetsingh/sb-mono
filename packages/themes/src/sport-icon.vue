@@ -1,23 +1,29 @@
 <script setup lang="ts">
-// Sport glyph for theme headers. Uses the same emoji as SportPicker on /new
-// so the visual identity is consistent across creation, control, and broadcast
-// surfaces. Renders nothing for unknown sports.
+// Sport glyph for theme headers. Renders nothing for unknown sports.
+//
+// Emoji rather than the hand-drawn SportGlyph the app uses on /new and
+// /control: that component lives in apps/app and this package can't reach it,
+// and a broadcast header wants a filled colour mark at small sizes anyway.
 //
 // Sized via parent's font-size (the emoji inherits via line-height: 1).
 
-import { computed } from "vue";
+import { computed } from 'vue';
 
 const props = defineProps<{ sport: string | null | undefined }>();
 
 const SPORT_EMOJI: Record<string, string> = {
-  badminton: "🏸",
-  tennis: "🎾",
-  pickleball: "🥎",
-  "table-tennis": "🏓",
+  badminton: '🏸',
+  tennis: '🎾',
+  pickleball: '🥎',
+  // Unicode ships no padel racket, and padel's ball really is a tennis ball
+  // with less pressure — so it shares 🎾 rather than borrowing another sport's
+  // mark. The two are told apart by the format line, which names the sport.
+  padel: '🎾',
+  'table-tennis': '🏓',
 };
 
 const emoji = computed(() =>
-  props.sport ? (SPORT_EMOJI[props.sport] ?? "") : "",
+  props.sport ? (SPORT_EMOJI[props.sport] ?? '') : ''
 );
 </script>
 
@@ -28,8 +34,7 @@ const emoji = computed(() =>
     class="inline-block leading-none"
     style="
       font-family:
-        &quot;Apple Color Emoji&quot;, &quot;Segoe UI Emoji&quot;,
-        &quot;Noto Color Emoji&quot;, sans-serif;
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
     "
   >
     {{ emoji }}

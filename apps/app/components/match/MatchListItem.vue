@@ -99,6 +99,7 @@ const sportChip: Record<SportId, string> = {
     'bg-court-tabletennis-accent/12 text-court-tabletennis-accent',
   tennis: 'bg-court-tennis-accent/12 text-court-tennis-accent',
   pickleball: 'bg-court-pickleball-accent/12 text-court-pickleball-accent',
+  padel: 'bg-court-padel-accent/12 text-court-padel-accent',
 };
 
 const formattedDate = computed(() => {

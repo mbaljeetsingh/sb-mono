@@ -58,6 +58,18 @@ withDefaults(defineProps<{ sport: SportId; decorative?: boolean }>(), {
       <path d="M7 6.5c2.5 2.5 5 4 7.5 4.5" />
     </template>
 
+    <!-- Padel: the sport's own racket — a rounded, solid, perforated bat with
+         a short grip. Drawn stubbier than the pickleball slab so the two read
+         apart at 16px: teardrop head, three holes in a triangle. -->
+    <template v-else-if="sport === 'padel'">
+      <path d="M12 3.5c3.6 0 6 2.6 6 6s-2.4 6.5-6 6.5-6-2.9-6-6.5 2.4-6 6-6Z" />
+      <path d="M12 16v4.5" />
+      <path d="M10 20.5h4" />
+      <circle cx="10.4" cy="8.2" r="0.5" />
+      <circle cx="13.6" cy="8.2" r="0.5" />
+      <circle cx="12" cy="11.4" r="0.5" />
+    </template>
+
     <!-- Pickleball: slab paddle, short handle, drilled holes. -->
     <template v-else>
       <rect x="6" y="3.5" width="10" height="12.5" rx="4.5" />

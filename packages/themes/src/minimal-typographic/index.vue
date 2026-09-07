@@ -29,7 +29,8 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
+  showsPointTier,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -37,7 +38,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const status = useStatusPill(toRef(props, 'state'));
@@ -145,7 +147,7 @@ const sideLabel = (side: 'a' | 'b') => {
           <div
             class="score leading-[0.85] text-[clamp(96px,min(34vh,40vw),260px)] portrait:text-[clamp(120px,min(34vh,52vw),320px)]"
           >
-            {{ currentGame[side] }}
+            {{ primaryScore(side) }}
           </div>
           <!-- Completed games as light-tone cells, plus the serve marker and any
                GAME WON / WINNER caption. Replaces the old footer line that
@@ -173,7 +175,7 @@ const sideLabel = (side: 'a' | 'b') => {
               :color="teamColor(side)"
               size="sm"
               tone="light"
-              :include-current="false"
+              :include-current="showsPointTier"
             />
             <span
               v-if="withStanding"

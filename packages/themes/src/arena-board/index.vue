@@ -40,7 +40,7 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -48,7 +48,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
@@ -285,7 +286,7 @@ const gap = 'gap-x-[clamp(8px,1.8vmin,26px)]';
               ? `color-mix(in srgb, ${teamColor(side)} 26%, transparent)`
               : undefined,
           }"
-          >{{ currentGame[side] }}</span
+          >{{ primaryScore(side) }}</span
         >
       </div>
     </div>

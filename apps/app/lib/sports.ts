@@ -7,16 +7,20 @@
 
 import { getPreset } from '@sb/engine';
 
-export type SportId = 'badminton' | 'tennis' | 'pickleball' | 'table-tennis';
+export type SportId =
+  'badminton' | 'tennis' | 'padel' | 'pickleball' | 'table-tennis';
 
 export type SportMeta = {
   id: SportId;
   label: string;
   /** Short format hint shown under the label in the picker. */
   preset: string;
-  /** Public sports. Tennis + pickleball ship engine configs but their themes
-   *  and control surfaces haven't had a polish pass, so they stay disabled. */
+  /** Public sports. Every sport in the list ships an engine preset, a court
+   *  and a themed control surface; the flag stays so a sport can be held back
+   *  mid-development without deleting its entry. */
   enabled: boolean;
+  /** Played only as doubles (padel) — /new hides the singles option. */
+  doublesOnly?: boolean;
 };
 
 export const SPORTS: SportMeta[] = [
@@ -30,16 +34,51 @@ export const SPORTS: SportMeta[] = [
     id: 'table-tennis',
     label: 'Table tennis',
     preset: '11pt, BO5',
-    enabled: false,
+    enabled: true,
   },
-  { id: 'tennis', label: 'Tennis', preset: 'Coming soon', enabled: false },
+  { id: 'tennis', label: 'Tennis', preset: 'Sets + tiebreak', enabled: true },
   {
     id: 'pickleball',
     label: 'Pickleball',
-    preset: 'Coming soon',
-    enabled: false,
+    preset: 'Side-out to 11',
+    enabled: true,
+  },
+  {
+    id: 'padel',
+    label: 'Padel',
+    preset: 'Sets · doubles',
+    enabled: true,
+    doublesOnly: true,
   },
 ];
+
+/** Sports that have no singles format. */
+export const isDoublesOnly = (sport: SportId): boolean =>
+  SPORTS.find((s) => s.id === sport)?.doublesOnly ?? false;
+
+/**
+ * Width ÷ length of the real playing surface, as the Tailwind class /control
+ * gives its court frame from `sm` up. These sports are not the same shape —
+ * badminton is long and narrow, padel is exactly twice as long as it is wide,
+ * a table tennis table is narrower still — so drawing them all at badminton's
+ * ratio made four of the five courts a lie.
+ *
+ * Written out as whole literal class strings rather than composed at runtime:
+ * Tailwind scans source text for class names and never sees an interpolated
+ * one, so `sm:aspect-[${w}/${l}]` would generate no CSS at all.
+ */
+export const courtAspectClass: Record<SportId, string> = {
+  // BWF 6.1m × 13.4m.
+  badminton: 'sm:aspect-[61/134]',
+  // ITF doubles 10.97m × 23.77m.
+  tennis: 'sm:aspect-[1097/2377]',
+  // FIP 10m × 20m — the one court that is a clean 1:2.
+  padel: 'sm:aspect-[1/2]',
+  // USAP 6.1m × 13.41m (20ft × 44ft).
+  pickleball: 'sm:aspect-[610/1341]',
+  // ITTF table 1.525m × 2.74m.
+  'table-tennis': 'sm:aspect-[305/548]',
+};
 
 const SPORT_IDS = new Set<string>(SPORTS.map((s) => s.id));
 
