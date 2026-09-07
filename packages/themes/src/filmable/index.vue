@@ -9,6 +9,7 @@
 // Sizing is fluid (clamp + vmin/vh/vw) and the layout reflows to stacked rows
 // in portrait so the same theme reads well on phone, tablet, TV, and stream.
 
+import { formatHeadline } from '@sb/engine';
 import { computed, toRef } from 'vue';
 import GameCells from '../game-cells.vue';
 import GamesWonPlate from '../games-won-plate.vue';
@@ -30,6 +31,8 @@ const {
   playersA,
   playersB,
   primaryScore,
+  unitInitial,
+  wonLabel,
   showsPointTier,
   gamesWon,
   isServingSide,
@@ -71,8 +74,10 @@ const topMeta = computed(() => {
 const formatLine = computed(() => {
   const c = props.config;
   const heading =
-    c.gamesToWin === 1 ? 'Single game' : `Best of ${c.gamesToWin * 2 - 1}`;
-  return `${heading} · first to ${c.pointsPerGame}`;
+    c.gamesToWin === 1
+      ? `Single ${unitInitial.value === 'S' ? 'set' : 'game'}`
+      : `Best of ${c.gamesToWin * 2 - 1}`;
+  return `${heading} · ${formatHeadline(c)}`;
 });
 </script>
 
@@ -114,7 +119,7 @@ const formatLine = computed(() => {
         <span
           v-if="config.gamesToWin > 1"
           class="text-neutral-500 font-semibold"
-          >· G{{ state.games.length }}</span
+          >· {{ unitInitial }}{{ state.games.length }}</span
         >
       </span>
     </div>
@@ -171,7 +176,7 @@ const formatLine = computed(() => {
               background: `color-mix(in srgb, ${teamColor(side)} 12%, transparent)`,
             }"
           >
-            GAME WON
+            {{ wonLabel }}
           </span>
           <PenaltyCards :cards="cards(side)" size="sm" />
         </div>

@@ -7,21 +7,37 @@
 // change ends between games. Visual-only swap; server identity stays with
 // the engine. Operator can ignore it (common in club play).
 
-import { ArrowUpDown } from "lucide-vue-next";
-import { Button } from "@sb/layer-ui/components/ui/button";
+import { ArrowUpDown } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { Button } from '@sb/layer-ui/components/ui/button';
 
-defineProps<{
-  gameNumber: number;
-  winnerName: string;
-  gameScore: { winner: number; loser: number };
-  matchScore: { a: number; b: number };
-  nextGameNumber: number;
-  sidesSwapped: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    gameNumber: number;
+    /**
+     * What one entry of the score is called in this format — "game" for
+     * badminton / pickleball / table tennis, "set" for tennis and padel, where a
+     * game is the tier below and this dialog would be lying about which boundary
+     * the match just crossed.
+     */
+    unitLabel?: string;
+    winnerName: string;
+    gameScore: { winner: number; loser: number };
+    matchScore: { a: number; b: number };
+    nextGameNumber: number;
+    sidesSwapped: boolean;
+  }>(),
+  { unitLabel: 'game' }
+);
+
+// Sentence-cased for the headline and the button.
+const unitTitle = computed(
+  () => props.unitLabel.charAt(0).toUpperCase() + props.unitLabel.slice(1)
+);
 
 defineEmits<{
-  (e: "start-next"): void;
-  (e: "swap-sides"): void;
+  (e: 'start-next'): void;
+  (e: 'swap-sides'): void;
 }>();
 </script>
 
@@ -35,7 +51,7 @@ defineEmits<{
       <div
         class="text-[11px] font-bold tracking-[0.08em] uppercase text-success mb-2"
       >
-        ✓ Game {{ gameNumber }} complete
+        ✓ {{ unitTitle }} {{ gameNumber }} complete
       </div>
       <div class="text-[24px] font-semibold mb-4">{{ winnerName }} wins</div>
       <div
@@ -67,7 +83,7 @@ defineEmits<{
         class="h-12 w-full font-semibold"
         @click="$emit('start-next')"
       >
-        Start Game {{ nextGameNumber }}
+        Start {{ unitTitle }} {{ nextGameNumber }}
       </Button>
     </div>
   </div>

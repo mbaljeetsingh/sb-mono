@@ -9,6 +9,7 @@
 // Sizing is fluid (clamp + vmin/vh/vw) and the layout reflows to stacked rows
 // in portrait so the same theme reads well on phone, tablet, TV, and stream.
 
+import { formatHeadline } from '@sb/engine';
 import { computed, toRef } from 'vue';
 import GameCells from '../game-cells.vue';
 import type { ThemeProps } from '../index';
@@ -30,6 +31,8 @@ const {
   playersB,
   cards,
   primaryScore,
+  unitWord,
+  wonLabel,
   showsPointTier,
   gamesWon,
   isServingSide,
@@ -51,8 +54,10 @@ const playersOf = (side: 'a' | 'b') =>
 const formatLine = computed(() => {
   const c = props.config;
   const heading =
-    c.gamesToWin === 1 ? 'Single game' : `Best of ${c.gamesToWin * 2 - 1}`;
-  return `${heading} · first to ${c.pointsPerGame}`;
+    c.gamesToWin === 1
+      ? `Single ${unitWord.value.toLowerCase()}`
+      : `Best of ${c.gamesToWin * 2 - 1}`;
+  return `${heading} · ${formatHeadline(c)}`;
 });
 
 const withStanding = computed(() => showStanding(props.config));
@@ -61,7 +66,7 @@ const withStanding = computed(() => showStanding(props.config));
 // word crowded a layout whose whole argument is restraint.
 const sideLabel = (side: 'a' | 'b') => {
   if (isMatchWinner(side)) return 'WINNER';
-  if (isLastGameWinner(side)) return 'GAME WON';
+  if (isLastGameWinner(side)) return wonLabel.value;
   return null;
 };
 </script>
@@ -110,7 +115,9 @@ const sideLabel = (side: 'a' | 'b') => {
             · TEAM {{ status.side }}
           </span>
         </span>
-        <span v-else class="shrink-0">GAME {{ state.games.length }}</span>
+        <span v-else class="shrink-0"
+          >{{ unitWord }} {{ state.games.length }}</span
+        >
       </div>
 
       <!-- Center grid: side-by-side in landscape, stacked in portrait. -->

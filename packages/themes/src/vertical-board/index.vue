@@ -37,6 +37,9 @@ const {
   playersB,
   cards,
   primaryScore,
+  unitWord,
+  unitInitial,
+  wonLabel,
   showsPointTier,
   gamesWon,
   isServingSide,
@@ -64,7 +67,7 @@ const headMeta = computed(() => {
   const m = props.meta ?? {};
   const bo =
     props.config.gamesToWin === 1
-      ? 'SINGLE GAME'
+      ? `SINGLE ${unitWord.value}`
       : `BO${props.config.gamesToWin * 2 - 1}`;
   return [m.sportLabel, bo, m.category, m.round, m.courtLabel]
     .filter(Boolean)
@@ -77,7 +80,7 @@ const headMeta = computed(() => {
 // redundant encoding of one fact.
 const sideCaption = (side: 'a' | 'b') => {
   if (isMatchWinner(side)) return 'WINNER';
-  if (isLastGameWinner(side)) return 'GAME WON';
+  if (isLastGameWinner(side)) return wonLabel.value;
   return null;
 };
 
@@ -127,7 +130,7 @@ const panelStyle = (side: 'a' | 'b') => ({
         />
         LIVE
         <span v-if="config.gamesToWin > 1" class="text-white/45"
-          >· G{{ state.games.length }}</span
+          >· {{ unitInitial }}{{ state.games.length }}</span
         >
       </span>
     </div>

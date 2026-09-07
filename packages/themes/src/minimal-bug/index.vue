@@ -23,6 +23,7 @@ const props = defineProps<ThemeProps>();
 const {
   cards,
   primaryScore,
+  unitInitial,
   isServingSide,
   isWinningSide,
   playersA,
@@ -128,7 +129,7 @@ const initials = computed(() => ({
     <span
       v-else
       class="text-[11px] font-mono font-bold tracking-wide text-white/60 ml-1"
-      >G{{ state.games.length }}</span
+      >{{ unitInitial }}{{ state.games.length }}</span
     >
   </div>
 </template>

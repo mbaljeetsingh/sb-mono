@@ -2,6 +2,7 @@
 import {
   type SportPresetId,
   defaultPresetBySport,
+  formatDetail,
   formatHeadline,
   presetsForSport,
   sportPresets,
@@ -338,16 +339,21 @@ const formatNames = (t: { p1: string; p2: string }) =>
 // to reach the fields that actually gate the submit button.
 const showFormat = ref(false);
 
+/** "set" under tennis/padel scoring, "game" otherwise — see engine unitNoun. */
+const formatUnit = computed(() => {
+  const cfg = sportPresets[formatPreset.value]?.config;
+  return cfg ? unitNoun(cfg) : 'game';
+});
+
 const formatSummary = computed(() => {
   const sportLabel = SPORTS.find((s) => s.id === sport.value)?.label ?? '';
   const cfg = sportPresets[formatPreset.value]?.config;
   // `formatHeadline` rather than a bare `${pointsPerGame} pt`: under tennis
   // scoring that field counts games per SET, so the generic phrasing billed a
   // tennis match as "6 pt".
-  const noun = cfg ? unitNoun(cfg) : 'game';
   const length =
     matchLength.value === 'single'
-      ? `single ${noun}`
+      ? `single ${formatUnit.value}`
       : `best of ${bestOfN.value}`;
   return [
     sportLabel,
@@ -543,7 +549,7 @@ const createMatch = async () => {
             <Label
               class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
             >
-              Points per game
+              Scoring
             </Label>
             <ToggleGroup
               type="single"
@@ -554,23 +560,22 @@ const createMatch = async () => {
                 (v) => v && (formatPreset = v as SportPresetId)
               "
             >
+              <!-- Headline + detail from the engine, which is the only place
+                   that knows what the config fields mean per scoring mode.
+                   This used to be a per-id ternary chain that fell through to
+                   "classic" for anything it didn't name, so padel's advantage
+                   and golden-point presets both rendered as "6 classic". -->
               <ToggleGroupItem
                 v-for="p in presetsInSport"
                 :key="p.id"
                 :value="p.id"
-                class="flex-1"
+                class="h-auto min-h-11 flex-1 flex-col gap-0 whitespace-normal py-1.5"
               >
-                {{ p.config.pointsPerGame }}
-                <span class="opacity-60 ml-0.5">
-                  {{
-                    p.id === 'badminton-15'
-                      ? '(2027)'
-                      : p.id === 'badminton-21'
-                        ? 'BWF'
-                        : p.id === 'pickleball-rally'
-                          ? 'rally'
-                          : 'classic'
-                  }}
+                <span class="text-sm font-semibold">
+                  {{ formatHeadline(p.config) }}
+                </span>
+                <span class="mt-0.5 block text-[10px] font-medium opacity-60">
+                  {{ formatDetail(p.config) }}
                 </span>
               </ToggleGroupItem>
             </ToggleGroup>
@@ -616,7 +621,7 @@ const createMatch = async () => {
                 </span>
                 <span class="block text-[11px] text-fg-subtle mt-0.5">
                   first to {{ gamesToWin }}
-                  {{ gamesToWin === 1 ? 'game' : 'games' }}
+                  {{ gamesToWin === 1 ? formatUnit : `${formatUnit}s` }}
                 </span>
               </div>
               <Button

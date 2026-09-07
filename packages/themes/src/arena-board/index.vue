@@ -17,6 +17,7 @@
 //
 // Fluid via clamp/vmin so the same board runs on a propped tablet and a wall TV.
 
+import { formatHeadline } from '@sb/engine';
 import { computed, toRef } from 'vue';
 import { CODE_W, PLATE_W, POINTS_TEXT_LG, POINTS_W_LG } from '../cell-metrics';
 import GameCells from '../game-cells.vue';
@@ -41,6 +42,8 @@ const {
   playersB,
   cards,
   primaryScore,
+  unitWord,
+  wonLabel,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -73,8 +76,10 @@ const headMeta = computed(() => {
 const formatLine = computed(() => {
   const c = props.config;
   const heading =
-    c.gamesToWin === 1 ? 'SINGLE GAME' : `BEST OF ${c.gamesToWin * 2 - 1}`;
-  return `${heading}  ·  FIRST TO ${c.pointsPerGame}`;
+    c.gamesToWin === 1
+      ? `SINGLE ${unitWord.value}`
+      : `BEST OF ${c.gamesToWin * 2 - 1}`;
+  return `${heading}  ·  ${formatHeadline(c).toUpperCase()}`;
 });
 
 // Shared column template — both rows and the header read from one source, which
@@ -250,7 +255,7 @@ const gap = 'gap-x-[clamp(8px,1.8vmin,26px)]';
                 borderColor: teamColor(side),
                 color: teamColor(side),
               }"
-              >GAME WON</span
+              >{{ wonLabel }}</span
             >
             <PenaltyCards :cards="cards(side)" size="md" class="shrink-0" />
           </div>

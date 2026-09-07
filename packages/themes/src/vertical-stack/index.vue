@@ -26,6 +26,8 @@ const {
   playersB,
   cards,
   primaryScore,
+  unitInitial,
+  wonLabel,
   showsPointTier,
   gamesWon,
   isServingSide,
@@ -104,7 +106,7 @@ const columns = computed(() =>
         <span class="size-1.5 rounded-full bg-white animate-pulse-soft" />
         LIVE
         <span v-if="config.gamesToWin > 1" class="text-white/50 font-semibold"
-          >· G{{ state.games.length }}</span
+          >· {{ unitInitial }}{{ state.games.length }}</span
         >
       </span>
     </div>
@@ -162,7 +164,7 @@ const columns = computed(() =>
                 borderColor: teamColor(side),
                 background: `color-mix(in srgb, ${teamColor(side)} 18%, transparent)`,
               }"
-              >GAME WON</span
+              >{{ wonLabel }}</span
             >
             <PenaltyCards :cards="cards(side)" size="xs" class="shrink-0" />
           </div>

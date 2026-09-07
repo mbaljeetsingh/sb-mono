@@ -9,6 +9,7 @@
 // Sizing is fluid (clamp + vmin/vw/vh) so the table fits any viewport from a
 // portrait phone to a wall TV without horizontal scroll.
 
+import { formatHeadline } from '@sb/engine';
 import { computed, toRef } from 'vue';
 import type { ThemeProps } from '../index';
 import PenaltyCards from '../penalty-cards.vue';
@@ -31,13 +32,16 @@ const {
   cards,
   games,
   gamesWon,
+  unitWord,
+  wonLabel,
   isServingSide,
   isLastGameWinner,
   isMatchWinner,
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const isLive = computed(() => props.meta?.isLive !== false);
@@ -55,7 +59,7 @@ const gameColumns = computed(() => games.value);
 // scoresheet marks service with a tick rather than a word.
 const sideStatus = (side: 'a' | 'b') => {
   if (isMatchWinner(side)) return 'WINNER';
-  if (isLastGameWinner(side)) return 'GAME WON';
+  if (isLastGameWinner(side)) return wonLabel.value;
   return null;
 };
 
@@ -113,7 +117,7 @@ const gridTemplate = computed(
           status.label
         }}</span>
         <span v-else-if="isLive" class="shrink-0"
-          >GAME {{ state.games.length }} · LIVE</span
+          >{{ unitWord }} {{ state.games.length }} · LIVE</span
         >
       </div>
 
@@ -242,10 +246,10 @@ const gridTemplate = computed(
         <span class="truncate">
           {{
             config.gamesToWin === 1
-              ? 'Single game'
+              ? `Single ${unitWord.toLowerCase()}`
               : `Best of ${config.gamesToWin * 2 - 1}`
           }}
-          · first to {{ config.pointsPerGame }}
+          · {{ formatHeadline(config) }}
         </span>
         <span class="shrink-0">SCOREBOARD APP</span>
       </div>

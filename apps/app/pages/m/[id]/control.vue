@@ -89,6 +89,7 @@ const {
   sportPresetOptions,
   presetLabel,
   seriesLabel,
+  unitNoun,
 } = useFormat(matchId, { isDoubles: isDoublesRef });
 const {
   events,
@@ -681,8 +682,11 @@ const completedGames = computed(() => {
 // appeared at all and you inferred it by counting entries in this strip.
 const stripStateLabel = computed(() => {
   if (state.value.matchOver) return null;
-  if (state.value.betweenGames) return 'Between games';
-  return `Game ${games.value.length}`;
+  // A tiebreak is the thing an operator most needs confirmed — the serve
+  // pattern and the point counting both change — so it outranks the set number.
+  if (state.value.inTiebreak) return 'Tiebreak';
+  if (state.value.betweenGames) return `Between ${unitNoun.value}s`;
+  return `${unitNoun.value === 'set' ? 'Set' : 'Game'} ${games.value.length}`;
 });
 
 // The matchup, not the match state. The state moved into the strip below, and
@@ -1321,6 +1325,7 @@ const swapLabelB = computed(() =>
       <GameOverModal
         v-else-if="state.betweenGames && games.length > 0"
         :game-number="games.length"
+        :unit-label="unitNoun"
         :winner-name="lastGameWinnerName"
         :game-score="lastGameScore"
         :match-score="gamesWon"
@@ -1373,6 +1378,7 @@ const swapLabelB = computed(() =>
         :initial-games="state.games"
         :initial-games-won="state.gamesWon"
         :games-to-win="config.gamesToWin"
+        :unit-label="unitNoun"
         :team-names="{ a: displayNameA, b: displayNameB }"
         @apply="onApplyScoreCorrect"
         @close="closeSheet"

@@ -25,6 +25,8 @@ const {
   playersB,
   cards,
   primaryScore,
+  unitWord,
+  wonLabel,
   showsPointTier,
   gamesWon,
   isServingSide,
@@ -106,7 +108,7 @@ const playersOf = (side: 'a' | 'b') =>
           background: `color-mix(in srgb, ${teamColor(side)} 18%, transparent)`,
         }"
       >
-        GAME WON
+        {{ wonLabel }}
       </span>
       <PenaltyCards :cards="cards(side)" size="sm" class="shrink-0" />
     </div>
@@ -188,7 +190,7 @@ const playersOf = (side: 'a' | 'b') =>
       class="inline-flex items-center gap-1.5 text-neutral-400 shrink-0 ml-3"
     >
       <span class="size-1.5 rounded-full bg-white animate-pulse-soft" />
-      LIVE · GAME {{ state.games.length }}
+      LIVE · {{ unitWord }} {{ state.games.length }}
     </span>
   </div>
 </template>

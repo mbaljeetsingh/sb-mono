@@ -41,6 +41,9 @@ const {
   playersB,
   cards,
   primaryScore,
+  unitWord,
+  unitInitial,
+  wonLabel,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -106,7 +109,7 @@ const columns = computed(() =>
         v-if="state.matchOver"
         class="ml-2 inline-flex shrink-0 items-center gap-2 text-[13px] font-bold tracking-[0.18em] text-white"
       >
-        {{ config.gamesToWin > 1 ? 'FINAL' : 'GAME' }}
+        {{ config.gamesToWin > 1 ? 'FINAL' : unitWord }}
         <span
           v-if="endReason"
           class="text-[11px] font-semibold tracking-[0.12em] text-white/55 uppercase"
@@ -124,7 +127,7 @@ const columns = computed(() =>
         />
         LIVE
         <span v-if="config.gamesToWin > 1" class="font-semibold text-white/45"
-          >· G{{ state.games.length }}</span
+          >· {{ unitInitial }}{{ state.games.length }}</span
         >
       </span>
     </div>
@@ -210,7 +213,7 @@ const columns = computed(() =>
               borderColor: teamColor(side),
               background: `color-mix(in srgb, ${teamColor(side)} 16%, transparent)`,
             }"
-            >GAME WON</span
+            >{{ wonLabel }}</span
           >
           <PenaltyCards :cards="cards(side)" size="sm" class="shrink-0" />
         </div>

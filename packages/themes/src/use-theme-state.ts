@@ -3,7 +3,12 @@
 // card counts, prior vs current games), so we keep the math here and let the
 // themes focus on layout.
 
-import { type RacquetConfig, type RacquetState, pointLabel } from '@sb/engine';
+import {
+  type RacquetConfig,
+  type RacquetState,
+  pointLabel,
+  unitNoun,
+} from '@sb/engine';
 import { type Ref, computed } from 'vue';
 
 export type SideKey = 'a' | 'b';
@@ -121,6 +126,21 @@ export function useThemeState(
   const showsPointTier = computed(() => configRef?.value.scoring === 'tennis');
 
   /**
+   * Captions for whatever one entry of `state.games` is in this format: a GAME
+   * for badminton / pickleball / table tennis, a SET for tennis and padel.
+   *
+   * Shared here rather than ternaried into each of the eleven themes, all of
+   * which print some version of this — a "GAME 2" header, a "G3" chip, a "GAME
+   * WON" flag — and every one of which said "game" against a tennis match,
+   * where a game is the tier below and the header was off by a whole level.
+   */
+  const unitWord = computed(() =>
+    configRef ? unitNoun(configRef.value).toUpperCase() : 'GAME'
+  );
+  const unitInitial = computed(() => unitWord.value.charAt(0));
+  const wonLabel = computed(() => `${unitWord.value} WON`);
+
+  /**
    * The big numeral a theme prints as "the score right now".
    *
    * A string, not a number, because tennis's is "15" / "40" / "AD" rather than
@@ -173,6 +193,9 @@ export function useThemeState(
     priorGames,
     primaryScore,
     showsPointTier,
+    unitWord,
+    unitInitial,
+    wonLabel,
     isServingSide,
     isLastGameWinner,
     isMatchWinner,
