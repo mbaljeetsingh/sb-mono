@@ -14,10 +14,7 @@ export type { SportId };
 const props = defineProps<{ modelValue: SportId }>();
 defineEmits<(e: 'update:modelValue', v: SportId) => void>();
 
-// Sport list + enabled flags come from ~/lib/sports. Note: table tennis doubles
-// uses a 4-player rotation that differs from BWF partner rotation, which is what
-// the shared reducer implements — /new hides the doubles toggle for TT until a
-// TT-specific reducer lands.
+// Sport list + enabled flags come from ~/lib/sports.
 const sports = SPORTS;
 
 // Per-sport accent (the --court-* surfaces are dark mats — unreadable as a

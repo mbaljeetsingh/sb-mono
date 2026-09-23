@@ -23,6 +23,9 @@ const props = defineProps<{
     displayName: string;
     config: RacquetConfig;
   }[];
+  /** Presets withheld because they score differently from the match in
+   *  progress — switching would rescore every rally already played. */
+  lockedCount?: number;
 }>();
 
 // "Games" is the wrong noun for tennis and padel, where a games-to-win of 2
@@ -52,6 +55,9 @@ const matchLength = (v: 'single' | 'best-of') =>
     <h2 class="text-lg font-semibold">Match format</h2>
     <p class="text-[11px] text-fg-subtle mb-4">
       Change anytime — engine recomputes from the event log.
+      <template v-if="props.lockedCount">
+        Formats that score differently are hidden once play has started.
+      </template>
     </p>
 
     <section v-if="options.length > 1" class="mb-4">

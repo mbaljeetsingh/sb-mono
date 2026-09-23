@@ -828,6 +828,21 @@ const onApplyScoreCorrect = (payload: {
   closeSheet();
 };
 
+// Presets the operator may switch to right now. Format changes replay the
+// whole log, which is harmless between presets of the same scoring mode
+// (badminton 21 ↔ 15 just re-reads the same rallies against a new target) but
+// rewrites history across modes: side-out → rally turns every receiver rally
+// win into a point, and tennis → games-only turns every tap into a game — the
+// rescored match goes straight to the OBS overlay. Once a rally has been
+// scored, only same-mode presets are offered.
+const formatOptions = computed(() => {
+  const started = events.value.some((e) => e.type === 'point');
+  if (!started) return sportPresetOptions.value;
+  return sportPresetOptions.value.filter(
+    (p) => p.config.scoring === config.value.scoring
+  );
+});
+
 const winnerName = computed(() =>
   state.value.winner === 'A' ? displayNameA.value : displayNameB.value
 );
@@ -1389,7 +1404,8 @@ const swapLabelB = computed(() =>
         v-if="openSheet === 'format'"
         :preset="preset"
         :games-to-win="gamesToWin"
-        :options="sportPresetOptions"
+        :options="formatOptions"
+        :locked-count="sportPresetOptions.length - formatOptions.length"
         @update:preset="(id) => (preset = id)"
         @update:games-to-win="(n) => (gamesToWin = n)"
         @close="closeSheet"
