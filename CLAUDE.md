@@ -87,7 +87,8 @@ When you do update, do it in the same commit as the code, and keep the entry con
 
 ### Engine & sync
 
-- **Engine config** is in `packages/engine/src/registry.ts` — every shipped preset (badminton-21, badminton-15, tennis-basic, pickleball-classic, pickleball-rally, table-tennis) maps to `{ config, reducer, sport, displayName }`. Adding a sport in the racquet family = one entry. New family = sibling reducer + entries.
+- **Engine config** is in `packages/engine/src/registry.ts` — every shipped preset maps to `{ config, reducer, sport, displayName, official }`; each sport has its governing body's ruleset (`official: true`) plus shorter club variants. `RacquetConfig.scoring` picks `rally` / `side-out` / `tennis`. Adding a racquet sport = registry entries. New family = sibling reducer + entries. **Preset ids are data** (stored per match, the log is replayed against them) — add ids, never repurpose one.
+- **Reducer shape:** event handlers change only what the event decides; `seat()` (who serves/receives, from which court) and `flags()` (game/set/match point) are recomputed after every event. Don't carry derived serve state forward in a handler. `isDoubles` lives on `match.start` (config `doubles` is the fallback for old logs).
 - **Source of truth = the `matches` row in Supabase.** Meta (team names, players, tournament fields), format (sport_preset + config.gamesToWin), and theme choice (overlay_theme_id + scoreboard_theme_id) all live in the row and sync cross-device via Realtime UPDATE. `useMatchMeta`, `useFormat`, and `useThemeChoice` are the consumer composables — none of them write to localStorage.
 - **IndexedDB (via `idb-keyval`) is used for:**
   - `sb:events:{matchId}` — the event log (offline-first per E1.11 — durable through tab crashes, no quota anxiety, async transactions). `useEvents` reads/writes through `layers/app-base/lib/eventStore.ts` and mirrors to Supabase + BroadcastChannel for cross-tab. **Do not** swap this for `useStorage` / localStorage — venue WiFi flakes and points must not be lost.
@@ -109,7 +110,7 @@ When you do update, do it in the same commit as the code, and keep the entry con
 
 ### Pre-merge validation
 
-- **Always run `pnpm --filter @sb/engine test`** after engine or registry changes — 29 tests cover the BWF rule set + match-state events.
+- **Always run `pnpm --filter @sb/engine test`** after engine or registry changes — it covers every sport's rule set (BWF, ITTF incl. doubles order, USAP side-out, ITF/FIP point tiers and tiebreaks) + match-state events.
 - **Boot the dev server and click the surface** for any UI change. Type checks and tests verify code correctness, not feature correctness.
 
 ## When in doubt
