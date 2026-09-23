@@ -105,20 +105,11 @@ const seedBestOf =
     : 3;
 
 const sport = ref<SportId>(seedSport);
-// A restored format can contradict the sport's own constraint, and this guard
-// is NOT redundant with the watcher below: `watch` isn't `immediate`, so a
-// restored state that already violates the rule never transitions and never
-// fires it — and the Type toggle is hidden for those sports, leaving the user
-// with no control to fix it. TT would strand them on four required name fields
-// with no way back to singles; padel would let them score a doubles-only sport
-// as singles.
-const isDoubles = ref(
-  seedSport === 'table-tennis'
-    ? false
-    : isDoublesOnly(seedSport)
-      ? true
-      : !!stored.isDoubles
-);
+// A restored format can contradict the sport's own constraint — padel would
+// otherwise be scored as singles, with the Type toggle hidden and no control
+// to fix it. (The watcher below also runs immediately, but seeding correctly
+// avoids a first render with the wrong number of name fields.)
+const isDoubles = ref(isDoublesOnly(seedSport) ? true : !!stored.isDoubles);
 const formatPreset = ref<SportPresetId>(seedPreset);
 const matchLength = ref<MatchLength>(
   stored.matchLength === 'best-of' ? 'best-of' : 'single'
@@ -176,26 +167,17 @@ const courtLabel = ref('');
 // a rematch prefill brought any of the three fields back populated.
 const showTournamentDetails = ref(false);
 
-// Two sports don't get a choice, for opposite reasons.
-//
-// Table tennis doubles uses a 4-player service rotation the shared (BWF)
-// reducer doesn't implement — the serve must go to a designated opponent and
-// the pairs rotate — so it stays singles until a TT-specific reducer ships.
-//
 // Padel has no singles format at all: the court is built for four and FIP
 // publishes no singles rules, so the toggle would offer a format that doesn't
-// exist.
+// exist. Every other sport offers both — table-tennis doubles included, now
+// that the engine runs its four-player service order.
 const supportsSingles = computed(() => !isDoublesOnly(sport.value));
-const supportsDoubles = computed(() => sport.value !== 'table-tennis');
 /** Hide the toggle when only one answer is legal for this sport. */
-const showTypeToggle = computed(
-  () => supportsSingles.value && supportsDoubles.value
-);
+const showTypeToggle = supportsSingles;
 watch(
-  [supportsSingles, supportsDoubles],
-  ([singlesOk, doublesOk]) => {
-    if (!doublesOk) isDoubles.value = false;
-    else if (!singlesOk) isDoubles.value = true;
+  supportsSingles,
+  (singlesOk) => {
+    if (!singlesOk) isDoubles.value = true;
   },
   { immediate: true }
 );
@@ -231,8 +213,10 @@ const gamesToWin = computed(() =>
 );
 
 // Presets within the active sport — sub-toggle when there's a real choice
-// (badminton 21/15, pickleball official/rally, padel advantage/golden point).
-// Official ruleset first, which is also the default the sport watcher picks.
+// (badminton 21/15, pickleball side-out/rally, tennis official/no-ad/Fast4,
+// padel advantage/star/golden point). Official ruleset first, which is also
+// the default the sport watcher picks. Three or more wrap to a two-column grid:
+// in one row the tiles' two-line captions crushed to unreadable at phone width.
 const presetsInSport = computed(() => presetsForSport(sport.value));
 
 // /new uses local refs for theme choice rather than `useThemeChoice` —
@@ -556,6 +540,7 @@ const createMatch = async () => {
               :model-value="formatPreset"
               variant="outline"
               class="w-full"
+              :class="presetsInSport.length > 2 ? 'grid grid-cols-2 gap-2' : ''"
               @update:model-value="
                 (v) => v && (formatPreset = v as SportPresetId)
               "

@@ -15,6 +15,7 @@ export type {
   ServeRule,
   SideId,
   TennisGameTier,
+  PointRace,
   Tiebreak,
 } from './sports/racquet-shared';
 
@@ -27,8 +28,10 @@ export {
   formatDetail,
   formatHeadline,
   gameTierOf,
+  isMatchTiebreakSet,
   isTiebreakScore,
   pointLabel,
+  slotInCourt,
   unitNoun,
 } from './sports/racquet-shared';
 
@@ -55,14 +58,18 @@ export {
   getPreset,
   padelGolden,
   padelOfficial,
+  padelStar,
   pickleballClassic,
   pickleballOfficial,
+  pickleballOfficial15,
   pickleballRally,
   presetsForSport,
   sportPresets,
   tableTennis,
   tableTennis21,
   tennisBasic,
+  tennisFast4,
+  tennisMatchTiebreak,
   tennisOfficial,
   type RacquetPresetEntry,
   type SportPresetId,

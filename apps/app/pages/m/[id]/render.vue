@@ -554,7 +554,9 @@ const cards = computed<ClipCard[]>(() => {
           : c.kind === 'point-saved'
             ? c.saved === 'match'
               ? 'Match point saved'
-              : 'Game point saved'
+              : c.saved === 'set'
+                ? 'Set point saved'
+                : 'Game point saved'
             : c.kind === 'clutch'
               ? 'Clutch point'
               : 'Long rally',

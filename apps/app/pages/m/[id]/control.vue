@@ -77,7 +77,7 @@ watch([accessLoaded, canScore], ([l, ok]) => {
   navigateTo(`/m/${matchId.value}/scoreboard`, { replace: true });
 });
 
-const { meta: matchMeta } = useMatchMeta(matchId);
+const { meta: matchMeta, loaded: metaLoaded } = useMatchMeta(matchId);
 // Doubles reaches the engine through the format config: side-out pickleball
 // gives a doubles team two servers per turn, so the reducer can't score the
 // sport without it.
@@ -208,13 +208,28 @@ watch(
 //      the async Supabase fetch, sees `events.value.length === 0` because
 //      the remote events haven't landed yet, and stamps a stray match.start
 //      that resets the score (the engine treats match.start as a reset).
+/**
+ * Every `match.start` this page writes goes through here, so each one records
+ * singles vs doubles in the log itself — replaying the log then scores the
+ * same on every surface without the format config having to be told.
+ *
+ * Omitted, never guessed, until the match row has loaded: the bootstrap can
+ * fire before it has, and a wrong `false` in the log would override the
+ * config fallback the reducer uses for events that don't carry it.
+ */
+const matchStartEvent = (serverSide: SideId) =>
+  ({
+    type: 'match.start',
+    serverSide,
+    serverCourt: 'right',
+    ...(metaLoaded.value
+      ? { isDoubles: matchMeta.value.isDoubles ?? false }
+      : {}),
+  }) as Omit<RacquetEvent, 'id' | 'ts'>;
+
 const maybeSeedMatchStart = () => {
   if (!canScore.value || events.value.length !== 0) return;
-  append({
-    type: 'match.start',
-    serverSide: 'A',
-    serverCourt: 'right',
-  } as Omit<RacquetEvent, 'id' | 'ts'>);
+  append(matchStartEvent('A'));
 };
 
 watch(
@@ -306,11 +321,7 @@ const onTossCommit = (payload: {
     }
   }
   replace([]);
-  append({
-    type: 'match.start',
-    serverSide: payload.serverSide,
-    serverCourt: 'right',
-  } as Omit<RacquetEvent, 'id' | 'ts'>);
+  append(matchStartEvent(payload.serverSide));
   const serverName =
     payload.serverSide === 'A' ? displayNameA.value : displayNameB.value;
   toast.success(`${serverName} serves first`, {
@@ -408,9 +419,20 @@ const onTap = (side: SideId) => {
 // catches the eye; the soft second vibrate confirms the change to the
 // operator without looking. Skip the first tick so opening a page doesn't
 // buzz on initial server assignment.
-const serveSignature = computed(
-  () => `${state.value.servingSide}-${state.value.serverCourt}`
-);
+// Tennis alternates the service court every rally and table-tennis doubles
+// always serves from the right, so keying on the court buzzed every tennis
+// point and never on a table-tennis change of server. Key on the serving
+// PLAYER there; badminton and pickleball keep the court, whose change is also
+// the partner swap on serve the cue was written for.
+const serveSignature = computed(() => {
+  const s = state.value;
+  const byPlayer =
+    config.value.scoring === 'tennis' ||
+    (config.value.serveRule === 'alternate' && s.doubles);
+  return byPlayer
+    ? `${s.servingSide}-${s.serverSlot}`
+    : `${s.servingSide}-${s.serverCourt}`;
+});
 let serveWatchSkippedFirst = false;
 watch(serveSignature, () => {
   if (!serveWatchSkippedFirst) {
@@ -435,11 +457,7 @@ const onReset = () => {
   if (!guardActive()) return;
   sidesSwapped.value = false;
   replace([]);
-  append({
-    type: 'match.start',
-    serverSide: 'A',
-    serverCourt: 'right',
-  } as Omit<RacquetEvent, 'id' | 'ts'>);
+  append(matchStartEvent('A'));
 };
 
 // Reset just the current game's score (mistake recovery without losing
@@ -450,10 +468,14 @@ const onResetCurrentGame = () => {
   if (games.length === 0) return;
   if (!guardActive()) return;
   vibrate(20);
+  // Under tennis scoring the last `games` entry is the whole SET, so zeroing it
+  // wiped every game of the set to undo one; the game is the point tier.
+  const isTennis = config.value.scoring === 'tennis';
   append({
     type: 'score.correct',
-    games: [...games.slice(0, -1), { a: 0, b: 0 }],
+    games: isTennis ? games : [...games.slice(0, -1), { a: 0, b: 0 }],
     gamesWon: state.value.gamesWon,
+    ...(isTennis ? { points: { a: 0, b: 0 } } : {}),
     reason: 'Reset current game',
   } as Omit<RacquetEvent, 'id' | 'ts'>);
 };
@@ -504,11 +526,7 @@ const swapServerOnly = () => {
   vibrate(10);
   const opposite: SideId = first.serverSide === 'A' ? 'B' : 'A';
   replace([]);
-  append({
-    type: 'match.start',
-    serverSide: opposite,
-    serverCourt: 'right',
-  } as Omit<RacquetEvent, 'id' | 'ts'>);
+  append(matchStartEvent(opposite));
 };
 
 const swapSides = () => {
@@ -528,37 +546,21 @@ const swapSides = () => {
     if (first && first.type === 'match.start') {
       const opposite: SideId = first.serverSide === 'A' ? 'B' : 'A';
       replace([]);
-      append({
-        type: 'match.start',
-        serverSide: opposite,
-        serverCourt: 'right',
-      } as Omit<RacquetEvent, 'id' | 'ts'>);
+      append(matchStartEvent(opposite));
     }
   }
 };
 
-// Deciding-game ends-change. BWF Law 9.4: in the deciding game, players
-// change ends when the leading score reaches 11. We don't enforce it —
-// just expose the swap button again whenever it's relevant, since club
-// players often skip ends-change. The button stays visible from 11 until
-// the game ends so an operator who missed the moment can still act.
-const isDecidingGame = computed(
-  () =>
-    state.value.gamesWon.a === config.value.gamesToWin - 1 &&
-    state.value.gamesWon.b === config.value.gamesToWin - 1
-);
-// Visible only at the interval moment in the deciding game (11 for BWF-21,
-// 8 for BWF-15 — `state.atInterval` is engine-derived from `cfg.intervalAt`
-// and is true only for the rally that crosses it, then false on the next
-// score). If the operator doesn't act before the next point is scored, the
-// button hides itself — matches club behavior where ends-change is often
-// skipped.
+// Ends change, per the sport's own rule — the engine's `endsChange` is true for
+// the rally that makes one due: the deciding game's midpoint in badminton (11),
+// pickleball (6) and table tennis (5), and in tennis/padel every odd game and
+// every six tiebreak points. We don't enforce it — club players often skip it —
+// just expose the swap button (and a pill) until the next rally is scored.
 const canSwapAtDecider = computed(
   () =>
-    isDecidingGame.value &&
     !state.value.matchOver &&
     !state.value.betweenGames &&
-    state.value.atInterval
+    state.value.endsChange
 );
 // Start of any in-progress game (score still 0-0) is also a valid swap
 // moment — covers operators who clicked "Start Game N" without first
@@ -684,8 +686,9 @@ const stripStateLabel = computed(() => {
   if (state.value.matchOver) return null;
   // A tiebreak is the thing an operator most needs confirmed — the serve
   // pattern and the point counting both change — so it outranks the set number.
-  if (state.value.inTiebreak) return 'Tiebreak';
   if (state.value.betweenGames) return `Between ${unitNoun.value}s`;
+  if (state.value.inMatchTiebreak) return 'Match tiebreak';
+  if (state.value.inTiebreak) return 'Tiebreak';
   return `${unitNoun.value === 'set' ? 'Set' : 'Game'} ${games.value.length}`;
 });
 
@@ -815,6 +818,12 @@ const onApplyScoreCorrect = (payload: {
     type: 'score.correct',
     games: payload.games,
     gamesWon: payload.gamesWon,
+    // The sheet edits games and sets only. Without carrying the point tier
+    // through, fixing a set score under tennis scoring silently reset the game
+    // in progress to 0–0.
+    ...(config.value.scoring === 'tennis'
+      ? { points: state.value.points }
+      : {}),
   } as Omit<RacquetEvent, 'id' | 'ts'>);
   closeSheet();
 };
@@ -1007,6 +1016,18 @@ const swapLabelB = computed(() =>
                 : `Interval${intervalClock ? ` · ${intervalClock}` : ''}`
             }}
           </span>
+          <!-- The sport's ends change is due (see canSwapAtDecider). A tap
+               target rather than a label: it is the swap itself. -->
+          <Button
+            v-if="canSwapAtDecider"
+            variant="secondary"
+            size="sm"
+            class="h-auto px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider"
+            @click="swapSidesVisualOnly"
+          >
+            <ArrowUpDown class="size-3" />
+            Change ends
+          </Button>
           <Button
             v-if="canEditMeta"
             variant="link"

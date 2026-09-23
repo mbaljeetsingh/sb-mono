@@ -65,6 +65,7 @@ const matchLength = (v: 'single' | 'best-of') =>
         :model-value="props.preset"
         variant="outline"
         class="w-full"
+        :class="options.length > 2 ? 'grid grid-cols-2 gap-2' : ''"
         @update:model-value="
           (v) => v && emit('update:preset', v as SportPresetId)
         "
@@ -73,7 +74,7 @@ const matchLength = (v: 'single' | 'best-of') =>
           v-for="p in options"
           :key="p.id"
           :value="p.id"
-          class="flex-1 flex-col gap-0 h-11 whitespace-normal"
+          class="h-auto min-h-11 flex-1 flex-col gap-0 whitespace-normal py-1.5"
         >
           <span class="text-sm font-semibold">
             {{ formatHeadline(p.config) }}

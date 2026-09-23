@@ -30,6 +30,14 @@ export type RacquetEvent =
       type: 'match.start';
       serverSide: SideId;
       serverCourt: 'right' | 'left';
+      /**
+       * Singles or doubles, recorded in the log itself so every replay of it
+       * scores identically — side-out pickleball and table-tennis doubles
+       * serve differently from their singles forms. Optional because logs
+       * written before it existed don't carry it; the reducer then falls back
+       * to `RacquetConfig.doubles`.
+       */
+      isDoubles?: boolean;
     })
   | (BaseEvent & { type: 'point'; side: SideId })
   | (BaseEvent & { type: 'undo' })
@@ -111,17 +119,45 @@ export type RacquetState = BaseState & {
    */
   serverNumber: 1 | 2;
   /**
-   * Slot (1 or 2) of the player serving on the serving team.
+   * Side-out doubles: the current server is the PARTNER of the player the
+   * score parity puts in the service court — i.e. the second server of a
+   * turn, who serves from wherever they already stand. False on the opening
+   * "0–0–2" turn, where the second-server convention is a call-out only and
+   * the right-court player serves.
+   */
+  serverIsPartner: boolean;
+  /**
+   * Slot (1 or 2) of the player serving, and of the player receiving.
    *
-   * Stored rather than derived because the two families disagree about what
-   * determines it. Badminton/pickleball: the server is whoever stands in the
-   * court the score parity dictates, so it follows `serverCourt` +
-   * `partnerOnRight` and can change every rally. Tennis/padel: one player
-   * serves the WHOLE game while `serverCourt` alternates deuce/ad every point,
-   * so deriving it from the court would hand the serve to their partner on
-   * every second rally.
+   * Never carried from event to event: the reducer re-derives both — along
+   * with `serverCourt` — from the score and the serve state after every event
+   * (see `seat` in the reducer), because the sports disagree about what
+   * decides them. Badminton/pickleball: whoever stands in the court the score
+   * parity dictates. Tennis/padel: one player serves the WHOLE game while the
+   * court alternates deuce/ad every point. Table-tennis doubles: a fixed
+   * four-player cycle. Carrying them forward instead let every non-rally path
+   * (penalties, corrections, a manual game end) leave them stale.
    */
   serverSlot: 1 | 2;
+  receiverSlot: 1 | 2;
+  /** Whether this match is doubles — from `match.start`, else the config. */
+  doubles: boolean;
+  /**
+   * Table-tennis doubles, deciding game: the pair that was due to receive when
+   * one side first reached the ends-change score, whose receiving order has
+   * therefore reversed (ITTF 2.14.3). null otherwise.
+   */
+  receiverSwap: SideId | null;
+  /**
+   * The rally just played makes an ends change due under this sport's rules:
+   * tennis/padel after every odd game and every six tiebreak points; the
+   * deciding game's midpoint in badminton (11), pickleball (6) and table
+   * tennis (5). Stays true until the next rally, so an operator who looks
+   * down late still sees it.
+   */
+  endsChange: boolean;
+  /** Tennis family: the current set is a single match tiebreak (to 10). */
+  inMatchTiebreak: boolean;
   betweenGames: boolean;
   winner: SideId | null;
   atInterval: boolean;
@@ -205,6 +241,13 @@ export type TennisGameTier = {
   /** Rallies needed to win a game. 4 = the 15/30/40/game ladder. */
   pointsToWin: number;
   winBy: 1 | 2;
+  /**
+   * Advantage play that turns sudden death at the Nth deuce. Padel's STAR
+   * POINT (FIP 2026, adopted by Premier Padel) is 3: two advantages are played
+   * as normal, and the third 40–40 is settled by one rally. Omit for pure
+   * advantage (winBy 2) or pure golden point (winBy 1).
+   */
+  suddenDeathAtDeuce?: number;
 };
 
 /** Tiebreak played instead of a normal game once a set reaches `atGames`-all. */
@@ -213,6 +256,9 @@ export type Tiebreak = {
   pointsToWin: number;
   winBy: number;
 };
+
+/** A point-count race: a tiebreak, or the match tiebreak. */
+export type PointRace = { pointsToWin: number; winBy: number };
 
 /**
  * How serve passes. Only consulted when `scoring === 'rally'` — the other two
@@ -253,6 +299,20 @@ export type RacquetConfig = {
   /** Tennis family: tiebreak at `atGames`-all. null = play the set out by margin. */
   tiebreak?: Tiebreak | null;
   /**
+   * Tennis family: when the sets are level one short of the match, the
+   * deciding set is replaced by a single tiebreak — the 10-point "match
+   * tiebreak" of pro doubles and most club leagues. It counts as a set won
+   * 1–0. null = play the deciding set in full.
+   */
+  matchTiebreak?: PointRace | null;
+  /**
+   * Rally/side-out: the leading score at which players change ends in the
+   * deciding game — pickleball 6 (11-point game), table tennis 5. Defaults to
+   * `intervalAt` (BWF changes ends at the 11-point interval). Tennis-family
+   * ends changes follow the odd-game rule instead.
+   */
+  endsChangeAt?: number | null;
+  /**
    * Doubles court rotation. 'serve-swap' (default) is BWF Law 8, also correct
    * for pickleball — partners switch sides each time their team scores on
    * serve. 'fixed' is tennis/padel, where partners hold their halves.
@@ -261,16 +321,10 @@ export type RacquetConfig = {
   /** Sports played only as doubles (padel). The UI hides the singles option. */
   doublesOnly?: boolean;
   /**
-   * Whether THIS match is being played as doubles. Unlike everything else here
-   * it is a per-match choice rather than a property of the preset, merged in by
-   * `useFormat` from the match row.
-   *
-   * The reducer needs it for exactly one rule: side-out pickleball gives a
-   * doubles team two servers per turn and opens each game on "0–0–2", while a
-   * singles team has one, so running the doubles rule in singles would hand the
-   * server a free fault. Everything else that differs between singles and
-   * doubles is presentation, which is why the engine ignored the distinction
-   * until now.
+   * Fallback for whether THIS match is doubles, for logs whose `match.start`
+   * predates `isDoubles`. A per-match fact rather than a preset property,
+   * merged in by `useFormat` from the match row. New logs carry it on the
+   * event, which wins.
    */
   doubles?: boolean;
 };
@@ -284,7 +338,13 @@ export const initialRacquetState = (): RacquetState => ({
   matchInitialServer: 'A',
   serverCourt: 'right',
   serverNumber: 1,
+  serverIsPartner: false,
   serverSlot: 1,
+  receiverSlot: 1,
+  doubles: false,
+  receiverSwap: null,
+  endsChange: false,
+  inMatchTiebreak: false,
   betweenGames: false,
   matchOver: false,
   winner: null,
@@ -406,24 +466,49 @@ export const isTiebreakScore = (
   return setScore.a === tb.atGames && setScore.b === tb.atGames;
 };
 
+/** Sets are level one short of the match and the format settles it with a
+ * match tiebreak instead of a full deciding set. */
+export const isMatchTiebreakSet = (
+  gamesWon: GameScore,
+  cfg: RacquetConfig
+): boolean =>
+  !!cfg.matchTiebreak &&
+  cfg.gamesToWin > 1 &&
+  gamesWon.a === cfg.gamesToWin - 1 &&
+  gamesWon.b === cfg.gamesToWin - 1;
+
+/** The point race the current tennis game is played as. */
+export const tennisTierOf = (
+  state: Pick<RacquetState, 'inTiebreak' | 'gamesWon'>,
+  cfg: RacquetConfig
+): TennisGameTier | PointRace => {
+  if (!state.inTiebreak) return gameTierOf(cfg);
+  if (isMatchTiebreakSet(state.gamesWon, cfg)) return cfg.matchTiebreak!;
+  return cfg.tiebreak ?? { pointsToWin: 7, winBy: 2 };
+};
+
 /**
  * Winner of a tennis GAME (the point tier), or null while it is still live.
  *
  * A tiebreak is scored numerically by its own thresholds; a normal game uses
  * the 0/15/30/40 ladder, where `winBy: 1` is padel's golden point / tennis's
- * no-ad — deuce is decided by a single rally rather than an advantage.
+ * no-ad, and `suddenDeathAtDeuce` is advantage play that turns golden at the
+ * Nth deuce (padel's star point).
  */
 export const tennisGameWinner = (
   points: GameScore,
-  inTiebreak: boolean,
-  cfg: RacquetConfig
+  tier: TennisGameTier | PointRace
 ): SideId | null => {
-  const tier = inTiebreak
-    ? (cfg.tiebreak ?? { pointsToWin: 7, winBy: 2 })
-    : gameTierOf(cfg);
   const { a, b } = points;
-  if (a >= tier.pointsToWin && a - b >= tier.winBy) return 'A';
-  if (b >= tier.pointsToWin && b - a >= tier.winBy) return 'B';
+  const n = 'suddenDeathAtDeuce' in tier ? tier.suddenDeathAtDeuce : undefined;
+  // The Nth deuce is at (pointsToWin - 1) + (N - 1) points each; from there
+  // the next rally decides.
+  const winBy =
+    n !== undefined && Math.min(a, b) >= tier.pointsToWin - 1 + (n - 1)
+      ? 1
+      : tier.winBy;
+  if (a >= tier.pointsToWin && a - b >= winBy) return 'A';
+  if (b >= tier.pointsToWin && b - a >= winBy) return 'B';
   return null;
 };
 
@@ -431,14 +516,24 @@ export const tennisGameWinner = (
 export const wouldWinTennisGame = (
   points: GameScore,
   side: SideId,
-  inTiebreak: boolean,
-  cfg: RacquetConfig
+  tier: TennisGameTier | PointRace
 ): boolean => {
   const next =
     side === 'A'
       ? { a: points.a + 1, b: points.b }
       : { a: points.a, b: points.b + 1 };
-  return tennisGameWinner(next, inTiebreak, cfg) === side;
+  return tennisGameWinner(next, tier) === side;
+};
+
+/** Slot standing in `court` for `team`, from the BWF position flag. One copy,
+ * shared by the reducer, the control cells and the themes. */
+export const slotInCourt = (
+  partnerOnRight: RacquetState['partnerOnRight'],
+  team: SideId,
+  court: 'left' | 'right'
+): 1 | 2 => {
+  const onRight = partnerOnRight[team === 'A' ? 'a' : 'b'];
+  return court === 'right' ? onRight : onRight === 1 ? 2 : 1;
 };
 
 /**
@@ -497,12 +592,22 @@ export const formatHeadline = (cfg: RacquetConfig): string => {
 export const formatDetail = (cfg: RacquetConfig): string => {
   if (cfg.scoring === 'tennis') {
     const tier = gameTierOf(cfg);
-    // The one thing a player actually asks before a padel match starts.
-    const deuce = tier.winBy === 1 ? 'golden point' : 'advantage';
+    // The one thing a player actually asks before a padel match starts. Tennis
+    // calls sudden death at deuce "no-ad"; padel calls it the golden point.
+    const deuce = tier.suddenDeathAtDeuce
+      ? 'star point'
+      : tier.winBy === 1
+        ? cfg.sport === 'padel'
+          ? 'golden point'
+          : 'no-ad'
+        : 'advantage';
     const tb = cfg.tiebreak
       ? `tiebreak at ${cfg.tiebreak.atGames}–${cfg.tiebreak.atGames}`
       : 'no tiebreak';
-    return [deuce, tb].join(' · ');
+    const mtb = cfg.matchTiebreak
+      ? `match tiebreak to ${cfg.matchTiebreak.pointsToWin}`
+      : null;
+    return [deuce, tb, mtb].filter(Boolean).join(' · ');
   }
   const parts = [
     cfg.cap ? `cap ${cfg.cap}` : `win-by ${cfg.winBy}`,

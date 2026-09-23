@@ -126,8 +126,9 @@ export type HighlightClip = {
   side: 'A' | 'B';
   /** ms since the previous point in the same game; null for a game's first point. */
   gapMs: number | null;
-  /** point-saved only: whether the point erased a game point or a match point. */
-  saved?: 'game' | 'match';
+  /** point-saved only: which point the rally erased. 'set' exists only under
+   *  tennis scoring, where a game point and a set point are different tiers. */
+  saved?: 'game' | 'set' | 'match';
 };
 
 export type VideoHighlightClip = HighlightClip & {
@@ -246,6 +247,8 @@ export const buildHighlightClips = (
       winners.push({ ...clip, kind: 'game-point' });
     } else if (prevState.matchPoint[loser]) {
       winners.push({ ...clip, kind: 'point-saved', saved: 'match' });
+    } else if (prevState.setPoint?.[loser]) {
+      winners.push({ ...clip, kind: 'point-saved', saved: 'set' });
     } else if (prevState.gamePoint[loser]) {
       winners.push({ ...clip, kind: 'point-saved', saved: 'game' });
     } else if (prevState.isDeuce) {

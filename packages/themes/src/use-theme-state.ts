@@ -7,6 +7,7 @@ import {
   type RacquetConfig,
   type RacquetState,
   pointLabel,
+  slotInCourt,
   unitNoun,
 } from '@sb/engine';
 import { type Ref, computed } from 'vue';
@@ -76,7 +77,6 @@ export function useThemeState(
     if (parts.length < 2) {
       return [{ name: parts[0] ?? '', isServer: false, isPartner: false }];
     }
-    const onRight = state.partnerOnRight?.[side] ?? 1;
     const isServingTeam =
       state.servingSide.toLowerCase() === side && !state.matchOver;
     // The engine names the serving player outright. Deriving it from the court
@@ -88,7 +88,11 @@ export function useThemeState(
     // tracked it.
     const serverSlot =
       state.serverSlot ??
-      (state.serverCourt === 'right' ? onRight : onRight === 1 ? 2 : 1);
+      slotInCourt(
+        state.partnerOnRight ?? { a: 1, b: 1 },
+        side === 'a' ? 'A' : 'B',
+        state.serverCourt
+      );
     return parts.map((name, idx) => {
       const isServer = isServingTeam && idx + 1 === serverSlot;
       return { name, isServer, isPartner: isServingTeam && !isServer };
@@ -365,7 +369,12 @@ export function useStatusPill(stateRef: Ref<RacquetState>) {
     if (s.atInterval) return { label: 'INTERVAL', tone: 'muted', side: null };
     // Lowest priority: a tiebreak lasts many rallies, so it is context rather
     // than an event, and anything above it is news.
-    if (s.inTiebreak) return { label: 'TIEBREAK', tone: 'muted', side: null };
+    if (s.inTiebreak)
+      return {
+        label: s.inMatchTiebreak ? 'MATCH TIEBREAK' : 'TIEBREAK',
+        tone: 'muted',
+        side: null,
+      };
     return null;
   });
 }

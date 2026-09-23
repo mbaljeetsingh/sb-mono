@@ -1,3 +1,4 @@
+import { slotInCourt } from '@sb/engine';
 import { type ComputedRef, type Ref, computed } from 'vue';
 
 // Court cell layout for the control surface. Each team gets two cells (left
@@ -92,12 +93,6 @@ export function useCourtCells(state: StateRef, meta: MetaRef) {
   const cellsA = computed(() => cellsForTeam('A'));
   const cellsB = computed(() => cellsForTeam('B'));
 
-  /** Slot standing in `court` for `team`, from the BWF position flag. */
-  const slotInCourt = (team: 'A' | 'B', court: 'left' | 'right'): 1 | 2 => {
-    const onRight = state.value.partnerOnRight[team === 'A' ? 'a' : 'b'];
-    return court === 'right' ? onRight : onRight === 1 ? 2 : 1;
-  };
-
   const cellIsServer = (team: 'A' | 'B', court: 'left' | 'right') => {
     if (state.value.servingSide !== team) return false;
     // Singles draws the lone name in the active court, so there is no player to
@@ -106,7 +101,7 @@ export function useCourtCells(state: StateRef, meta: MetaRef) {
     if (!meta.value.isDoubles || !slot) {
       return state.value.serverCourt === court;
     }
-    return slotInCourt(team, court) === slot;
+    return slotInCourt(state.value.partnerOnRight, team, court) === slot;
   };
 
   return { cellsA, cellsB, cellIsServer, displayNameA, displayNameB };
