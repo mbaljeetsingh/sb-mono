@@ -580,7 +580,7 @@ const createMatch = async () => {
               @update:model-value="(v) => v && (matchLength = v as MatchLength)"
             >
               <ToggleGroupItem value="single" class="flex-1">
-                Single match
+                Single {{ formatUnit }}
               </ToggleGroupItem>
               <ToggleGroupItem value="best-of" class="flex-1">
                 Best of N

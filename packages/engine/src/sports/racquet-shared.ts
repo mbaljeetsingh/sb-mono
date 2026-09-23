@@ -578,7 +578,13 @@ export const pointLabel = (
  * six-point game. Same reason `cap: 7` must print as "tiebreak at 6–6" rather
  * than "cap 7".
  */
+/** A tennis-family sport scored one tap per GAME (`tennis-basic`): each
+ * "point" the engine counts is a whole game. */
+const countsGamesOnly = (cfg: RacquetConfig) =>
+  cfg.scoring === 'rally' && (cfg.sport === 'tennis' || cfg.sport === 'padel');
+
 export const formatHeadline = (cfg: RacquetConfig): string => {
+  if (countsGamesOnly(cfg)) return `Games to ${cfg.pointsPerGame}`;
   switch (cfg.scoring) {
     case 'tennis':
       return `Sets to ${cfg.pointsPerGame}`;
@@ -609,6 +615,7 @@ export const formatDetail = (cfg: RacquetConfig): string => {
       : null;
     return [deuce, tb, mtb].filter(Boolean).join(' · ');
   }
+  if (countsGamesOnly(cfg)) return `one tap per game · win-by ${cfg.winBy}`;
   const parts = [
     cfg.cap ? `cap ${cfg.cap}` : `win-by ${cfg.winBy}`,
     cfg.intervalAt ? `interval ${cfg.intervalAt}` : null,
