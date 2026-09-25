@@ -4,14 +4,14 @@ This file is loaded automatically into every Claude session in this repo. Treat 
 
 ## Project at a glance
 
-Scoreboard is a free, OSS-first live scoring tool for racquet sports (badminton first; tennis / pickleball / table-tennis sharing the engine). Two surfaces:
+Scoreboard is a free, OSS-first live scoring tool for racquet sports (badminton first; tennis / padel / pickleball / table tennis / squash sharing the engine). Two surfaces:
 
 - **`apps/app`** — operator-facing PWA. `/new`, `/m/[id]/{control,scoreboard,overlay}`, `/d/[id]/overlay`, `/t/[id]/overlay`, `/profile`, `/auth/*`. Anonymous scoring is allowed (Option A). Sign-in is optional and unlocks ownership / history / Pro features later.
 - **`apps/web`** — marketing site (currently empty). Plan: public landing, theme gallery, free anonymous scorer alongside marketing. See ROADMAP §"Marketing site".
 
 Shared layers + packages:
 
-- `packages/engine` — pure TS scoring engine (badminton 21pt / 15pt etc.). Sport-pluggable, fully tested.
+- `packages/engine` — pure TS scoring engine: rally, side-out and tennis-tier scoring for every racquet preset. Sport-pluggable, fully tested.
 - `packages/themes` — broadcast theme registry. Surface-grouped (overlay vs scoreboard).
 - `packages/shared` — small shared utilities.
 - `layers/ui` — shadcn-vue primitives + design tokens. Imported explicitly per-file (no `Ui` prefix, no auto-import).
@@ -56,7 +56,7 @@ When you do update, do it in the same commit as the code, and keep the entry con
 - **No shadcn `Ui` prefix.** Components are in `layers/ui/components/ui/<name>/index.ts` and imported explicitly: `import { Button } from "@sb/layer-ui/components/ui/button"`.
 - **Use shadcn primitives over raw HTML.** If a `Button`, `Input`, `Label`, `ToggleGroup`, `Dialog`, etc. exists in `layers/ui`, prefer it over a styled `<button>`/`<input>`. Exceptions: full-area tap zones with custom geometry (the score cells in `control.vue`) and decorative elements with no semantic role (slide-indicator dots).
 - **Use shadcn defaults.** Don't override `variant`/`size` with custom Tailwind classes for selected states; use the component's built-in active state. The only exception is when the component lacks a "selected" variant and we explicitly need one — prefer `ToggleGroup` over hand-rolled toggle pairs.
-- **Icons from `lucide-vue-next`** — no inline SVGs, no emoji-as-icon. Imported explicitly per-file. One sanctioned exception: `apps/app/components/common/SportGlyph.vue` holds hand-drawn per-sport glyphs (lucide ships no racquet-sport icons); all custom SVG paths live in that single component and nowhere else.
+- **Icons from `lucide-vue-next`** — no inline SVGs, no emoji-as-icon. Imported explicitly per-file. One sanctioned exception: sport icons (lucide ships no racquet-sport icons) live in `packages/themes/src/sport-icon.vue` — Material Symbols / Material Design Icons, Apache 2.0, credited in `THIRD_PARTY_NOTICES.md`. It is the only copy: the app's `SportGlyph.vue` wraps it and every theme header uses it, so a sport shows the same icon everywhere. No sport artwork anywhere else.
 
 ### Imports & state
 
