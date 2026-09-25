@@ -14,7 +14,7 @@ These are not negotiable in v1. Every other decision follows from them.
 
 1. **Event-sourced.** Match state is *always* computed from an append-only event log. Never store state directly.
 2. **Local-first.** Every score tap writes to local storage (IndexedDB) before the network. UI reads from local state synchronously.
-3. **Sport-pluggable.** Each sport family is a self-contained module under `packages/engine/src/sports/<family>/` with its own event vocabulary and reducer. New racquet sports drop in as siblings of badminton, not as config hacks.
+3. **Sport-pluggable.** Each sport *family* is a self-contained module under `packages/engine/src/sports/<family>/` with its own event vocabulary and reducer. Within the racquet family, sports share one reducer and differ by `RacquetConfig.scoring` — `rally` (badminton, table tennis), `side-out` (official pickleball: only the serving side scores), and `tennis` (tennis and padel: rallies win points, points win games, games win sets). A new family adds a sibling reducer; a new racquet sport adds a registry entry.
 4. **Three rendering surfaces from one match state.** Control / overlay / scoreboard are different views over the same data; the data layer doesn't know about presentation.
 5. **Themes are user-replaceable.** Plain HTML + CSS files with `data-bind` attributes hydrated at runtime. No build step required to author a theme.
 6. **Framework-free engine.** `@sb/engine` is pure TypeScript with zero runtime dependencies. It runs in Nuxt, Capacitor, Tauri, Node, Cloudflare Workers — anywhere.

@@ -7,9 +7,23 @@
 import { getPreset } from '@sb/engine';
 import { type Ref, computed } from 'vue';
 
-export function useMatchState(matchId: Ref<string>) {
+export function useMatchState(
+  matchId: Ref<string>,
+  opts: {
+    /**
+     * Whether this match is doubles. Forwarded to `useFormat`, which folds it
+     * into the config the reducer sees.
+     *
+     * Every surface showing the same match MUST pass the same value: side-out
+     * pickleball scores differently in singles and doubles, so an overlay
+     * reducing with `doubles: false` against a control reducing with `true`
+     * would put two different scores on screen for one event log.
+     */
+    isDoubles?: Ref<boolean | undefined>;
+  } = {}
+) {
   const { events, append, replace, loaded } = useEvents(matchId);
-  const { preset, config } = useFormat(matchId);
+  const { preset, config } = useFormat(matchId, opts);
 
   const presetEntry = computed(() => getPreset(preset.value));
 

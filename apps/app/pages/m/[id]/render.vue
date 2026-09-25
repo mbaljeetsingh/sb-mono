@@ -346,9 +346,14 @@ const firstPointPerGame = computed<((typeof events.value)[number] | null)[]>(
 const totalGames = computed(() => firstPointPerGame.value.length);
 
 const replayTimeMs = ref(0);
+// Declared up here rather than beside the other theme/meta plumbing below,
+// because the replay reducer needs `isDoubles` in its config — see useFormat.
+const { teamNames, players, meta: matchMeta } = useMatchMeta(matchId);
+const isDoublesRef = computed(() => matchMeta.value.isDoubles ?? false);
 const { state, config, preset, loaded, events } = useReplayState(
   matchId,
-  replayTimeMs
+  replayTimeMs,
+  { isDoubles: isDoublesRef }
 );
 
 // Active anchor = the latest anchor whose videoMs is <= current playhead.
@@ -533,8 +538,6 @@ type ClipCard = {
   selected: boolean;
 };
 
-const formatScore = (s: { a: number; b: number }) => `${s.a}–${s.b}`;
-
 const cards = computed<ClipCard[]>(() => {
   const filtered =
     sideFilter.value === 'all'
@@ -547,15 +550,17 @@ const cards = computed<ClipCard[]>(() => {
       c.kind === 'match-point'
         ? 'Match point'
         : c.kind === 'game-point'
-          ? `Game ${c.gameIndex + 1} won`
+          ? `${c.unit === 'set' ? 'Set' : 'Game'} ${c.gameIndex + 1} won`
           : c.kind === 'point-saved'
             ? c.saved === 'match'
               ? 'Match point saved'
-              : 'Game point saved'
+              : c.saved === 'set'
+                ? 'Set point saved'
+                : 'Game point saved'
             : c.kind === 'clutch'
               ? 'Clutch point'
               : 'Long rally',
-    meta: `Game ${c.gameIndex + 1} · ${formatScore(c.scoreBefore)} → ${formatScore(c.scoreAfter)} · at ${formatTime(c.videoStartMs)}`,
+    meta: `${c.unit === 'set' ? 'Set' : 'Game'} ${c.gameIndex + 1} · ${c.scoreText.before} → ${c.scoreText.after} · at ${formatTime(c.videoStartMs)}`,
     videoStartMs: c.videoStartMs,
     videoEndMs: c.videoEndMs,
   }));
@@ -926,7 +931,6 @@ const overlayFrameStyle = computed(() => {
 
 // Theme — reuse the overlay theme the operator chose for this match.
 const { overlay: overlayTheme } = useThemeChoice(matchId);
-const { teamNames, players, meta: matchMeta } = useMatchMeta(matchId);
 const themeEntry = computed(() =>
   getTheme(overlayTheme.value || 'broadcast-classic', 'overlay')
 );

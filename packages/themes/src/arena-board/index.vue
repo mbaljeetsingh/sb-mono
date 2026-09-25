@@ -17,6 +17,7 @@
 //
 // Fluid via clamp/vmin so the same board runs on a propped tablet and a wall TV.
 
+import { formatHeadline } from '@sb/engine';
 import { computed, toRef } from 'vue';
 import { CODE_W, PLATE_W, POINTS_TEXT_LG, POINTS_W_LG } from '../cell-metrics';
 import GameCells from '../game-cells.vue';
@@ -40,7 +41,9 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
+  unitWord,
+  wonLabel,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -48,7 +51,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
@@ -72,8 +76,10 @@ const headMeta = computed(() => {
 const formatLine = computed(() => {
   const c = props.config;
   const heading =
-    c.gamesToWin === 1 ? 'SINGLE GAME' : `BEST OF ${c.gamesToWin * 2 - 1}`;
-  return `${heading}  ·  FIRST TO ${c.pointsPerGame}`;
+    c.gamesToWin === 1
+      ? `SINGLE ${unitWord.value}`
+      : `BEST OF ${c.gamesToWin * 2 - 1}`;
+  return `${heading}  ·  ${formatHeadline(c).toUpperCase()}`;
 });
 
 // Shared column template — both rows and the header read from one source, which
@@ -249,7 +255,7 @@ const gap = 'gap-x-[clamp(8px,1.8vmin,26px)]';
                 borderColor: teamColor(side),
                 color: teamColor(side),
               }"
-              >GAME WON</span
+              >{{ wonLabel }}</span
             >
             <PenaltyCards :cards="cards(side)" size="md" class="shrink-0" />
           </div>
@@ -285,7 +291,7 @@ const gap = 'gap-x-[clamp(8px,1.8vmin,26px)]';
               ? `color-mix(in srgb, ${teamColor(side)} 26%, transparent)`
               : undefined,
           }"
-          >{{ currentGame[side] }}</span
+          >{{ primaryScore(side) }}</span
         >
       </div>
     </div>

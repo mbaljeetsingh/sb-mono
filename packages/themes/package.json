@@ -16,7 +16,8 @@
     "./top-ribbon": "./src/top-ribbon/index.vue",
     "./filmable": "./src/filmable/index.vue",
     "./minimal-typographic": "./src/minimal-typographic/index.vue",
-    "./penalty-cards": "./src/penalty-cards.vue"
+    "./penalty-cards": "./src/penalty-cards.vue",
+    "./sport-icon": "./src/sport-icon.vue"
   },
   "peerDependencies": {
     "@sb/engine": "workspace:*",

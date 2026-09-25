@@ -2,7 +2,7 @@
 import { Button } from '@sb/layer-ui/components/ui/button';
 import { Input } from '@sb/layer-ui/components/ui/input';
 import { Label } from '@sb/layer-ui/components/ui/label';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
   initialGames: { a: number; b: number }[];
@@ -10,8 +10,17 @@ const props = defineProps<{
   /** Total games needed to win the match. `1` = single-game format; the
    *  games-won concept is meaningless and we hide that input. */
   gamesToWin: number;
+  /** What one row of the score is called — "game", or "set" under tennis and
+   *  padel scoring, where the rows ARE sets. "G1 / Games won" against a
+   *  tennis match invites the operator to correct the wrong tier. */
+  unitLabel?: string;
   teamNames: { a: string; b: string };
 }>();
+
+/** Row prefix: G1 / G2 for games, S1 / S2 for sets. */
+const unitInitial = computed(() =>
+  (props.unitLabel ?? 'game').charAt(0).toUpperCase()
+);
 
 const emit = defineEmits<{
   (
@@ -96,7 +105,7 @@ const apply = () => {
     <div class="flex flex-col gap-2 mb-3 flex-1 overflow-y-auto">
       <div v-for="(g, i) in games" :key="i" class="flex items-center gap-2">
         <div class="w-8 text-[11px] font-semibold text-fg-subtle">
-          G{{ i + 1 }}
+          {{ unitInitial }}{{ i + 1 }}
         </div>
         <Input
           v-model="g.a"
@@ -120,7 +129,7 @@ const apply = () => {
       <Label
         class="text-[11px] font-bold tracking-wider uppercase text-fg-subtle mb-2"
       >
-        Games won
+        {{ unitLabel === 'set' ? 'Sets won' : 'Games won' }}
       </Label>
       <div class="flex gap-2 mb-4">
         <Input

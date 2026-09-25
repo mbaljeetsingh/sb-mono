@@ -44,6 +44,13 @@ export type SummaryInput = {
   id: string;
   sport_preset: string;
   config: { gamesToWin?: number } | null;
+  /**
+   * Needed to reduce the log, not just to describe it: side-out pickleball
+   * scores differently in singles and doubles, so a summary computed without
+   * it would print a scoreline the operator never saw. Callers must select the
+   * column.
+   */
+  is_doubles?: boolean | null;
   ended_at?: string | null;
 };
 
@@ -144,6 +151,7 @@ export async function fetchMatchSummaries(
     const config: RacquetConfig = {
       ...preset.config,
       gamesToWin: m.config?.gamesToWin ?? preset.config.gamesToWin,
+      doubles: m.is_doubles ?? false,
     };
     out.set(
       m.id,

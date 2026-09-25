@@ -2,7 +2,9 @@ import {
   type RacquetConfig,
   type SportPresetId,
   getPreset,
+  presetsForSport,
   sportPresets,
+  unitNoun as unitNounOf,
 } from '@sb/engine';
 import type { Json } from '@sb/shared';
 import { watchDebounced } from '@vueuse/core';
@@ -19,7 +21,19 @@ import { type Ref, computed, onMounted, onUnmounted, ref, watch } from 'vue';
 // Same echo-guard pattern as useMatchMeta: track the last-seen-remote
 // snapshot and skip the watch-driven update when current state equals it,
 // breaking the write-back loop without time-based heuristics.
-export function useFormat(matchId: Ref<string>) {
+export function useFormat(
+  matchId: Ref<string>,
+  opts: {
+    /**
+     * Whether this match is doubles, from the match row. Merged into `config`
+     * because one scoring rule genuinely needs it: side-out pickleball gives a
+     * doubles team two servers per turn and opens each game on "0–0–2", so
+     * running the doubles rule in singles would hand the server a free fault.
+     * Optional — read-only surfaces that only display a score can omit it.
+     */
+    isDoubles?: Ref<boolean | undefined>;
+  } = {}
+) {
   const supabase = useSupabaseClient();
   const preset = ref<SportPresetId>('badminton-21');
   const gamesToWin = ref<number>(1);
@@ -141,35 +155,49 @@ export function useFormat(matchId: Ref<string>) {
   const config = computed<RacquetConfig>(() => ({
     ...getPreset(preset.value).config,
     gamesToWin: gamesToWin.value,
+    doubles: opts.isDoubles?.value ?? false,
   }));
 
   const sport = computed(() => getPreset(preset.value).sport);
-  const sportPresetOptions = computed(() =>
-    Object.values(sportPresets).filter((p) => p.sport === sport.value)
-  );
+  // Official ruleset first — it is the one most operators want, and the list
+  // doubles as the FormatSheet's toggle order.
+  const sportPresetOptions = computed(() => presetsForSport(sport.value));
 
   const seriesLabel = computed(() =>
     gamesToWin.value === 1 ? 'Single' : `BO${gamesToWin.value * 2 - 1}`
   );
 
-  const presetLabel = computed(() => {
-    switch (preset.value) {
-      case 'badminton-21':
-        return 'BWF 21';
-      case 'badminton-15':
-        return '15 (2027)';
-      case 'tennis-basic':
-        return 'Tennis · 6';
-      case 'pickleball-classic':
-        return 'PB 11';
-      case 'pickleball-rally':
-        return 'PB 21';
-      case 'table-tennis':
-        return 'TT 11';
-      default:
-        return `P${config.value.pointsPerGame}`;
-    }
-  });
+  /** What one entry of `state.games` is called in this format — "set" under
+   *  tennis scoring, "game" everywhere else. Surfaces that label the score
+   *  need it; getting it wrong reads as a different sport. */
+  const unitNoun = computed(() => unitNounOf(config.value));
+
+  // Short chip text for the control header. Spelled out per preset rather than
+  // derived: `pointsPerGame` means GAMES-per-set under tennis scoring, so the
+  // generic fallback renders tennis as "P6", which reads as a six-point game.
+  const PRESET_LABELS: Record<SportPresetId, string> = {
+    'badminton-21': 'BWF 21',
+    'badminton-15': '15 (2027)',
+    'tennis-official': 'Tennis',
+    'tennis-match-tiebreak': 'Tennis · no-ad',
+    'tennis-fast4': 'Fast4',
+    'tennis-basic': 'Tennis · 6',
+    'pickleball-official': 'PB 11',
+    'pickleball-official-15': 'PB 15',
+    'pickleball-classic': 'PB rally 11',
+    'pickleball-rally': 'PB rally 21',
+    'padel-official': 'Padel',
+    'padel-star': 'Padel · star',
+    'padel-golden': 'Padel · GP',
+    'table-tennis': 'TT 11',
+    'table-tennis-21': 'TT 21',
+    'squash-par11': 'PAR 11',
+    'squash-classic': 'Classic 9',
+  };
+
+  const presetLabel = computed(
+    () => PRESET_LABELS[preset.value] ?? `P${config.value.pointsPerGame}`
+  );
 
   return {
     preset,
@@ -179,5 +207,6 @@ export function useFormat(matchId: Ref<string>) {
     sportPresetOptions,
     seriesLabel,
     presetLabel,
+    unitNoun,
   };
 }

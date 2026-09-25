@@ -40,7 +40,10 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
+  unitWord,
+  unitInitial,
+  wonLabel,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -48,7 +51,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const status = useStatusPill(toRef(props, 'state'));
@@ -105,7 +109,7 @@ const columns = computed(() =>
         v-if="state.matchOver"
         class="ml-2 inline-flex shrink-0 items-center gap-2 text-[13px] font-bold tracking-[0.18em] text-white"
       >
-        {{ config.gamesToWin > 1 ? 'FINAL' : 'GAME' }}
+        {{ config.gamesToWin > 1 ? 'FINAL' : unitWord }}
         <span
           v-if="endReason"
           class="text-[11px] font-semibold tracking-[0.12em] text-white/55 uppercase"
@@ -123,7 +127,7 @@ const columns = computed(() =>
         />
         LIVE
         <span v-if="config.gamesToWin > 1" class="font-semibold text-white/45"
-          >· G{{ state.games.length }}</span
+          >· {{ unitInitial }}{{ state.games.length }}</span
         >
       </span>
     </div>
@@ -209,7 +213,7 @@ const columns = computed(() =>
               borderColor: teamColor(side),
               background: `color-mix(in srgb, ${teamColor(side)} 16%, transparent)`,
             }"
-            >GAME WON</span
+            >{{ wonLabel }}</span
           >
           <PenaltyCards :cards="cards(side)" size="sm" class="shrink-0" />
         </div>
@@ -234,7 +238,7 @@ const columns = computed(() =>
         <span
           class="score text-right text-[48px] leading-none text-white tabular-nums"
         >
-          {{ currentGame[side] }}
+          {{ primaryScore(side) }}
         </span>
       </div>
     </div>

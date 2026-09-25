@@ -15,6 +15,7 @@ type MatchRow = {
   id: string;
   sport_preset: string;
   config: { gamesToWin?: number } | null;
+  is_doubles: boolean | null;
   team_name_a: string | null;
   team_name_b: string | null;
   event_name: string | null;
@@ -111,7 +112,7 @@ const loadRemote = async () => {
   const { data, error: err } = await supabase
     .from('matches')
     .select(
-      'id, sport_preset, config, team_name_a, team_name_b, event_name, court_label, updated_at, ended_at'
+      'id, sport_preset, config, is_doubles, team_name_a, team_name_b, event_name, court_label, updated_at, ended_at'
     )
     .eq('owner_id', ownerId.value)
     .order('updated_at', { ascending: false })
@@ -145,7 +146,7 @@ const loadLocalScoped = async () => {
   const { data, error: err } = await supabase
     .from('matches')
     .select(
-      'id, sport_preset, config, team_name_a, team_name_b, event_name, court_label, updated_at, ended_at'
+      'id, sport_preset, config, is_doubles, team_name_a, team_name_b, event_name, court_label, updated_at, ended_at'
     )
     .in('id', ids)
     .is('owner_id', null)

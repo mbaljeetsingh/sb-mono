@@ -36,7 +36,11 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
+  unitWord,
+  unitInitial,
+  wonLabel,
+  showsPointTier,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -44,7 +48,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
@@ -62,7 +67,7 @@ const headMeta = computed(() => {
   const m = props.meta ?? {};
   const bo =
     props.config.gamesToWin === 1
-      ? 'SINGLE GAME'
+      ? `SINGLE ${unitWord.value}`
       : `BO${props.config.gamesToWin * 2 - 1}`;
   return [m.sportLabel, bo, m.category, m.round, m.courtLabel]
     .filter(Boolean)
@@ -75,7 +80,7 @@ const headMeta = computed(() => {
 // redundant encoding of one fact.
 const sideCaption = (side: 'a' | 'b') => {
   if (isMatchWinner(side)) return 'WINNER';
-  if (isLastGameWinner(side)) return 'GAME WON';
+  if (isLastGameWinner(side)) return wonLabel.value;
   return null;
 };
 
@@ -125,7 +130,7 @@ const panelStyle = (side: 'a' | 'b') => ({
         />
         LIVE
         <span v-if="config.gamesToWin > 1" class="text-white/45"
-          >· G{{ state.games.length }}</span
+          >· {{ unitInitial }}{{ state.games.length }}</span
         >
       </span>
     </div>
@@ -194,7 +199,7 @@ const panelStyle = (side: 'a' | 'b') => ({
         <div
           class="score flex min-h-0 flex-1 items-center justify-center leading-[0.82] tabular-nums portrait:text-[clamp(110px,min(26vh,54vw),340px)] landscape:text-[clamp(96px,min(46vh,26vw),300px)]"
         >
-          {{ currentGame[side] }}
+          {{ primaryScore(side) }}
         </div>
 
         <!-- Per-game history pinned to the panel foot, with the standing number
@@ -206,7 +211,7 @@ const panelStyle = (side: 'a' | 'b') => ({
             :side="side"
             :color="teamColor(side)"
             size="lg"
-            :include-current="false"
+            :include-current="showsPointTier"
           />
           <span v-else aria-hidden="true" />
           <span

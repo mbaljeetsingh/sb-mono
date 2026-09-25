@@ -1,71 +1,200 @@
 // Sport-preset registry. Single source of truth: sport_preset → { config, reducer, sport, displayName }.
 //
-// Adding a sport in the racquet family = one entry below. The badminton reducer
-// implements generic rally scoring (points per game, win-by, cap, games-to-win,
-// interval) and is reused for tennis/pickleball/table-tennis. Doubles partner
-// rotation in `state.partnerOnRight` is BWF-specific; non-badminton themes
-// should ignore it.
+// Adding a sport in the racquet family = one entry below. The shared reducer
+// implements all three scoring modes (`cfg.scoring`) — rally, side-out and the
+// tennis point/game/set tiers — so badminton, table tennis, pickleball, tennis
+// and padel all run through it.
 //
 // New sport family = add a sibling reducer + entries here.
+//
+// PRESET IDS ARE DATA. `matches.sport_preset` stores one of these strings per
+// match and `getPreset` replays the whole event log against whatever config the
+// id resolves to, so re-pointing an existing id at different rules silently
+// rescores every match ever played under it. Add ids; never repurpose them.
+//
+// Each sport ships an OFFICIAL preset (its governing body's ruleset) and, where
+// the sport is commonly played a shorter way, a SIMPLIFIED one.
 
-import { badminton15, badminton21 } from "./sports/badminton/config";
-import { reduce as reduceRacquet } from "./sports/badminton/reducer";
+import { badminton15, badminton21 } from './sports/badminton/config';
+import { reduce as reduceRacquet } from './sports/badminton/reducer';
 import type {
   RacquetConfig,
   RacquetEvent,
   RacquetState,
-} from "./sports/racquet-shared";
+} from './sports/racquet-shared';
 
 export type SportPresetId =
-  | "badminton-21"
-  | "badminton-15"
-  | "tennis-basic"
-  | "pickleball-classic"
-  | "pickleball-rally"
-  | "table-tennis";
+  | 'badminton-21'
+  | 'badminton-15'
+  | 'tennis-official'
+  | 'tennis-match-tiebreak'
+  | 'tennis-fast4'
+  | 'tennis-basic'
+  | 'pickleball-official'
+  | 'pickleball-official-15'
+  | 'pickleball-classic'
+  | 'pickleball-rally'
+  | 'padel-official'
+  | 'padel-star'
+  | 'padel-golden'
+  | 'table-tennis'
+  | 'table-tennis-21'
+  | 'squash-par11'
+  | 'squash-classic';
 
 // Presets shipped on day one. Each preset is a self-contained RacquetConfig.
 // Cap = null means "no hard cap" — the win-by margin must be reached.
 
+// ITF scoring in full: rallies win points on the 0/15/30/40 ladder, four points
+// (by two) win a game, six games (by two) win a set, and 6–6 goes to a seven-
+// point tiebreak. `pointsPerGame` / `winBy` / `cap` describe the SET here — the
+// tier shift that `scoring: 'tennis'` implies — so `cap: 7` is the tiebreak set.
+const tennisOfficial: RacquetConfig = {
+  sport: 'tennis',
+  displayName: 'Tennis (official)',
+  scoring: 'tennis',
+  pointsPerGame: 6,
+  winBy: 2,
+  cap: 7,
+  gamesToWin: 2,
+  intervalAt: null,
+  serveRule: 'rally-winner',
+  gameTier: { pointsToWin: 4, winBy: 2 },
+  tiebreak: { atGames: 6, pointsToWin: 7, winBy: 2 },
+  partnerRotation: 'fixed',
+};
+
+// What pro doubles and most club leagues actually play: no-ad games (40–40 is
+// decided by one rally) and, at one set all, a 10-point match tiebreak in place
+// of the deciding set.
+const tennisMatchTiebreak: RacquetConfig = {
+  ...tennisOfficial,
+  displayName: 'Tennis (no-ad, match tiebreak)',
+  gameTier: { pointsToWin: 4, winBy: 1 },
+  matchTiebreak: { pointsToWin: 10, winBy: 2 },
+};
+
+// Fast4 (Tennis Australia / LTA): first to 4 games, no-ad, and at 3–3 a
+// tiebreak to 5 with sudden death at 4–4. `cap: 4` is the tiebreak set, 4–3.
+const tennisFast4: RacquetConfig = {
+  ...tennisOfficial,
+  displayName: 'Tennis (Fast4)',
+  pointsPerGame: 4,
+  cap: 4,
+  gameTier: { pointsToWin: 4, winBy: 1 },
+  tiebreak: { atGames: 3, pointsToWin: 5, winBy: 1 },
+};
+
+// The original simplified preset, kept byte-identical because live matches
+// carry this id: a "set" is the engine's game and a "game" is the engine's
+// point, so a club match is scored 6–4 without the 15/30/40 ladder. First to 6
+// with a margin of 2; no tiebreak, so 7–7 just plays on.
 const tennisBasic: RacquetConfig = {
-  sport: "tennis",
-  displayName: "Tennis (basic, no tiebreak)",
-  // We treat a "set" as the engine's game and a "game" as the engine's point.
-  // First to 6 with margin of 2 wins a set; first to 2 sets wins. v1 ships no
-  // tiebreak (deferred to v1.x); 7-7 sets just keep going until margin of 2.
+  sport: 'tennis',
+  displayName: 'Tennis (quick, count games only)',
+  scoring: 'rally',
   pointsPerGame: 6,
   winBy: 2,
   cap: null,
   gamesToWin: 2,
   intervalAt: null,
-  serveRule: "rally-winner",
+  serveRule: 'rally-winner',
 };
 
-const pickleballClassic: RacquetConfig = {
-  sport: "pickleball",
-  displayName: "Pickleball (classic, 11)",
+// USA Pickleball: side-out scoring — only the serving side can score, doubles
+// teams get two servers per turn, and each game opens on "0–0–2". First to 11
+// by 2, best of 3.
+const pickleballOfficial: RacquetConfig = {
+  sport: 'pickleball',
+  displayName: 'Pickleball (official, side-out 11)',
+  scoring: 'side-out',
   pointsPerGame: 11,
   winBy: 2,
   cap: null,
   gamesToWin: 2,
   intervalAt: null,
-  serveRule: "rally-winner",
+  serveRule: 'rally-winner',
+  // USAP: ends change in the deciding game when the leader reaches 6.
+  endsChangeAt: 6,
+};
+
+// Tournament pool play and medal games: a single side-out game to 15, ends
+// changing at 8.
+const pickleballOfficial15: RacquetConfig = {
+  ...pickleballOfficial,
+  displayName: 'Pickleball (official, side-out 15)',
+  pointsPerGame: 15,
+  gamesToWin: 1,
+  endsChangeAt: 8,
+};
+
+// The badminton-style game many groups play: every rally scores, whoever
+// serves. The id predates side-out scoring; it has always meant this.
+const pickleballClassic: RacquetConfig = {
+  sport: 'pickleball',
+  displayName: 'Pickleball (rally 11, every point scores)',
+  scoring: 'rally',
+  pointsPerGame: 11,
+  winBy: 2,
+  cap: null,
+  gamesToWin: 2,
+  intervalAt: null,
+  serveRule: 'rally-winner',
+  endsChangeAt: 6,
 };
 
 const pickleballRally: RacquetConfig = {
-  sport: "pickleball",
-  displayName: "Pickleball (rally, 21)",
+  sport: 'pickleball',
+  displayName: 'Pickleball (rally 21, every point scores)',
+  scoring: 'rally',
   pointsPerGame: 21,
   winBy: 2,
   cap: null,
   gamesToWin: 1,
   intervalAt: null,
-  serveRule: "rally-winner",
+  serveRule: 'rally-winner',
+  endsChangeAt: 11,
+};
+
+// FIP: padel borrows tennis scoring wholesale — 15/30/40, six games by two, a
+// seven-point tiebreak at 6–6, best of three sets. Always doubles.
+const padelOfficial: RacquetConfig = {
+  sport: 'padel',
+  displayName: 'Padel (official, advantage)',
+  scoring: 'tennis',
+  pointsPerGame: 6,
+  winBy: 2,
+  cap: 7,
+  gamesToWin: 2,
+  intervalAt: null,
+  serveRule: 'rally-winner',
+  gameTier: { pointsToWin: 4, winBy: 2 },
+  tiebreak: { atGames: 6, pointsToWin: 7, winBy: 2 },
+  partnerRotation: 'fixed',
+  doublesOnly: true,
+};
+
+// STAR POINT (FIP rules from 2026, played on the Premier Padel tour): two
+// advantages are played as normal, and a third 40–40 is settled by one rally.
+const padelStar: RacquetConfig = {
+  ...padelOfficial,
+  displayName: 'Padel (star point)',
+  gameTier: { pointsToWin: 4, winBy: 2, suddenDeathAtDeuce: 3 },
+};
+
+// The GOLDEN POINT: at 40–40 the next rally takes the game, no advantages. It
+// is what the professional tour plays and what most clubs use to keep courts
+// moving, so it ships as padel's shorter option.
+const padelGolden: RacquetConfig = {
+  ...padelOfficial,
+  displayName: 'Padel (golden point)',
+  gameTier: { pointsToWin: 4, winBy: 1 },
 };
 
 const tableTennis: RacquetConfig = {
-  sport: "table-tennis",
-  displayName: "Table tennis (11, BO5)",
+  sport: 'table-tennis',
+  displayName: 'Table tennis (official, 11)',
+  scoring: 'rally',
   pointsPerGame: 11,
   winBy: 2,
   cap: null,
@@ -73,7 +202,55 @@ const tableTennis: RacquetConfig = {
   intervalAt: null,
   // ITTF: serve alternates every 2 points, every 1 from 10–10. Initial server
   // also alternates between games.
-  serveRule: "alternate-every-2",
+  serveRule: 'alternate',
+  serveTurnLength: 2,
+  // ITTF: in the last possible game, ends change (and in doubles the
+  // receiving order reverses) when one side first reaches 5.
+  endsChangeAt: 5,
+};
+
+// The pre-2001 game, still what most garages and clubs play: 21 points, serve
+// every 5, and single points from 20–20.
+const tableTennis21: RacquetConfig = {
+  sport: 'table-tennis',
+  displayName: 'Table tennis (classic, 21)',
+  scoring: 'rally',
+  pointsPerGame: 21,
+  winBy: 2,
+  cap: null,
+  gamesToWin: 2,
+  intervalAt: null,
+  serveRule: 'alternate',
+  serveTurnLength: 5,
+  endsChangeAt: 10,
+};
+
+// World Squash: point-a-rally to 11 by two, best of five. The server picks a
+// box at the start of each hand and alternates while keeping serve. No
+// interval and no change of ends — both players share the court.
+const squashPar11: RacquetConfig = {
+  sport: 'squash',
+  displayName: 'Squash (official, PAR 11)',
+  scoring: 'rally',
+  pointsPerGame: 11,
+  winBy: 2,
+  cap: null,
+  gamesToWin: 3,
+  intervalAt: null,
+  serveRule: 'rally-winner',
+  serveBox: 'choice',
+  singlesOnly: true,
+};
+
+// Traditional English hand-in/hand-out: only the server scores, games to 9,
+// and at 8–all the receiver chooses set one (to 9) or set two (to 10).
+const squashClassic: RacquetConfig = {
+  ...squashPar11,
+  displayName: 'Squash (classic, hand-in hand-out 9)',
+  scoring: 'side-out',
+  pointsPerGame: 9,
+  winBy: 1,
+  setChoiceAt: 8,
 };
 
 export type RacquetPresetEntry = {
@@ -83,63 +260,82 @@ export type RacquetPresetEntry = {
   config: RacquetConfig;
   /** Reducer for this preset's family. */
   reducer: (events: RacquetEvent[], cfg: RacquetConfig) => RacquetState;
+  /** The governing body's ruleset for this sport, as opposed to a shortened
+   *  club variant. Exactly one per sport; drives the "Official" badge and
+   *  `defaultPresetBySport`. */
+  official?: boolean;
 };
 
+const entry = (
+  id: SportPresetId,
+  config: RacquetConfig,
+  official = false
+): RacquetPresetEntry => ({
+  id,
+  sport: config.sport,
+  displayName: config.displayName,
+  config,
+  reducer: reduceRacquet,
+  official,
+});
+
 export const sportPresets: Record<SportPresetId, RacquetPresetEntry> = {
-  "badminton-21": {
-    id: "badminton-21",
-    sport: "badminton",
-    displayName: badminton21.displayName,
-    config: badminton21,
-    reducer: reduceRacquet,
-  },
-  "badminton-15": {
-    id: "badminton-15",
-    sport: "badminton",
-    displayName: badminton15.displayName,
-    config: badminton15,
-    reducer: reduceRacquet,
-  },
-  "tennis-basic": {
-    id: "tennis-basic",
-    sport: "tennis",
-    displayName: tennisBasic.displayName,
-    config: tennisBasic,
-    reducer: reduceRacquet,
-  },
-  "pickleball-classic": {
-    id: "pickleball-classic",
-    sport: "pickleball",
-    displayName: pickleballClassic.displayName,
-    config: pickleballClassic,
-    reducer: reduceRacquet,
-  },
-  "pickleball-rally": {
-    id: "pickleball-rally",
-    sport: "pickleball",
-    displayName: pickleballRally.displayName,
-    config: pickleballRally,
-    reducer: reduceRacquet,
-  },
-  "table-tennis": {
-    id: "table-tennis",
-    sport: "table-tennis",
-    displayName: tableTennis.displayName,
-    config: tableTennis,
-    reducer: reduceRacquet,
-  },
+  'badminton-21': entry('badminton-21', badminton21, true),
+  'badminton-15': entry('badminton-15', badminton15),
+  'tennis-official': entry('tennis-official', tennisOfficial, true),
+  'tennis-match-tiebreak': entry('tennis-match-tiebreak', tennisMatchTiebreak),
+  'tennis-fast4': entry('tennis-fast4', tennisFast4),
+  'tennis-basic': entry('tennis-basic', tennisBasic),
+  'pickleball-official': entry('pickleball-official', pickleballOfficial, true),
+  'pickleball-official-15': entry(
+    'pickleball-official-15',
+    pickleballOfficial15
+  ),
+  'pickleball-classic': entry('pickleball-classic', pickleballClassic),
+  'pickleball-rally': entry('pickleball-rally', pickleballRally),
+  'padel-official': entry('padel-official', padelOfficial, true),
+  'padel-star': entry('padel-star', padelStar),
+  'padel-golden': entry('padel-golden', padelGolden),
+  'table-tennis': entry('table-tennis', tableTennis, true),
+  'table-tennis-21': entry('table-tennis-21', tableTennis21),
+  'squash-par11': entry('squash-par11', squashPar11, true),
+  'squash-classic': entry('squash-classic', squashClassic),
 };
 
 /** Default preset per sport — used when a UI just picks a sport without a specific format. */
 export const defaultPresetBySport: Record<string, SportPresetId> = {
-  badminton: "badminton-21",
-  tennis: "tennis-basic",
-  pickleball: "pickleball-classic",
-  "table-tennis": "table-tennis",
+  badminton: 'badminton-21',
+  tennis: 'tennis-official',
+  pickleball: 'pickleball-official',
+  padel: 'padel-official',
+  'table-tennis': 'table-tennis',
+  squash: 'squash-par11',
 };
 
 /** Look up a preset; falls back to badminton-21 if unknown. */
 export const getPreset = (id: string | null | undefined): RacquetPresetEntry =>
-  sportPresets[id as SportPresetId] ?? sportPresets["badminton-21"]!;
+  sportPresets[id as SportPresetId] ?? sportPresets['badminton-21']!;
 
-export { tennisBasic, pickleballClassic, pickleballRally, tableTennis };
+/** Presets for one sport, official first. */
+export const presetsForSport = (sport: string): RacquetPresetEntry[] =>
+  Object.values(sportPresets)
+    .filter((p) => p.sport === sport)
+    .sort((a, b) => Number(b.official ?? false) - Number(a.official ?? false));
+
+export {
+  squashClassic,
+  squashPar11,
+  tennisOfficial,
+  tennisMatchTiebreak,
+  tennisFast4,
+  pickleballOfficial15,
+  padelStar,
+  tennisBasic,
+  pickleballOfficial,
+  pickleballClassic,
+  pickleballRally,
+  padelOfficial,
+  padelGolden,
+  tableTennis,
+  tableTennis21,
+};

@@ -30,10 +30,16 @@ const fromRow = (row: EventRow): RacquetEvent =>
 
 export function useReplayState(
   matchId: Ref<string>,
-  replayTimeMs: Ref<number>
+  replayTimeMs: Ref<number>,
+  opts: {
+    /** Forwarded to `useFormat` — see the note there. The replay has to reduce
+     *  with the same config as the live surfaces or a burned-in overlay would
+     *  disagree with the score that was actually on court. */
+    isDoubles?: Ref<boolean | undefined>;
+  } = {}
 ) {
   const supabase = useSupabaseClient();
-  const { preset, config } = useFormat(matchId);
+  const { preset, config } = useFormat(matchId, opts);
   const presetEntry = computed(() => getPreset(preset.value));
 
   const events = ref<RacquetEvent[]>([]);

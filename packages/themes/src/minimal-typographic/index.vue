@@ -9,6 +9,7 @@
 // Sizing is fluid (clamp + vmin/vh/vw) and the layout reflows to stacked rows
 // in portrait so the same theme reads well on phone, tablet, TV, and stream.
 
+import { formatHeadline } from '@sb/engine';
 import { computed, toRef } from 'vue';
 import GameCells from '../game-cells.vue';
 import type { ThemeProps } from '../index';
@@ -29,7 +30,10 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
+  unitWord,
+  wonLabel,
+  showsPointTier,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -37,7 +41,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const status = useStatusPill(toRef(props, 'state'));
@@ -49,8 +54,10 @@ const playersOf = (side: 'a' | 'b') =>
 const formatLine = computed(() => {
   const c = props.config;
   const heading =
-    c.gamesToWin === 1 ? 'Single game' : `Best of ${c.gamesToWin * 2 - 1}`;
-  return `${heading} · first to ${c.pointsPerGame}`;
+    c.gamesToWin === 1
+      ? `Single ${unitWord.value.toLowerCase()}`
+      : `Best of ${c.gamesToWin * 2 - 1}`;
+  return `${heading} · ${formatHeadline(c)}`;
 });
 
 const withStanding = computed(() => showStanding(props.config));
@@ -59,7 +66,7 @@ const withStanding = computed(() => showStanding(props.config));
 // word crowded a layout whose whole argument is restraint.
 const sideLabel = (side: 'a' | 'b') => {
   if (isMatchWinner(side)) return 'WINNER';
-  if (isLastGameWinner(side)) return 'GAME WON';
+  if (isLastGameWinner(side)) return wonLabel.value;
   return null;
 };
 </script>
@@ -108,7 +115,9 @@ const sideLabel = (side: 'a' | 'b') => {
             · TEAM {{ status.side }}
           </span>
         </span>
-        <span v-else class="shrink-0">GAME {{ state.games.length }}</span>
+        <span v-else class="shrink-0"
+          >{{ unitWord }} {{ state.games.length }}</span
+        >
       </div>
 
       <!-- Center grid: side-by-side in landscape, stacked in portrait. -->
@@ -145,7 +154,7 @@ const sideLabel = (side: 'a' | 'b') => {
           <div
             class="score leading-[0.85] text-[clamp(96px,min(34vh,40vw),260px)] portrait:text-[clamp(120px,min(34vh,52vw),320px)]"
           >
-            {{ currentGame[side] }}
+            {{ primaryScore(side) }}
           </div>
           <!-- Completed games as light-tone cells, plus the serve marker and any
                GAME WON / WINNER caption. Replaces the old footer line that
@@ -173,7 +182,7 @@ const sideLabel = (side: 'a' | 'b') => {
               :color="teamColor(side)"
               size="sm"
               tone="light"
-              :include-current="false"
+              :include-current="showsPointTier"
             />
             <span
               v-if="withStanding"

@@ -217,3 +217,46 @@ describe('clipsToVideo', () => {
     expect(collapsed).toHaveLength(0);
   });
 });
+
+// Under tennis scoring a `state.games` entry is a SET, so a rally that doesn't
+// finish a game leaves it untouched — cards built from that pair claimed an
+// unchanged score ("3–3 → 3–3") for most of a match, and called the set a game.
+describe('buildHighlightClips — tennis scoring', () => {
+  const tennis = getPreset('tennis-official');
+
+  /** Rallies to `side`, from a fresh match with A serving. */
+  const rallies = (sides: ('A' | 'B')[]): RacquetEvent[] => {
+    seq = 0;
+    const events: RacquetEvent[] = [
+      ev(0, { type: 'match.start', serverSide: 'A', serverCourt: 'right' }),
+    ];
+    sides.forEach((side, i) => {
+      events.push(ev(10 + i * 20, { type: 'point', side }));
+    });
+    return events;
+  };
+
+  it('labels the rally on the point ladder, not the set tally', () => {
+    // 40–40, then A takes the advantage: a deuce clip, whose score has to read
+    // "40–40 → AD–40" (the label is always A–B) rather than the set's
+    // untouched "0–0 → 0–0".
+    const events = rallies(['A', 'A', 'A', 'B', 'B', 'B', 'A']);
+    const clips = buildHighlightClips(events, tennis.reducer, tennis.config, {
+      maxRallies: 0,
+    });
+    const clutch = clips.find((c) => c.kind === 'clutch');
+    expect(clutch).toBeDefined();
+    expect(clutch?.scoreText).toEqual({ before: '40–40', after: 'AD–40' });
+    expect(clutch?.unit).toBe('set');
+  });
+
+  it('reports the unit as "game" for a rally-scored format', () => {
+    const events = straightSetsMatch();
+    const clips = buildHighlightClips(events, reducer, config, {
+      maxRallies: 0,
+    });
+    expect(clips[0]?.unit).toBe('game');
+    // Rally scoring's label is exactly what the raw pair rendered before.
+    expect(clips[0]?.scoreText).toEqual({ before: '20–0', after: '21–0' });
+  });
+});

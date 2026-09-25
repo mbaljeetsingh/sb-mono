@@ -25,7 +25,13 @@
 // "Funny" is not derivable from the log — the page covers it with manual
 // markers placed on the timeline (video-time domain, not event domain).
 
-import type { RacquetConfig, RacquetEvent, RacquetState } from '@sb/engine';
+import {
+  type RacquetConfig,
+  type RacquetEvent,
+  type RacquetState,
+  pointLabel,
+  unitNoun,
+} from '@sb/engine';
 import type { Anchor } from './snapshot-plan';
 
 export type RacquetReducer = (
@@ -102,12 +108,27 @@ export type HighlightClip = {
   endTs: number;
   scoreBefore: GamePair;
   scoreAfter: GamePair;
+  /**
+   * The scoreline either side of the rally, already in the format's own
+   * language — "20–19", or "30–40" / "40–AD" under tennis and padel scoring.
+   *
+   * Needed because `scoreBefore`/`scoreAfter` read `state.games`, which under
+   * tennis scoring is the SET's game tally: a rally that doesn't finish a game
+   * leaves it untouched, so a card built from those numbers claimed "3–3 →
+   * 3–3" for most of a match. The rally-scoring string is identical to what
+   * the raw pair produced.
+   */
+  scoreText: { before: string; after: string };
+  /** What one entry of `state.games` is here — "game", or "set" under tennis
+   *  scoring, where `gameIndex` counts sets. */
+  unit: 'game' | 'set';
   /** Who won the point. */
   side: 'A' | 'B';
   /** ms since the previous point in the same game; null for a game's first point. */
   gapMs: number | null;
-  /** point-saved only: whether the point erased a game point or a match point. */
-  saved?: 'game' | 'match';
+  /** point-saved only: which point the rally erased. 'set' exists only under
+   *  tennis scoring, where a game point and a set point are different tiers. */
+  saved?: 'game' | 'set' | 'match';
 };
 
 export type VideoHighlightClip = HighlightClip & {
@@ -164,6 +185,22 @@ export const buildHighlightClips = (
 
     const scoreBefore: GamePair = prevState.games[gameIndex] ?? { a: 0, b: 0 };
     const scoreAfter: GamePair = nextState.games[gameIndex] ?? scoreBefore;
+    // Under tennis scoring the rally moves `points`, not the set's game tally,
+    // so the label has to come off the point tier and through pointLabel.
+    const label = (st: RacquetState, pair: GamePair) =>
+      config.scoring === 'tennis'
+        ? `${pointLabel(st.points, 'A', st.inTiebreak, config)}–${pointLabel(
+            st.points,
+            'B',
+            st.inTiebreak,
+            config
+          )}`
+        : `${pair.a}–${pair.b}`;
+    const scoreText = {
+      before: label(prevState, scoreBefore),
+      after: label(nextState, scoreAfter),
+    };
+    const unit = unitNoun(config);
 
     const gapMs = lastPointTs === null ? null : ev.ts - lastPointTs;
     const lookback =
@@ -184,6 +221,8 @@ export const buildHighlightClips = (
       endTs: ev.ts + POST_ROLL_MS,
       scoreBefore,
       scoreAfter,
+      scoreText,
+      unit,
       side: ev.side,
       gapMs,
     };
@@ -208,6 +247,8 @@ export const buildHighlightClips = (
       winners.push({ ...clip, kind: 'game-point' });
     } else if (prevState.matchPoint[loser]) {
       winners.push({ ...clip, kind: 'point-saved', saved: 'match' });
+    } else if (prevState.setPoint?.[loser]) {
+      winners.push({ ...clip, kind: 'point-saved', saved: 'set' });
     } else if (prevState.gamePoint[loser]) {
       winners.push({ ...clip, kind: 'point-saved', saved: 'game' });
     } else if (prevState.isDeuce) {

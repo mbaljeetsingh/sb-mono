@@ -4,14 +4,14 @@ This file is loaded automatically into every Claude session in this repo. Treat 
 
 ## Project at a glance
 
-Scoreboard is a free, OSS-first live scoring tool for racquet sports (badminton first; tennis / pickleball / table-tennis sharing the engine). Two surfaces:
+Scoreboard is a free, OSS-first live scoring tool for racquet sports (badminton first; tennis / padel / pickleball / table tennis / squash sharing the engine). Two surfaces:
 
 - **`apps/app`** — operator-facing PWA. `/new`, `/m/[id]/{control,scoreboard,overlay}`, `/d/[id]/overlay`, `/t/[id]/overlay`, `/profile`, `/auth/*`. Anonymous scoring is allowed (Option A). Sign-in is optional and unlocks ownership / history / Pro features later.
 - **`apps/web`** — marketing site (currently empty). Plan: public landing, theme gallery, free anonymous scorer alongside marketing. See ROADMAP §"Marketing site".
 
 Shared layers + packages:
 
-- `packages/engine` — pure TS scoring engine (badminton 21pt / 15pt etc.). Sport-pluggable, fully tested.
+- `packages/engine` — pure TS scoring engine: rally, side-out and tennis-tier scoring for every racquet preset. Sport-pluggable, fully tested.
 - `packages/themes` — broadcast theme registry. Surface-grouped (overlay vs scoreboard).
 - `packages/shared` — small shared utilities.
 - `layers/ui` — shadcn-vue primitives + design tokens. Imported explicitly per-file (no `Ui` prefix, no auto-import).
@@ -56,7 +56,7 @@ When you do update, do it in the same commit as the code, and keep the entry con
 - **No shadcn `Ui` prefix.** Components are in `layers/ui/components/ui/<name>/index.ts` and imported explicitly: `import { Button } from "@sb/layer-ui/components/ui/button"`.
 - **Use shadcn primitives over raw HTML.** If a `Button`, `Input`, `Label`, `ToggleGroup`, `Dialog`, etc. exists in `layers/ui`, prefer it over a styled `<button>`/`<input>`. Exceptions: full-area tap zones with custom geometry (the score cells in `control.vue`) and decorative elements with no semantic role (slide-indicator dots).
 - **Use shadcn defaults.** Don't override `variant`/`size` with custom Tailwind classes for selected states; use the component's built-in active state. The only exception is when the component lacks a "selected" variant and we explicitly need one — prefer `ToggleGroup` over hand-rolled toggle pairs.
-- **Icons from `lucide-vue-next`** — no inline SVGs, no emoji-as-icon. Imported explicitly per-file. One sanctioned exception: `apps/app/components/common/SportGlyph.vue` holds hand-drawn per-sport glyphs (lucide ships no racquet-sport icons); all custom SVG paths live in that single component and nowhere else.
+- **Icons from `lucide-vue-next`** — no inline SVGs, no emoji-as-icon. Imported explicitly per-file. One sanctioned exception: sport icons (lucide ships no racquet-sport icons) live in `packages/themes/src/sport-icon.vue` — Material Symbols / Material Design Icons, Apache 2.0, credited in `THIRD_PARTY_NOTICES.md`. It is the only copy: the app's `SportGlyph.vue` wraps it and every theme header uses it, so a sport shows the same icon everywhere. No sport artwork anywhere else.
 
 ### Imports & state
 
@@ -87,7 +87,8 @@ When you do update, do it in the same commit as the code, and keep the entry con
 
 ### Engine & sync
 
-- **Engine config** is in `packages/engine/src/registry.ts` — every shipped preset (badminton-21, badminton-15, tennis-basic, pickleball-classic, pickleball-rally, table-tennis) maps to `{ config, reducer, sport, displayName }`. Adding a sport in the racquet family = one entry. New family = sibling reducer + entries.
+- **Engine config** is in `packages/engine/src/registry.ts` — every shipped preset maps to `{ config, reducer, sport, displayName, official }`; each sport has its governing body's ruleset (`official: true`) plus shorter club variants. `RacquetConfig.scoring` picks `rally` / `side-out` / `tennis`. Adding a racquet sport = registry entries. New family = sibling reducer + entries. **Preset ids are data** (stored per match, the log is replayed against them) — add ids, never repurpose one.
+- **Reducer shape:** event handlers change only what the event decides; `seat()` (who serves/receives, from which court) and `flags()` (game/set/match point) are recomputed after every event. Don't carry derived serve state forward in a handler. `isDoubles` lives on `match.start` (config `doubles` is the fallback for old logs).
 - **Source of truth = the `matches` row in Supabase.** Meta (team names, players, tournament fields), format (sport_preset + config.gamesToWin), and theme choice (overlay_theme_id + scoreboard_theme_id) all live in the row and sync cross-device via Realtime UPDATE. `useMatchMeta`, `useFormat`, and `useThemeChoice` are the consumer composables — none of them write to localStorage.
 - **IndexedDB (via `idb-keyval`) is used for:**
   - `sb:events:{matchId}` — the event log (offline-first per E1.11 — durable through tab crashes, no quota anxiety, async transactions). `useEvents` reads/writes through `layers/app-base/lib/eventStore.ts` and mirrors to Supabase + BroadcastChannel for cross-tab. **Do not** swap this for `useStorage` / localStorage — venue WiFi flakes and points must not be lost.
@@ -109,7 +110,7 @@ When you do update, do it in the same commit as the code, and keep the entry con
 
 ### Pre-merge validation
 
-- **Always run `pnpm --filter @sb/engine test`** after engine or registry changes — 29 tests cover the BWF rule set + match-state events.
+- **Always run `pnpm --filter @sb/engine test`** after engine or registry changes — it covers every sport's rule set (BWF, ITTF incl. doubles order, USAP side-out, ITF/FIP point tiers and tiebreaks) + match-state events.
 - **Boot the dev server and click the surface** for any UI change. Type checks and tests verify code correctness, not feature correctness.
 
 ## When in doubt

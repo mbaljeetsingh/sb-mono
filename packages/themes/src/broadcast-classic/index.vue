@@ -30,7 +30,10 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
+  unitWord,
+  wonLabel,
+  showsPointTier,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -38,7 +41,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const status = useStatusPill(toRef(props, 'state'));
 const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
@@ -87,7 +91,7 @@ const columns = computed(() =>
         v-if="state.matchOver"
         class="text-[13px] font-bold tracking-[0.14em] text-white/90 shrink-0 ml-2"
       >
-        {{ config.gamesToWin > 1 ? 'FINAL' : 'GAME' }}
+        {{ config.gamesToWin > 1 ? 'FINAL' : unitWord }}
       </span>
       <span
         v-else-if="isLive"
@@ -96,7 +100,7 @@ const columns = computed(() =>
         <span class="size-2 rounded-full bg-white animate-pulse-soft" />
         LIVE
         <span v-if="config.gamesToWin > 1" class="text-white/55 font-semibold"
-          >· GAME {{ state.games.length }}</span
+          >· {{ unitWord }} {{ state.games.length }}</span
         >
       </span>
     </div>
@@ -172,7 +176,7 @@ const columns = computed(() =>
                 background: `color-mix(in srgb, ${teamColor(side)} 18%, transparent)`,
               }"
             >
-              GAME WON
+              {{ wonLabel }}
             </span>
             <PenaltyCards :cards="cards(side)" size="sm" />
           </div>
@@ -187,7 +191,7 @@ const columns = computed(() =>
           :side="side"
           :color="teamColor(side)"
           size="sm"
-          :include-current="false"
+          :include-current="showsPointTier"
         />
 
         <GamesWonPlate
@@ -199,7 +203,7 @@ const columns = computed(() =>
 
         <!-- Current game -->
         <span class="score text-[44px] leading-none text-white text-right">
-          {{ currentGame[side] }}
+          {{ primaryScore(side) }}
         </span>
       </div>
     </div>

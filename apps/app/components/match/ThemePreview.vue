@@ -48,9 +48,28 @@ const defaultState: RacquetState = {
     { a: 14, b: 11 },
   ],
   gamesWon: { a: 1, b: 0 },
+  // The preview is a badminton sample, so there is no point tier below the
+  // games and no side-out server number — these carry the neutral values the
+  // engine gives every rally-scored format.
+  points: { a: 0, b: 0 },
+  inTiebreak: false,
   servingSide: 'A',
   matchInitialServer: 'A',
   serverCourt: 'right',
+  serverNumber: 1,
+  serverIsPartner: false,
+  serverSlot: 1,
+  receiverSlot: 1,
+  doubles: false,
+  receiverSwap: null,
+  endsChange: false,
+  inMatchTiebreak: false,
+  firstServerByGame: {},
+  decidingPoint: null,
+  serveRun: 0,
+  handBox: 'right',
+  gameTarget: null,
+  awaitingSetChoice: false,
   betweenGames: false,
   matchOver: false,
   winner: null,
@@ -59,6 +78,7 @@ const defaultState: RacquetState = {
   isMatchPoint: false,
   gamePoint: { a: false, b: false },
   matchPoint: { a: false, b: false },
+  setPoint: { a: false, b: false },
   // 14–11 isn't level, so the sample is not at deuce. The preview deliberately
   // shows the INTERVAL pill (atInterval above) as its status-pill example.
   isDeuce: false,

@@ -60,7 +60,7 @@ const refreshRecent = async () => {
   const { data, error } = await supabase
     .from('matches')
     .select(
-      'id, sport_preset, config, ended_at, team_name_a, team_name_b, overlay_theme_id'
+      'id, sport_preset, config, is_doubles, ended_at, team_name_a, team_name_b, overlay_theme_id'
     )
     .eq('owner_id', ownerId)
     .order('updated_at', { ascending: false })
@@ -85,6 +85,7 @@ const refreshRecent = async () => {
       id: r.id,
       sport_preset: r.sport_preset,
       config: r.config as { gamesToWin?: number } | null,
+      is_doubles: r.is_doubles,
       ended_at: r.ended_at,
     }))
   );

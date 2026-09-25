@@ -32,14 +32,16 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
+  showsPointTier,
   gamesWon,
   isServingSide,
   isMatchWinner,
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const status = useStatusPill(toRef(props, 'state'));
 const withStanding = computed(() => showStanding(props.config));
@@ -110,7 +112,7 @@ const code = (side: 'a' | 'b') => teamCodeOf(nameOf(side), codeOf(side));
           :side="side"
           :color="teamColor(side)"
           size="sm"
-          :include-current="false"
+          :include-current="showsPointTier"
         />
         <PenaltyCards :cards="cards(side)" size="xs" class="shrink-0" />
       </span>
@@ -126,7 +128,7 @@ const code = (side: 'a' | 'b') => teamCodeOf(nameOf(side), codeOf(side));
       <span
         class="score text-right text-[24px] leading-none tabular-nums"
         :class="isMatchWinner(side) ? 'text-white' : 'text-white/95'"
-        >{{ currentGame[side] }}</span
+        >{{ primaryScore(side) }}</span
       >
     </div>
 

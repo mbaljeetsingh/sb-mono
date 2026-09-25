@@ -2,7 +2,11 @@
 import {
   type SportPresetId,
   defaultPresetBySport,
+  formatDetail,
+  formatHeadline,
+  presetsForSport,
   sportPresets,
+  unitNoun,
 } from '@sb/engine';
 import { markCreated } from '@sb/layer-app-base/lib/eventStore';
 import { Button } from '@sb/layer-ui/components/ui/button';
@@ -14,7 +18,7 @@ import {
 } from '@sb/layer-ui/components/ui/toggle-group';
 import { themes as themeRegistry } from '@sb/themes';
 import { useStorage } from '@vueuse/core';
-import { ChevronDown, Loader2, Minus, Play, Plus } from 'lucide-vue-next';
+import { ChevronDown, Loader2, Play, SlidersHorizontal } from 'lucide-vue-next';
 import { ulid } from 'ulid';
 import { computed, nextTick, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
@@ -24,7 +28,13 @@ import SportPicker from '~/components/match/SportPicker.vue';
 import ThemePickerDialog from '~/components/match/ThemePickerDialog.vue';
 import { joinNames } from '~/lib/partner-swap';
 import { namesInPlay } from '~/lib/recent-players';
-import { SPORTS, type SportId } from '~/lib/sports';
+import {
+  SPORTS,
+  type SportId,
+  isDoublesOnly,
+  isSinglesOnly,
+  presetCopy,
+} from '~/lib/sports';
 import { useUserStore } from '~/stores/user';
 
 useSeoMeta({ title: 'New match' });
@@ -101,15 +111,16 @@ const seedBestOf =
     : 3;
 
 const sport = ref<SportId>(seedSport);
-// TT can't do doubles yet (see supportsDoubles below). This guard is NOT
-// redundant with that watcher: `watch` isn't `immediate`, so a restored
-// TT-plus-doubles state never transitions and never fires it — and the Type
-// toggle is hidden for TT, so the user would be left with four required name
-// fields and no control to get back to singles. Unreachable while TT is
-// disabled (seedSport only accepts enabled sports), but it has to hold the
-// day TT ships.
+// A restored format can contradict the sport's own constraint — padel would
+// otherwise be scored as singles, with the Type toggle hidden and no control
+// to fix it. (The watcher below also runs immediately, but seeding correctly
+// avoids a first render with the wrong number of name fields.)
 const isDoubles = ref(
-  seedSport === 'table-tennis' ? false : !!stored.isDoubles
+  isDoublesOnly(seedSport)
+    ? true
+    : isSinglesOnly(seedSport)
+      ? false
+      : !!stored.isDoubles
 );
 const formatPreset = ref<SportPresetId>(seedPreset);
 const matchLength = ref<MatchLength>(
@@ -168,12 +179,25 @@ const courtLabel = ref('');
 // a rematch prefill brought any of the three fields back populated.
 const showTournamentDetails = ref(false);
 
-// TT doubles uses a 4-player rotation that the shared (BWF) reducer doesn't
-// implement. Force singles for TT until a TT-specific reducer ships.
-const supportsDoubles = computed(() => sport.value !== 'table-tennis');
-watch(supportsDoubles, (ok) => {
-  if (!ok) isDoubles.value = false;
-});
+// Two sports don't get a choice, for opposite reasons. Padel has no singles
+// format at all: the court is built for four and FIP publishes no singles
+// rules. Squash is modelled as singles only — doubles squash is played on a
+// wider court under its own rules. Everything else offers both, table-tennis
+// doubles included now that the engine runs its four-player service order.
+const supportsSingles = computed(() => !isDoublesOnly(sport.value));
+const supportsDoubles = computed(() => !isSinglesOnly(sport.value));
+/** Hide the toggle when only one answer is legal for this sport. */
+const showTypeToggle = computed(
+  () => supportsSingles.value && supportsDoubles.value
+);
+watch(
+  [supportsSingles, supportsDoubles],
+  ([singlesOk, doublesOk]) => {
+    if (!singlesOk) isDoubles.value = true;
+    else if (!doublesOk) isDoubles.value = false;
+  },
+  { immediate: true }
+);
 
 // When sport changes, snap preset + match length to that sport's natural
 // defaults (table tennis → BO5, badminton → Single, etc.).
@@ -206,10 +230,11 @@ const gamesToWin = computed(() =>
 );
 
 // Presets within the active sport — sub-toggle when there's a real choice
-// (badminton 21/15, pickleball classic/rally).
-const presetsInSport = computed(() =>
-  Object.values(sportPresets).filter((p) => p.sport === sport.value)
-);
+// (badminton 21/15, pickleball side-out/rally, tennis official/no-ad/Fast4,
+// padel advantage/star/golden point). Official ruleset first, which is also
+// the default the sport watcher picks. Three or more wrap to a two-column grid:
+// in one row the tiles' two-line captions crushed to unreadable at phone width.
+const presetsInSport = computed(() => presetsForSport(sport.value));
 
 // /new uses local refs for theme choice rather than `useThemeChoice` —
 // the matches row doesn't exist yet, so there's nothing to sync. Avoids
@@ -308,21 +333,118 @@ onMounted(async () => {
 const formatNames = (t: { p1: string; p2: string }) =>
   isDoubles.value ? joinNames(t.p1, t.p2) : t.p1.trim();
 
-// Format is collapsed behind a summary by default. Every field in it has a
-// sensible default (sport → badminton-21 → single game), while the player names
-// are the only required input — so the form now leads with the names and keeps
-// format one tap away instead of making the user scroll past four toggle groups
-// to reach the fields that actually gate the submit button.
-const showFormat = ref(false);
+// Format is out in the open again, as compact controls rather than a
+// collapsed summary. Sport decides everything below it (the scoring options,
+// whether doubles is even legal, how many name fields there are), so hiding it
+// behind a disclosure made the first decision the least visible one.
+
+// Match length as one segmented row, "Best of 1 · 3 · 5 · 7", instead of a
+// Single / Best-of-N toggle plus a stepper. 1 is the old "single" format. A
+// longer length the sticky format or a rematch brought in (9, 11 — the seed
+// accepts up to 11) is added as its own option so it still shows as selected.
+const bestOf = computed(() =>
+  matchLength.value === 'single' ? 1 : bestOfN.value
+);
+const bestOfOptions = computed(() =>
+  [...new Set([1, 3, 5, 7, bestOf.value])].sort((a, b) => a - b)
+);
+const setBestOf = (n: number) => {
+  if (n <= 1) {
+    matchLength.value = 'single';
+    return;
+  }
+  matchLength.value = 'best-of';
+  bestOfN.value = n;
+};
+const bestOfCaption = computed(() =>
+  gamesToWin.value === 1
+    ? `One ${formatUnit.value}`
+    : `First to ${gamesToWin.value} ${formatUnit.value}s`
+);
+
+const activeCopy = computed(() => presetCopy[formatPreset.value]);
+
+// ---------------------------------------------------------------------------
+// Name fields and the ONE recent-players row
+//
+// There used to be a chip row under every name field — four identical rows in
+// doubles. Now one row fills the ACTIVE field. A field becomes active on focus
+// and stays active on blur (tapping a chip blurs the input first, so clearing
+// on blur would lose the target); after a pick the next empty field becomes
+// active, so tapping chips fills the form in order.
+// ---------------------------------------------------------------------------
+type Slot = 'a1' | 'a2' | 'b1' | 'b2';
+const visibleSlots = computed<Slot[]>(() =>
+  isDoubles.value ? ['a1', 'a2', 'b1', 'b2'] : ['a1', 'b1']
+);
+const slotValue = (slot: Slot): string => {
+  const team = slot[0] === 'a' ? teamA.value : teamB.value;
+  return slot[1] === '1' ? team.p1 : team.p2;
+};
+const setSlot = (slot: Slot, name: string) => {
+  const team = slot[0] === 'a' ? teamA : teamB;
+  team.value = { ...team.value, [slot[1] === '1' ? 'p1' : 'p2']: name };
+};
+const slotLabel = (slot: Slot): string =>
+  isDoubles.value
+    ? `Team ${slot.startsWith('a') ? 'A' : 'B'} · player ${slot.endsWith('1') ? 1 : 2}`
+    : slot === 'a1'
+      ? 'Player 1'
+      : 'Player 2';
+const firstEmptySlot = () =>
+  visibleSlots.value.find((s) => !slotValue(s).trim());
+const activeSlot = ref<Slot>('a1');
+const allFilled = computed(() => !firstEmptySlot());
+// A partner field the singles toggle just hid can't stay the target.
+watch(
+  visibleSlots,
+  (slots) => {
+    if (!slots.includes(activeSlot.value)) {
+      activeSlot.value = firstEmptySlot() ?? slots[0]!;
+    }
+  },
+  { immediate: true }
+);
+const onPickRecent = (name: string) => {
+  setSlot(activeSlot.value, name);
+  const next = firstEmptySlot();
+  if (next) activeSlot.value = next;
+};
+const isActiveSlot = (slot: Slot) =>
+  activeSlot.value === slot && !allFilled.value;
+
+// Tournament fields and theme — the rarely-changed extras, one row that
+// opens. (Was `showTournamentDetails`; the rematch prefill still opens it when
+// it brings any of the fields back populated.)
+const moreOptionsSummary = computed(() => {
+  const details = [eventName.value, round.value, courtLabel.value]
+    .map((v) => v.trim())
+    .filter(Boolean);
+  return [
+    details.length ? details.join(' · ') : 'Event, round, court',
+    `Theme: ${overlayName.value}`,
+  ].join(' · ');
+});
+
+/** "set" under tennis/padel scoring, "game" otherwise — see engine unitNoun. */
+const formatUnit = computed(() => {
+  const cfg = sportPresets[formatPreset.value]?.config;
+  return cfg ? unitNoun(cfg) : 'game';
+});
 
 const formatSummary = computed(() => {
   const sportLabel = SPORTS.find((s) => s.id === sport.value)?.label ?? '';
-  const points = sportPresets[formatPreset.value]?.config.pointsPerGame;
+  const cfg = sportPresets[formatPreset.value]?.config;
+  // `formatHeadline` rather than a bare `${pointsPerGame} pt`: under tennis
+  // scoring that field counts games per SET, so the generic phrasing billed a
+  // tennis match as "6 pt".
   const length =
-    matchLength.value === 'single' ? 'single game' : `best of ${bestOfN.value}`;
+    matchLength.value === 'single'
+      ? `single ${formatUnit.value}`
+      : `best of ${bestOfN.value}`;
   return [
     sportLabel,
-    points ? `${points} pt` : null,
+    cfg ? formatHeadline(cfg).toLowerCase() : null,
     isDoubles.value ? 'doubles' : 'singles',
     length,
   ]
@@ -436,315 +558,326 @@ const createMatch = async () => {
 </script>
 
 <template>
-  <!-- Form column, not full width. The page inherits the layout's max-w-6xl,
-       which stretched a player-name field across 1150px on a laptop; a form
-       this short reads as one column at any size. -->
-  <div class="mx-auto flex w-full max-w-xl flex-col font-sans">
-    <!-- text-2xl/tracking-tight is the shared page-title scale (/matches,
-         /profile) — this page was the odd one out at text-xl. -->
+  <!-- One column on a phone; from `lg` the format settles on the left and the
+       players, extras and Start sit on the right, so a laptop sees the whole
+       form without scrolling. Each column stays form-width — a name field
+       stretched across a 1150px viewport reads as a banner, not an input. -->
+  <div class="mx-auto flex w-full max-w-xl flex-col font-sans lg:max-w-5xl">
     <h1 class="px-4 pt-6 pb-3 text-2xl font-semibold tracking-tight">
       New match
     </h1>
 
-    <main class="flex-1 px-4 pb-48 pt-2 space-y-6 md:pb-6">
-      <!-- Format sits above the names, collapsed behind a one-line summary.
-           Every field in here has a good default (badminton, 21 BWF, singles,
-           single game) so it costs one row, not a scroll — but it has to come
-           first because Singles/Doubles decides the *shape* of the name fields
-           below (two inputs vs four, "Player 1" vs "Team A", and two more
-           required names). Putting it after meant flipping to doubles reflowed
-           fields the user had already filled and knocked the submit button back
-           to disabled. -->
-      <section>
-        <button
-          type="button"
-          class="flex w-full items-center justify-between gap-3 rounded-md py-1 text-left"
-          :aria-expanded="showFormat"
-          aria-controls="match-format"
-          @click="showFormat = !showFormat"
-        >
-          <span class="min-w-0">
-            <span
-              class="block text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle"
-            >
-              Format
-            </span>
-            <span class="mt-0.5 block truncate text-sm font-medium">
-              {{ formatSummary }}
-            </span>
-          </span>
-          <ChevronDown
-            class="size-4 shrink-0 text-fg-subtle transition-transform"
-            :class="showFormat ? 'rotate-180' : ''"
-          />
-        </button>
-        <div v-if="showFormat" id="match-format" class="mt-3 space-y-6">
-          <section>
-            <div
-              class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2"
-            >
-              Sport
-            </div>
-            <SportPicker v-model="sport" />
-          </section>
+    <div
+      class="grid gap-7 px-4 pt-2 pb-48 md:pb-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-10"
+    >
+      <!-- Format: sport → scoring → players & length. Top to bottom in the
+           order each choice constrains the next. -->
+      <main class="space-y-7">
+        <section>
+          <div
+            class="mb-2.5 text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle"
+          >
+            Sport
+          </div>
+          <SportPicker v-model="sport" />
+        </section>
 
-          <section v-if="supportsDoubles">
-            <Label
-              class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
+        <section v-if="presetsInSport.length">
+          <div
+            id="scoring-label"
+            class="mb-2.5 text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle"
+          >
+            Scoring
+          </div>
+          <ToggleGroup
+            v-if="presetsInSport.length > 1"
+            type="single"
+            :model-value="formatPreset"
+            variant="outline"
+            aria-labelledby="scoring-label"
+            class="w-full"
+            :spacing="presetsInSport.length > 2 ? 2 : 0"
+            :class="presetsInSport.length > 2 ? 'grid grid-cols-2' : ''"
+            @update:model-value="
+              (v) => v && (formatPreset = v as SportPresetId)
+            "
+          >
+            <ToggleGroupItem
+              v-for="p in presetsInSport"
+              :key="p.id"
+              :value="p.id"
+              class="h-10 flex-1 whitespace-nowrap text-sm font-semibold"
             >
-              Type
-            </Label>
+              {{ presetCopy[p.id].label }}
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <!-- How the chosen format plays, in one plain sentence — the thing a
+               club player needs to know, rather than engine terms. -->
+          <p class="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+            {{ activeCopy.blurb }}
+          </p>
+        </section>
+
+        <section class="flex flex-wrap gap-x-4 gap-y-5">
+          <div class="min-w-[9rem] flex-1">
+            <div
+              id="players-label"
+              class="mb-2.5 text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle"
+            >
+              Players
+            </div>
             <ToggleGroup
+              v-if="showTypeToggle"
               type="single"
               :model-value="isDoubles ? 'doubles' : 'singles'"
               variant="outline"
+              aria-labelledby="players-label"
               class="w-full"
               @update:model-value="(v) => v && (isDoubles = v === 'doubles')"
             >
-              <ToggleGroupItem value="singles" class="flex-1">
+              <ToggleGroupItem value="singles" class="h-10 flex-1">
                 Singles
               </ToggleGroupItem>
-              <ToggleGroupItem value="doubles" class="flex-1">
+              <ToggleGroupItem value="doubles" class="h-10 flex-1">
                 Doubles
               </ToggleGroupItem>
             </ToggleGroup>
-          </section>
-
-          <section v-if="presetsInSport.length > 1">
-            <Label
-              class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
+            <!-- Padel is doubles-only and squash singles-only: say so rather
+                 than offering a toggle with one legal answer. -->
+            <p
+              v-else
+              class="flex h-10 items-center text-sm text-muted-foreground"
             >
-              Points per game
-            </Label>
+              {{
+                isDoubles
+                  ? 'Doubles — the only format for padel'
+                  : 'Singles only'
+              }}
+            </p>
+          </div>
+
+          <div class="shrink-0">
+            <div
+              id="bestof-label"
+              class="mb-2.5 text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle"
+            >
+              Best of
+            </div>
             <ToggleGroup
               type="single"
-              :model-value="formatPreset"
+              :model-value="String(bestOf)"
               variant="outline"
-              class="w-full"
-              @update:model-value="
-                (v) => v && (formatPreset = v as SportPresetId)
-              "
+              aria-labelledby="bestof-label"
+              @update:model-value="(v) => v && setBestOf(Number(v))"
             >
               <ToggleGroupItem
-                v-for="p in presetsInSport"
-                :key="p.id"
-                :value="p.id"
-                class="flex-1"
+                v-for="n in bestOfOptions"
+                :key="n"
+                :value="String(n)"
+                class="h-10 min-w-11 tabular-nums"
               >
-                {{ p.config.pointsPerGame }}
-                <span class="opacity-60 ml-0.5">
-                  {{
-                    p.id === 'badminton-15'
-                      ? '(2027)'
-                      : p.id === 'badminton-21'
-                        ? 'BWF'
-                        : p.id === 'pickleball-rally'
-                          ? 'rally'
-                          : 'classic'
-                  }}
-                </span>
+                {{ n }}
               </ToggleGroupItem>
             </ToggleGroup>
-          </section>
+            <p class="mt-1.5 text-[11px] text-fg-subtle">
+              {{ bestOfCaption }}
+            </p>
+          </div>
+        </section>
+      </main>
 
-          <section>
-            <Label
-              class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
-            >
-              Match length
-            </Label>
-            <ToggleGroup
-              type="single"
-              :model-value="matchLength"
-              variant="outline"
-              class="w-full mb-2"
-              @update:model-value="(v) => v && (matchLength = v as MatchLength)"
-            >
-              <ToggleGroupItem value="single" class="flex-1">
-                Single match
-              </ToggleGroupItem>
-              <ToggleGroupItem value="best-of" class="flex-1">
-                Best of N
-              </ToggleGroupItem>
-            </ToggleGroup>
+      <aside class="space-y-4">
+        <!-- The matchup: one card, team colours on the dots the court uses,
+             VS between the sides. Doubles puts each pair on one row. -->
+        <section
+          class="space-y-3 rounded-xl border border-border bg-card p-3"
+          aria-label="Players"
+        >
+          <template v-for="(team, ti) in ['a', 'b'] as const" :key="team">
             <div
-              v-if="matchLength === 'best-of'"
-              class="flex items-center gap-3 px-1"
+              v-if="ti === 1"
+              class="flex items-center gap-3"
+              aria-hidden="true"
             >
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                aria-label="Decrease best-of"
-                :disabled="bestOfN <= 3"
-                @click="bestOfN = Math.max(3, bestOfN - 2)"
+              <span class="h-px flex-1 bg-border" />
+              <span
+                class="text-[11px] font-bold tracking-[0.1em] text-fg-subtle"
               >
-                <Minus class="size-4" />
-              </Button>
-              <div class="flex-1 text-center">
-                <span class="text-base font-semibold text-foreground">
-                  Best of {{ bestOfN }}
-                </span>
-                <span class="block text-[11px] text-fg-subtle mt-0.5">
-                  first to {{ gamesToWin }}
-                  {{ gamesToWin === 1 ? 'game' : 'games' }}
-                </span>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                aria-label="Increase best-of"
-                :disabled="bestOfN >= 11"
-                @click="bestOfN = Math.min(11, bestOfN + 2)"
-              >
-                <Plus class="size-4" />
-              </Button>
+                VS
+              </span>
+              <span class="h-px flex-1 bg-border" />
             </div>
-          </section>
-        </div>
-      </section>
+            <div>
+              <div
+                v-if="isDoubles"
+                class="mb-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground"
+              >
+                <span
+                  class="size-2 rounded-full"
+                  :class="team === 'a' ? 'bg-team-a' : 'bg-team-b'"
+                />
+                Team {{ team.toUpperCase() }}
+              </div>
+              <div :class="isDoubles ? 'grid grid-cols-2 gap-2' : ''">
+                <div
+                  v-for="n in isDoubles ? ([1, 2] as const) : ([1] as const)"
+                  :key="n"
+                  class="relative"
+                >
+                  <Label :for="`team-${team}-p${n}`" class="sr-only">
+                    {{ slotLabel(`${team}${n}` as Slot) }}
+                  </Label>
+                  <span
+                    v-if="!isDoubles"
+                    class="pointer-events-none absolute top-1/2 left-3.5 size-2 -translate-y-1/2 rounded-full"
+                    :class="team === 'a' ? 'bg-team-a' : 'bg-team-b'"
+                    aria-hidden="true"
+                  />
+                  <!-- The active field — the one the recent-names row fills —
+                       keeps a primary border even after focus moves to a
+                       chip, so it's clear where a tap will land. -->
+                  <Input
+                    :id="`team-${team}-p${n}`"
+                    :model-value="slotValue(`${team}${n}` as Slot)"
+                    type="text"
+                    autocomplete="off"
+                    :placeholder="
+                      isDoubles
+                        ? `Player ${n}`
+                        : slotLabel(`${team}${n}` as Slot)
+                    "
+                    class="h-12 bg-background text-base"
+                    :class="[
+                      !isDoubles && 'pl-8',
+                      isActiveSlot(`${team}${n}` as Slot) && 'border-primary',
+                    ]"
+                    @update:model-value="
+                      (v) => setSlot(`${team}${n}` as Slot, String(v))
+                    "
+                    @focus="activeSlot = `${team}${n}` as Slot"
+                  />
+                </div>
+              </div>
+            </div>
+          </template>
+        </section>
 
-      <section>
-        <Label
-          for="team-a-p1"
-          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
-        >
-          {{ isDoubles ? 'Team A' : 'Player 1' }}
-        </Label>
-        <Input
-          id="team-a-p1"
-          v-model="teamA.p1"
-          type="text"
-          :placeholder="isDoubles ? 'Player 1' : 'Name'"
-          :aria-label="isDoubles ? 'Team A player 1' : undefined"
-          class="h-11"
-        />
+        <!-- ONE row of recent names for the active field (see the script).
+             Hidden once every field is filled. -->
         <PlayerChips
+          v-if="!allFilled"
           :list="recentNames"
-          :query="teamA.p1"
+          :query="slotValue(activeSlot)"
           :exclude="enteredNames"
-          :label="
-            isDoubles
-              ? 'Recent players for Team A player 1'
-              : 'Recent players for Player 1'
-          "
+          :label="`Recent players — tap to fill ${slotLabel(activeSlot)}`"
           :show-hint="!hintDismissed"
-          @pick="(n) => (teamA.p1 = n)"
+          @pick="onPickRecent"
           @remove="onRemoveRecent"
         />
-        <!-- The section <Label> points at p1, so in doubles the partner field
-             would otherwise reach a screen reader as an unlabelled textbox
-             ("edit text" with only the visual placeholder to go on). -->
-        <Input
-          v-if="isDoubles"
-          id="team-a-p2"
-          v-model="teamA.p2"
-          type="text"
-          placeholder="Player 2"
-          aria-label="Team A player 2"
-          class="h-11 mt-2"
-        />
-        <PlayerChips
-          v-if="isDoubles"
-          :list="recentNames"
-          :query="teamA.p2"
-          :exclude="enteredNames"
-          label="Recent players for Team A player 2"
-          @pick="(n) => (teamA.p2 = n)"
-          @remove="onRemoveRecent"
-        />
-      </section>
-
-      <section>
-        <Label
-          for="team-b-p1"
-          class="text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle mb-2 block"
+        <p
+          v-if="!allFilled && recentNames.length"
+          class="-mt-2 text-xs text-fg-subtle"
         >
-          {{ isDoubles ? 'Team B' : 'Player 2' }}
-        </Label>
-        <Input
-          id="team-b-p1"
-          v-model="teamB.p1"
-          type="text"
-          :placeholder="isDoubles ? 'Player 1' : 'Name'"
-          :aria-label="isDoubles ? 'Team B player 1' : undefined"
-          class="h-11"
-        />
-        <PlayerChips
-          :list="recentNames"
-          :query="teamB.p1"
-          :exclude="enteredNames"
-          :label="
-            isDoubles
-              ? 'Recent players for Team B player 1'
-              : 'Recent players for Player 2'
-          "
-          @pick="(n) => (teamB.p1 = n)"
-          @remove="onRemoveRecent"
-        />
-        <Input
-          v-if="isDoubles"
-          id="team-b-p2"
-          v-model="teamB.p2"
-          type="text"
-          placeholder="Player 2"
-          aria-label="Team B player 2"
-          class="h-11 mt-2"
-        />
-        <PlayerChips
-          v-if="isDoubles"
-          :list="recentNames"
-          :query="teamB.p2"
-          :exclude="enteredNames"
-          label="Recent players for Team B player 2"
-          @pick="(n) => (teamB.p2 = n)"
-          @remove="onRemoveRecent"
-        />
-      </section>
+          Tap a name to fill {{ slotLabel(activeSlot) }}
+        </p>
 
-      <section>
-        <button
-          type="button"
-          class="flex w-full items-center justify-between rounded-md py-1 text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-subtle hover:text-foreground"
-          :aria-expanded="showTournamentDetails"
-          aria-controls="tournament-details"
-          @click="showTournamentDetails = !showTournamentDetails"
+        <!-- Rarely-changed extras: tournament fields and the theme. -->
+        <section>
+          <Button
+            type="button"
+            variant="outline"
+            class="h-auto w-full items-center gap-3 p-3 text-left whitespace-normal"
+            :aria-expanded="showTournamentDetails"
+            aria-controls="more-options"
+            @click="showTournamentDetails = !showTournamentDetails"
+          >
+            <SlidersHorizontal class="size-4 shrink-0 text-fg-subtle" />
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-semibold">More options</span>
+              <span class="block truncate text-xs font-normal text-fg-subtle">
+                {{ moreOptionsSummary }}
+              </span>
+            </span>
+            <ChevronDown
+              class="size-4 shrink-0 text-fg-subtle transition-transform"
+              :class="showTournamentDetails ? 'rotate-180' : ''"
+            />
+          </Button>
+          <div
+            v-if="showTournamentDetails"
+            id="more-options"
+            class="mt-3 space-y-2"
+          >
+            <Label for="event-name" class="sr-only">Event</Label>
+            <Input
+              id="event-name"
+              v-model="eventName"
+              type="text"
+              placeholder='Event (e.g. "Spring Open")'
+              class="h-11"
+            />
+            <Label for="event-round" class="sr-only">Round</Label>
+            <Input
+              id="event-round"
+              v-model="round"
+              type="text"
+              placeholder='Round (e.g. "Quarterfinal")'
+              class="h-11"
+            />
+            <Label for="event-court" class="sr-only">Court or table</Label>
+            <Input
+              id="event-court"
+              v-model="courtLabel"
+              type="text"
+              placeholder='Court / table (e.g. "Court 1")'
+              class="h-11"
+            />
+            <div class="pt-2">
+              <LookAndFeelCards
+                :overlay-theme-name="overlayName"
+                :scoreboard-theme-name="scoreboardName"
+                @open-theme="themeDialogOpen = true"
+              />
+            </div>
+          </div>
+        </section>
+
+        <!-- Mobile: anchored to the bottom edge and padded to clear the tab
+             bar (MobileTabBar is a detached pill that hides on scroll-down).
+             Desktop: no tab bar and a short form, so the CTA rejoins the flow
+             under the players. The summary line restates what Start will
+             create. -->
+        <footer
+          class="fixed inset-x-0 bottom-0 z-10 space-y-2 border-t border-border bg-background px-4 pt-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:static md:border-t-0 md:px-0 md:pt-2 md:pb-10"
         >
-          <span>Tournament details (optional)</span>
-          <ChevronDown
-            class="size-4 transition-transform"
-            :class="showTournamentDetails ? 'rotate-180' : ''"
-          />
-        </button>
-        <div v-if="showTournamentDetails" id="tournament-details" class="mt-2">
-          <Input
-            v-model="eventName"
-            type="text"
-            placeholder='Event (e.g. "Spring Open")'
-            class="h-11"
-          />
-          <Input
-            v-model="round"
-            type="text"
-            placeholder='Round (e.g. "Quarterfinal")'
-            class="h-11 mt-2"
-          />
-          <Input
-            v-model="courtLabel"
-            type="text"
-            placeholder='Court / table (e.g. "Court 1")'
-            class="h-11 mt-2"
-          />
-        </div>
-      </section>
-
-      <LookAndFeelCards
-        :overlay-theme-name="overlayName"
-        :scoreboard-theme-name="scoreboardName"
-        @open-theme="themeDialogOpen = true"
-      />
-    </main>
+          <p class="text-center text-xs text-muted-foreground">
+            {{ formatSummary }}
+          </p>
+          <!-- Secondary while incomplete: `disabled` alone is opacity-only,
+               so a blocked CTA would still be the loudest thing on the page. -->
+          <Button
+            type="button"
+            size="lg"
+            :variant="canCreate ? 'default' : 'secondary'"
+            class="h-12 w-full text-base font-semibold"
+            :disabled="!canCreate || isCreating"
+            @click="createMatch"
+          >
+            <Loader2 v-if="isCreating" class="size-4 animate-spin" />
+            <Play v-else class="size-4" />
+            {{
+              isCreating
+                ? 'Creating…'
+                : canCreate
+                  ? 'Start match'
+                  : isDoubles
+                    ? 'Add all four players to start'
+                    : 'Add both players to start'
+            }}
+          </Button>
+        </footer>
+      </aside>
+    </div>
 
     <ThemePickerDialog
       v-model:open="themeDialogOpen"
@@ -757,44 +890,5 @@ const createMatch = async () => {
         }
       "
     />
-
-    <!-- Mobile: anchored to the bottom edge and padded to clear the tab bar,
-         rather than floated 3.5rem up. MobileTabBar is a detached pill that
-         hides on scroll-down (MobileTabBar.vue:152); with the old offset this
-         footer kept its gap and left a strip of scrolling page content visible
-         below it, and it overlapped the bar's top edge while shown. Padding =
-         0.75rem bar gap + 3.5rem bar height + breathing room.
-         Desktop: there is no tab bar to clear and the form is short, so the
-         CTA rejoins the flow instead of floating full-bleed across a mostly
-         empty viewport. -->
-    <footer
-      class="fixed inset-x-0 bottom-0 px-4 pt-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] bg-background border-t border-border md:static md:border-t-0 md:px-4 md:pt-2 md:pb-10"
-    >
-      <!-- Secondary while incomplete. `disabled` alone is opacity-only, so the
-           blocked CTA still rendered as a full brand-green fill — the loudest
-           thing on the page, and it reads as tappable right up until you tap
-           it. The variant swap makes "not yet" visible at a glance, and the
-           label already says what's missing. -->
-      <Button
-        type="button"
-        size="lg"
-        :variant="canCreate ? 'default' : 'secondary'"
-        class="w-full h-12 text-base font-semibold"
-        :disabled="!canCreate || isCreating"
-        @click="createMatch"
-      >
-        <Loader2 v-if="isCreating" class="size-4 animate-spin" />
-        <Play v-else class="size-4" />
-        {{
-          isCreating
-            ? 'Creating…'
-            : canCreate
-              ? 'Create match'
-              : isDoubles
-                ? 'Enter team names to continue'
-                : 'Enter player names to continue'
-        }}
-      </Button>
-    </footer>
   </div>
 </template>

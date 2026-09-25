@@ -24,7 +24,10 @@ const {
   playersA,
   playersB,
   cards,
-  currentGame,
+  primaryScore,
+  unitWord,
+  wonLabel,
+  showsPointTier,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -32,7 +35,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const meta = useMetaLine(toRef(props, 'meta'), toRef(props, 'config'));
 const isLive = computed(() => props.meta?.isLive !== false);
@@ -104,7 +108,7 @@ const playersOf = (side: 'a' | 'b') =>
           background: `color-mix(in srgb, ${teamColor(side)} 18%, transparent)`,
         }"
       >
-        GAME WON
+        {{ wonLabel }}
       </span>
       <PenaltyCards :cards="cards(side)" size="sm" class="shrink-0" />
     </div>
@@ -126,22 +130,22 @@ const playersOf = (side: 'a' | 'b') =>
         side="a"
         :color="teamColor('a')"
         size="sm"
-        :include-current="false"
+        :include-current="showsPointTier"
       />
       <span
         class="score text-[50px] text-neutral-50 tabular-nums w-[66px] text-right"
-        >{{ currentGame.a }}</span
+        >{{ primaryScore('a') }}</span
       >
       <span class="text-xl text-neutral-600 font-medium">—</span>
       <span class="score text-[50px] text-neutral-50 tabular-nums w-[66px]">{{
-        currentGame.b
+        primaryScore('b')
       }}</span>
       <GameCells
         :state="state"
         side="b"
         :color="teamColor('b')"
         size="sm"
-        :include-current="false"
+        :include-current="showsPointTier"
       />
       <GamesWonPlate
         v-if="withStanding"
@@ -186,7 +190,7 @@ const playersOf = (side: 'a' | 'b') =>
       class="inline-flex items-center gap-1.5 text-neutral-400 shrink-0 ml-3"
     >
       <span class="size-1.5 rounded-full bg-white animate-pulse-soft" />
-      LIVE · GAME {{ state.games.length }}
+      LIVE · {{ unitWord }} {{ state.games.length }}
     </span>
   </div>
 </template>

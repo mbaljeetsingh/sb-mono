@@ -9,6 +9,7 @@
 // Sizing is fluid (clamp + vmin/vh/vw) and the layout reflows to stacked rows
 // in portrait so the same theme reads well on phone, tablet, TV, and stream.
 
+import { formatHeadline } from '@sb/engine';
 import { computed, toRef } from 'vue';
 import GameCells from '../game-cells.vue';
 import GamesWonPlate from '../games-won-plate.vue';
@@ -29,7 +30,10 @@ const props = defineProps<ThemeProps>();
 const {
   playersA,
   playersB,
-  currentGame,
+  primaryScore,
+  unitInitial,
+  wonLabel,
+  showsPointTier,
   gamesWon,
   isServingSide,
   isLastGameWinner,
@@ -38,7 +42,8 @@ const {
 } = useThemeState(
   toRef(props, 'state'),
   toRef(props, 'teamNames'),
-  toRef(props, 'players')
+  toRef(props, 'players'),
+  toRef(props, 'config')
 );
 const status = useStatusPill(toRef(props, 'state'));
 const endReason = computed(() => endReasonLabel(props.state.endReason));
@@ -69,8 +74,10 @@ const topMeta = computed(() => {
 const formatLine = computed(() => {
   const c = props.config;
   const heading =
-    c.gamesToWin === 1 ? 'Single game' : `Best of ${c.gamesToWin * 2 - 1}`;
-  return `${heading} · first to ${c.pointsPerGame}`;
+    c.gamesToWin === 1
+      ? `Single ${unitInitial.value === 'S' ? 'set' : 'game'}`
+      : `Best of ${c.gamesToWin * 2 - 1}`;
+  return `${heading} · ${formatHeadline(c)}`;
 });
 </script>
 
@@ -112,7 +119,7 @@ const formatLine = computed(() => {
         <span
           v-if="config.gamesToWin > 1"
           class="text-neutral-500 font-semibold"
-          >· G{{ state.games.length }}</span
+          >· {{ unitInitial }}{{ state.games.length }}</span
         >
       </span>
     </div>
@@ -169,7 +176,7 @@ const formatLine = computed(() => {
               background: `color-mix(in srgb, ${teamColor(side)} 12%, transparent)`,
             }"
           >
-            GAME WON
+            {{ wonLabel }}
           </span>
           <PenaltyCards :cards="cards(side)" size="sm" />
         </div>
@@ -220,7 +227,7 @@ const formatLine = computed(() => {
         <div
           class="score leading-[0.9] mt-1 text-[clamp(72px,min(24vh,30vw),200px)] portrait:text-[clamp(96px,min(28vh,38vw),260px)]"
         >
-          {{ currentGame[side] }}
+          {{ primaryScore(side) }}
         </div>
         <!-- Completed games as boxed cells, directly under this side's numeral.
              They used to live in a single shared "HISTORY G1 21–18" line in the
@@ -244,7 +251,7 @@ const formatLine = computed(() => {
             :side="side"
             :color="teamColor(side)"
             size="md"
-            :include-current="false"
+            :include-current="showsPointTier"
           />
           <GamesWonPlate
             v-if="withStanding"

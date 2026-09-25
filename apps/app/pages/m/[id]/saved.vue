@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { useClipboard } from "@vueuse/core";
-import { Clipboard, X } from "lucide-vue-next";
-import { toast } from "vue-sonner";
-import { Button } from "@sb/layer-ui/components/ui/button";
+import { Button } from '@sb/layer-ui/components/ui/button';
+import { useClipboard } from '@vueuse/core';
+import { Clipboard, X } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
 
 definePageMeta({ layout: false });
 
 const route = useRoute();
-const matchId = computed(() => String(route.params.id ?? ""));
+const matchId = computed(() => String(route.params.id ?? ''));
 
 // Meta + game state both live in Supabase, so this page renders correctly
 // cross-device — a finished-match share link opened on a friend's phone
@@ -15,14 +15,18 @@ const matchId = computed(() => String(route.params.id ?? ""));
 // `useMatchState` rather than a separate `sb:result:` key (which nothing
 // was writing anyway).
 const { meta, teamNames } = useMatchMeta(matchId);
-const { state } = useMatchState(matchId);
+// `isDoubles` has to reach the reducer: side-out pickleball scores differently
+// in singles and doubles, so a surface reducing the same log with the wrong
+// value would show a different score from the operator's.
+const isDoublesRef = computed(() => meta.value.isDoubles ?? false);
+const { state } = useMatchState(matchId, { isDoubles: isDoublesRef });
 
 const sportLabel = computed(() =>
-  (meta.value.sport ?? "badminton").toUpperCase(),
+  (meta.value.sport ?? 'badminton').toUpperCase()
 );
 
 const result = computed(() =>
-  state.value.matchOver ? state.value.games : null,
+  state.value.matchOver ? state.value.games : null
 );
 
 const winner = computed(() => {
@@ -40,12 +44,12 @@ const winner = computed(() => {
 });
 
 const shareUrl = computed(() => {
-  if (typeof window === "undefined") return "";
+  if (typeof window === 'undefined') return '';
   return `${window.location.origin}/m/${matchId.value}/scoreboard`;
 });
 
 const { copy: clipboardCopy } = useClipboard({ legacy: true });
-const copy = async (text: string, label = "Link") => {
+const copy = async (text: string, label = 'Link') => {
   await clipboardCopy(text);
   toast.success(`${label} copied`);
 };

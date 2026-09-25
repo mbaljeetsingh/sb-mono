@@ -30,6 +30,19 @@ export const courtColorVariants: Record<SportId, CourtColorVariant[]> = {
     { id: 'green', label: 'Court green', class: 'bg-court-pickleball' },
     { id: 'blue', label: 'Court blue', class: 'bg-court-blue' },
   ],
+  // Padel is played on artificial turf, which clubs lay in blue or green far
+  // more often than the terracotta the sport started on.
+  padel: [
+    { id: 'blue', label: 'Turf blue', class: 'bg-court-padel' },
+    { id: 'green', label: 'Turf green', class: 'bg-court-turf' },
+    { id: 'clay', label: 'Terracotta', class: 'bg-court-clay' },
+  ],
+  // Club courts are maple; the tour's glass show courts are usually floored
+  // blue so the ball reads on camera.
+  squash: [
+    { id: 'maple', label: 'Maple', class: 'bg-court-squash' },
+    { id: 'blue', label: 'Glass court blue', class: 'bg-court-blue' },
+  ],
 };
 
 /** Resolve the mat class for a sport + stored choice (unknown ids fall back

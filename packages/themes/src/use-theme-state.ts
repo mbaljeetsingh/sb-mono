@@ -3,7 +3,13 @@
 // card counts, prior vs current games), so we keep the math here and let the
 // themes focus on layout.
 
-import type { RacquetConfig, RacquetState } from '@sb/engine';
+import {
+  type RacquetConfig,
+  type RacquetState,
+  pointLabel,
+  slotInCourt,
+  unitNoun,
+} from '@sb/engine';
 import { type Ref, computed } from 'vue';
 
 export type SideKey = 'a' | 'b';
@@ -34,7 +40,8 @@ const EMPTY_CARDS = { yellow: 0, red: 0, black: 0 } as const;
 export function useThemeState(
   stateRef: Ref<RacquetState>,
   teamNamesRef: Ref<{ a: string; b: string }>,
-  playersRef?: Ref<Players | undefined>
+  playersRef?: Ref<Players | undefined>,
+  configRef?: Ref<RacquetConfig>
 ) {
   // Partner order comes from `players` when the caller supplies it, and only
   // falls back to splitting the joined team name otherwise.
@@ -70,11 +77,22 @@ export function useThemeState(
     if (parts.length < 2) {
       return [{ name: parts[0] ?? '', isServer: false, isPartner: false }];
     }
-    const onRight = state.partnerOnRight?.[side] ?? 1;
     const isServingTeam =
       state.servingSide.toLowerCase() === side && !state.matchOver;
+    // The engine names the serving player outright. Deriving it from the court
+    // is only right for badminton and pickleball, where the server is by
+    // definition whoever stands in the court the score parity dictates; in
+    // tennis one player serves the whole game while the court alternates
+    // deuce/ad every point, so the fallback would highlight their partner on
+    // alternate rallies. Kept as a fallback for logs reduced before the engine
+    // tracked it.
     const serverSlot =
-      state.serverCourt === 'right' ? onRight : onRight === 1 ? 2 : 1;
+      state.serverSlot ??
+      slotInCourt(
+        state.partnerOnRight ?? { a: 1, b: 1 },
+        side === 'a' ? 'A' : 'B',
+        state.serverCourt
+      );
     return parts.map((name, idx) => {
       const isServer = isServingTeam && idx + 1 === serverSlot;
       return { name, isServer, isPartner: isServingTeam && !isServer };
@@ -96,6 +114,51 @@ export function useThemeState(
   // visually balanced; themes that prefer "tabulate all games" can read
   // `games` directly instead.
   const priorGames = computed(() => games.value.slice(0, -1));
+
+  /**
+   * True when the format has a point tier below the entries in `state.games` —
+   * i.e. tennis and padel, where a `games` entry is a SET and the live rally
+   * tally sits in `state.points`.
+   *
+   * Themes use it for two decisions: what the big numeral shows (see
+   * `primaryScore`) and whether the cell row includes the current entry. It
+   * should: under tennis scoring the current set's 4–3 is settled history at
+   * the set level and belongs in a box, exactly as a broadcast draws it —
+   * `Set1 6 | Set2 4 | 40`. Under rally scoring the current game IS the big
+   * numeral, so including it would print the same number twice.
+   */
+  const showsPointTier = computed(() => configRef?.value.scoring === 'tennis');
+
+  /**
+   * Captions for whatever one entry of `state.games` is in this format: a GAME
+   * for badminton / pickleball / table tennis, a SET for tennis and padel.
+   *
+   * Shared here rather than ternaried into each of the eleven themes, all of
+   * which print some version of this — a "GAME 2" header, a "G3" chip, a "GAME
+   * WON" flag — and every one of which said "game" against a tennis match,
+   * where a game is the tier below and the header was off by a whole level.
+   */
+  const unitWord = computed(() =>
+    configRef ? unitNoun(configRef.value).toUpperCase() : 'GAME'
+  );
+  const unitInitial = computed(() => unitWord.value.charAt(0));
+  const wonLabel = computed(() => `${unitWord.value} WON`);
+
+  /**
+   * The big numeral a theme prints as "the score right now".
+   *
+   * A string, not a number, because tennis's is "15" / "40" / "AD" rather than
+   * a rally count — and a tiebreak inside that same format goes back to plain
+   * integers. Every other format returns the current game's score unchanged,
+   * so themes that swapped `currentGame[side]` for this render identically.
+   */
+  const primaryScore = (side: SideKey): string => {
+    const cfg = configRef?.value;
+    const s = stateRef.value;
+    if (!cfg || cfg.scoring !== 'tennis')
+      return String(currentGame.value[side]);
+    return pointLabel(s.points, side === 'a' ? 'A' : 'B', s.inTiebreak, cfg);
+  };
 
   // Active rally play — false during betweenGames + matchOver so SERVE chips
   // give way to GAME WON / WINNER chips at game/match boundaries.
@@ -132,6 +195,11 @@ export function useThemeState(
     gamesWon,
     currentGame,
     priorGames,
+    primaryScore,
+    showsPointTier,
+    unitWord,
+    unitInitial,
+    wonLabel,
     isServingSide,
     isLastGameWinner,
     isMatchWinner,
@@ -278,6 +346,28 @@ export function useStatusPill(stateRef: Ref<RacquetState>) {
         tone: 'accent',
         side: pointSide(s.matchPoint),
       };
+    // Set point outranks game point and is strictly narrower — the engine only
+    // sets it when the same rally would also take the game — so checking it
+    // first is what makes a theme say SET POINT rather than the weaker truth.
+    if (s.setPoint.a || s.setPoint.b)
+      return {
+        label: 'SET POINT',
+        tone: 'accent',
+        side: pointSide(s.setPoint),
+      };
+    // Both sides one rally from the game: broadcasts name it rather than
+    // flagging GAME POINT against both.
+    if (s.decidingPoint)
+      return {
+        label:
+          s.decidingPoint === 'golden'
+            ? 'GOLDEN POINT'
+            : s.decidingPoint === 'star'
+              ? 'STAR POINT'
+              : 'DECIDING POINT',
+        tone: 'accent',
+        side: null,
+      };
     if (s.isGamePoint)
       return {
         label: 'GAME POINT',
@@ -290,6 +380,14 @@ export function useStatusPill(stateRef: Ref<RacquetState>) {
     // `accent` tone so every theme picks it up without a new class branch.
     if (s.isDeuce) return { label: 'DEUCE', tone: 'accent', side: null };
     if (s.atInterval) return { label: 'INTERVAL', tone: 'muted', side: null };
+    // Lowest priority: a tiebreak lasts many rallies, so it is context rather
+    // than an event, and anything above it is news.
+    if (s.inTiebreak)
+      return {
+        label: s.inMatchTiebreak ? 'MATCH TIEBREAK' : 'TIEBREAK',
+        tone: 'muted',
+        side: null,
+      };
     return null;
   });
 }
