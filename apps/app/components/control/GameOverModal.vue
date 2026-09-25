@@ -26,8 +26,10 @@ const props = withDefaults(
     matchScore: { a: number; b: number };
     nextGameNumber: number;
     sidesSwapped: boolean;
+    /** Offer the ends swap. False for squash, which has no ends to change. */
+    showEnds?: boolean;
   }>(),
-  { unitLabel: 'game' }
+  { unitLabel: 'game', showEnds: true }
 );
 
 // Sentence-cased for the headline and the button.
@@ -68,6 +70,7 @@ defineEmits<{
         >
       </div>
       <Button
+        v-if="showEnds"
         variant="outline"
         class="h-10 w-full font-medium mb-2"
         @click="$emit('swap-sides')"

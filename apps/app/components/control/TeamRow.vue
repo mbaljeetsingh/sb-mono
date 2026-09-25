@@ -52,6 +52,10 @@ const props = defineProps<{
    * under rally scoring the receiver can be at game point). */
   isMatchPoint: boolean;
   isGamePoint: boolean;
+  /** Chip text when this side is a point away. The parent names the tier —
+   *  SET PT under tennis scoring, STAR / GOLDEN PT in padel — which the two
+   *  booleans above can't express. Falls back to MATCH PT / GAME PT. */
+  pointChip?: string | null;
   cells: Cell[];
   matchOver: boolean;
   isGlowing: boolean;
@@ -223,6 +227,14 @@ const courtGeometry: Record<SportId, CourtGeometry> = {
   padel: {
     serviceLineFromNet: '69.5%',
     centreLine: { fromNet: '0px', fromOuter: '30.5%' },
+    sidelineInset: null,
+    longServiceFromOuter: null,
+  },
+  // Never drawn: squash has no net, so /control renders SquashCourt instead of
+  // two TeamRow halves. Present only because the map is keyed by every sport.
+  squash: {
+    serviceLineFromNet: null,
+    centreLine: null,
     sidelineInset: null,
     longServiceFromOuter: null,
   },
@@ -447,6 +459,7 @@ const courtSurface: Record<SportId, string> = {
   tennis: 'bg-court-tennis',
   pickleball: 'bg-court-pickleball',
   padel: 'bg-court-padel',
+  squash: 'bg-court-squash',
 };
 
 // Score tick — a brief scale-pop when a point lands. The score is now the
@@ -597,7 +610,7 @@ watch(
                 : 'bg-team-b text-team-b-foreground'
             "
           >
-            {{ isMatchPoint ? 'MATCH PT' : 'GAME PT' }}
+            {{ pointChip ?? (isMatchPoint ? 'MATCH PT' : 'GAME PT') }}
           </span>
         </span>
         <span class="flex flex-shrink-0 gap-1 pt-0.5">

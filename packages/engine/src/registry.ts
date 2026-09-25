@@ -38,7 +38,9 @@ export type SportPresetId =
   | 'padel-star'
   | 'padel-golden'
   | 'table-tennis'
-  | 'table-tennis-21';
+  | 'table-tennis-21'
+  | 'squash-par11'
+  | 'squash-classic';
 
 // Presets shipped on day one. Each preset is a self-contained RacquetConfig.
 // Cap = null means "no hard cap" — the win-by margin must be reached.
@@ -191,7 +193,7 @@ const padelGolden: RacquetConfig = {
 
 const tableTennis: RacquetConfig = {
   sport: 'table-tennis',
-  displayName: 'Table tennis (official, 11 · BO5)',
+  displayName: 'Table tennis (official, 11)',
   scoring: 'rally',
   pointsPerGame: 11,
   winBy: 2,
@@ -221,6 +223,34 @@ const tableTennis21: RacquetConfig = {
   serveRule: 'alternate',
   serveTurnLength: 5,
   endsChangeAt: 10,
+};
+
+// World Squash: point-a-rally to 11 by two, best of five. The server picks a
+// box at the start of each hand and alternates while keeping serve. No
+// interval and no change of ends — both players share the court.
+const squashPar11: RacquetConfig = {
+  sport: 'squash',
+  displayName: 'Squash (official, PAR 11)',
+  scoring: 'rally',
+  pointsPerGame: 11,
+  winBy: 2,
+  cap: null,
+  gamesToWin: 3,
+  intervalAt: null,
+  serveRule: 'rally-winner',
+  serveBox: 'choice',
+  singlesOnly: true,
+};
+
+// Traditional English hand-in/hand-out: only the server scores, games to 9,
+// and at 8–all the receiver chooses set one (to 9) or set two (to 10).
+const squashClassic: RacquetConfig = {
+  ...squashPar11,
+  displayName: 'Squash (classic, hand-in hand-out 9)',
+  scoring: 'side-out',
+  pointsPerGame: 9,
+  winBy: 1,
+  setChoiceAt: 8,
 };
 
 export type RacquetPresetEntry = {
@@ -268,6 +298,8 @@ export const sportPresets: Record<SportPresetId, RacquetPresetEntry> = {
   'padel-golden': entry('padel-golden', padelGolden),
   'table-tennis': entry('table-tennis', tableTennis, true),
   'table-tennis-21': entry('table-tennis-21', tableTennis21),
+  'squash-par11': entry('squash-par11', squashPar11, true),
+  'squash-classic': entry('squash-classic', squashClassic),
 };
 
 /** Default preset per sport — used when a UI just picks a sport without a specific format. */
@@ -277,6 +309,7 @@ export const defaultPresetBySport: Record<string, SportPresetId> = {
   pickleball: 'pickleball-official',
   padel: 'padel-official',
   'table-tennis': 'table-tennis',
+  squash: 'squash-par11',
 };
 
 /** Look up a preset; falls back to badminton-21 if unknown. */
@@ -290,6 +323,8 @@ export const presetsForSport = (sport: string): RacquetPresetEntry[] =>
     .sort((a, b) => Number(b.official ?? false) - Number(a.official ?? false));
 
 export {
+  squashClassic,
+  squashPar11,
   tennisOfficial,
   tennisMatchTiebreak,
   tennisFast4,

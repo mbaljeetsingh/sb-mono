@@ -83,6 +83,7 @@
   --color-court-tennis: var(--court-tennis);
   --color-court-pickleball: var(--court-pickleball);
   --color-court-padel: var(--court-padel);
+  --color-court-squash: var(--court-squash);
   --color-court-line: var(--court-line);
 
   /* Generic mat colors for the operator's court-color choice on /control
@@ -104,6 +105,7 @@
   --color-court-tennis-accent: var(--court-tennis-accent);
   --color-court-pickleball-accent: var(--court-pickleball-accent);
   --color-court-padel-accent: var(--court-padel-accent);
+  --color-court-squash-accent: var(--court-squash-accent);
 
   /* Radius scale (shadcn-vue ladder) */
   --radius-sm: calc(var(--radius) - 4px);
@@ -212,6 +214,8 @@
   --court-tennis: #e4e0d2;
   --court-pickleball: #dbe8e4;
   --court-padel: #d6e4ee;
+  /* Maple court floor. */
+  --court-squash: #efe2c8;
   --court-blue: #d8e6f5;
   --court-red: #f2dad6;
   --court-clay: #eddbc9;
@@ -224,6 +228,7 @@
   --court-tennis-accent: #46617a;
   --court-pickleball-accent: #2a6b5c;
   --court-padel-accent: #3a6285;
+  --court-squash-accent: #8a5a1f;
 }
 
 /* Dark — the default mode. Evening league play, dim halls and OBS operators
@@ -287,6 +292,7 @@
   --court-tennis: #2b4a63;
   --court-pickleball: #1f4a40;
   --court-padel: #16324d;
+  --court-squash: #4a3622;
   --court-blue: #14406e;
   --court-red: #6e1d14;
   --court-clay: #7c4426;
@@ -299,6 +305,7 @@
   --court-tennis-accent: #a8c8e8;
   --court-pickleball-accent: #7fd0be;
   --court-padel-accent: #93c5e8;
+  --court-squash-accent: #e6bd7c;
 }
 
 /* Default border colour.

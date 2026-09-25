@@ -41,6 +41,36 @@ export type RacquetEvent =
     })
   | (BaseEvent & { type: 'point'; side: SideId })
   | (BaseEvent & { type: 'undo' })
+  | (BaseEvent & {
+      /**
+       * Squash: the server's choice of service box at the start of a hand
+       * (WSF 2025 rule 5 — at the start of each game and each change of
+       * server the server chooses a box, then alternates while retaining
+       * serve). Only valid before the hand's first rally.
+       */
+      type: 'serve.box';
+      court: 'right' | 'left';
+    })
+  | (BaseEvent & {
+      /**
+       * Classic (hand-in/hand-out) squash: at 8–all the receiver chooses to
+       * play the game to 9 ("set one") or 10 ("set two"). Only valid while
+       * the game stands at `setChoiceAt`-all.
+       */
+      type: 'game.target';
+      to: number;
+    })
+  | (BaseEvent & {
+      /**
+       * Table-tennis doubles: the serving pair's choice of which of them
+       * serves first in the current game (ITTF 2.14.2 — "the pair having the
+       * right to serve first shall choose which of them will do so"). Only
+       * valid before the game's first rally; ignored anywhere else. The first
+       * receiver follows from it by rule, so it is not chosen.
+       */
+      type: 'serve.choose';
+      slot: 1 | 2;
+    })
   | (BaseEvent & { type: 'game.end' })
   | (BaseEvent & { type: 'sides.swap' })
   | (BaseEvent & { type: 'team.rename'; side: SideId; name: string })
@@ -158,6 +188,34 @@ export type RacquetState = BaseState & {
   endsChange: boolean;
   /** Tennis family: the current set is a single match tiebreak (to 10). */
   inMatchTiebreak: boolean;
+  /**
+   * Table-tennis doubles: the slot the serving pair chose to serve first in
+   * each game, by game index. Games with no choice default to slot 1.
+   */
+  firstServerByGame: Record<number, 1 | 2>;
+  /**
+   * The next rally decides the game for either side — padel's GOLDEN point
+   * (40–40 under golden-point scoring) or STAR point (the third deuce), and
+   * the no-ad / sudden-death "deciding point" in tennis. Broadcasts name it
+   * instead of showing GAME POINT against both sides. null otherwise.
+   */
+  decidingPoint: 'golden' | 'star' | 'deciding' | null;
+  /**
+   * Squash (`serveBox: 'choice'`): rallies the current server has won in a
+   * row this hand, and the box they chose to open it from. The server
+   * alternates boxes on every rally they win, so the box is `handBox` when
+   * `serveRun` is even and the other one when odd.
+   */
+  serveRun: number;
+  handBox: 'right' | 'left';
+  /**
+   * Classic squash: the game's target once the receiver has made the set
+   * choice at 8–all (9 for set one, 10 for set two). null = the preset's own
+   * target. `awaitingSetChoice` is true while the game stands at 8–all with
+   * no choice recorded — if none is ever made, it plays as set one.
+   */
+  gameTarget: number | null;
+  awaitingSetChoice: boolean;
   betweenGames: boolean;
   winner: SideId | null;
   atInterval: boolean;
@@ -320,6 +378,20 @@ export type RacquetConfig = {
   partnerRotation?: 'serve-swap' | 'fixed';
   /** Sports played only as doubles (padel). The UI hides the singles option. */
   doublesOnly?: boolean;
+  /** Sports played only as singles here (squash). The UI hides doubles. */
+  singlesOnly?: boolean;
+  /**
+   * Where the server serves from. 'parity' (default): the court their own
+   * score's parity dictates — badminton, pickleball. 'choice': squash — the
+   * server picks a box at the start of each hand and alternates on every
+   * rally they win while keeping serve.
+   */
+  serveBox?: 'parity' | 'choice';
+  /**
+   * Classic squash: the level score at which the receiver may extend the game
+   * by one point (8 → "set one" to 9 or "set two" to 10).
+   */
+  setChoiceAt?: number | null;
   /**
    * Fallback for whether THIS match is doubles, for logs whose `match.start`
    * predates `isDoubles`. A per-match fact rather than a preset property,
@@ -345,6 +417,12 @@ export const initialRacquetState = (): RacquetState => ({
   receiverSwap: null,
   endsChange: false,
   inMatchTiebreak: false,
+  firstServerByGame: {},
+  decidingPoint: null,
+  serveRun: 0,
+  handBox: 'right',
+  gameTarget: null,
+  awaitingSetChoice: false,
   betweenGames: false,
   matchOver: false,
   winner: null,
@@ -455,6 +533,16 @@ const DEFAULT_GAME_TIER: TennisGameTier = { pointsToWin: 4, winBy: 2 };
 
 export const gameTierOf = (cfg: RacquetConfig): TennisGameTier =>
   cfg.gameTier ?? DEFAULT_GAME_TIER;
+
+/**
+ * The config a game is actually being played to — the preset's own, or the
+ * classic-squash set-one/set-two target once the receiver has chosen.
+ */
+export const effectiveConfig = (
+  state: Pick<RacquetState, 'gameTarget'>,
+  cfg: RacquetConfig
+): RacquetConfig =>
+  state.gameTarget ? { ...cfg, pointsPerGame: state.gameTarget } : cfg;
 
 /** True when the set standing calls for a tiebreak instead of another game. */
 export const isTiebreakScore = (
@@ -617,7 +705,11 @@ export const formatDetail = (cfg: RacquetConfig): string => {
   }
   if (countsGamesOnly(cfg)) return `one tap per game · win-by ${cfg.winBy}`;
   const parts = [
-    cfg.cap ? `cap ${cfg.cap}` : `win-by ${cfg.winBy}`,
+    cfg.setChoiceAt
+      ? `set one or two at ${cfg.setChoiceAt}–all`
+      : cfg.cap
+        ? `cap ${cfg.cap}`
+        : `win-by ${cfg.winBy}`,
     cfg.intervalAt ? `interval ${cfg.intervalAt}` : null,
     cfg.scoring === 'side-out' ? 'serving side scores' : null,
     cfg.serveRule === 'alternate'

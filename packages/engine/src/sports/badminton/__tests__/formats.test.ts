@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  padelGolden,
   padelStar,
   pickleballOfficial,
   pickleballOfficial15,
@@ -290,5 +291,90 @@ describe('side-out penalty between games', () => {
     );
     expect(s.games[0]).toEqual({ a: 11, b: 0 });
     expect(s.games[1]).toEqual({ a: 0, b: 1 });
+  });
+});
+
+describe('table tennis doubles — the serving pair chooses its first server', () => {
+  const tt = (events: RacquetEvent[]) => reduce(events, tableTennis);
+  const who = (s: ReturnType<typeof tt>) =>
+    `${s.servingSide}${s.serverSlot}→${s.servingSide === 'A' ? 'B' : 'A'}${s.receiverSlot}`;
+  const game1ToA = times('A', 11).map(point);
+
+  it('game 2: B picks B2, who serves to the player who served to them', () => {
+    // Game 1 ran A1→B1, B1→A2, A2→B2, B2→A1 — so A2 served to B2.
+    const s = tt([
+      start('A', { isDoubles: true }),
+      ...game1ToA,
+      ev('game.end'),
+      ev('serve.choose', { slot: 2 }),
+    ]);
+    expect(who(s)).toBe('B2→A2');
+    // And the cycle continues from that choice: B2→A2, A2→B1, B1→A1, A1→B2.
+    const later = tt([
+      start('A', { isDoubles: true }),
+      ...game1ToA,
+      ev('game.end'),
+      ev('serve.choose', { slot: 2 }),
+      point('A'),
+      point('A'),
+    ]);
+    expect(who(later)).toBe('A2→B1');
+  });
+
+  it('works between games, before "Start game" is tapped', () => {
+    const s = tt([
+      start('A', { isDoubles: true }),
+      ...game1ToA,
+      ev('serve.choose', { slot: 2 }),
+    ]);
+    expect(s.betweenGames).toBe(true);
+    expect(who(s)).toBe('B2→A2');
+  });
+
+  it('is ignored once the game has started', () => {
+    const s = tt([
+      start('A', { isDoubles: true }),
+      point('A'),
+      ev('serve.choose', { slot: 2 }),
+    ]);
+    expect(s.firstServerByGame).toEqual({});
+    expect(who(s)).toBe('A1→B1');
+  });
+
+  it('is ignored outside table-tennis doubles', () => {
+    const s = reduce(
+      [start('A', { isDoubles: true }), ev('serve.choose', { slot: 2 })],
+      badminton21
+    );
+    expect(s.firstServerByGame).toEqual({});
+  });
+});
+
+describe('decidingPoint — naming the one-rally game', () => {
+  const deuce: SideId[] = ['A', 'A', 'A', 'B', 'B', 'B'];
+
+  it('golden point in padel', () => {
+    expect(play(padelGolden, deuce).decidingPoint).toBe('golden');
+  });
+
+  it('star point at the third deuce, not before', () => {
+    expect(play(padelStar, [...deuce, 'A', 'B']).decidingPoint).toBeNull();
+    expect(play(padelStar, [...deuce, 'A', 'B', 'B', 'A']).decidingPoint).toBe(
+      'star'
+    );
+  });
+
+  it('deciding point in no-ad tennis, and none under advantage', () => {
+    expect(play(tennisMatchTiebreak, deuce).decidingPoint).toBe('deciding');
+    expect(play(tennisOfficial, deuce).decidingPoint).toBeNull();
+  });
+
+  it('Fast4 tiebreak sudden death at 4–4', () => {
+    const at44 = [...alternatingGames(6), ...times('A', 4), ...times('B', 4)];
+    expect(play(tennisFast4, at44).decidingPoint).toBe('deciding');
+  });
+
+  it('clears once the rally is played', () => {
+    expect(play(padelGolden, [...deuce, 'A']).decidingPoint).toBeNull();
   });
 });

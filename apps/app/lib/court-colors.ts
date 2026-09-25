@@ -37,6 +37,12 @@ export const courtColorVariants: Record<SportId, CourtColorVariant[]> = {
     { id: 'green', label: 'Turf green', class: 'bg-court-turf' },
     { id: 'clay', label: 'Terracotta', class: 'bg-court-clay' },
   ],
+  // Club courts are maple; the tour's glass show courts are usually floored
+  // blue so the ball reads on camera.
+  squash: [
+    { id: 'maple', label: 'Maple', class: 'bg-court-squash' },
+    { id: 'blue', label: 'Glass court blue', class: 'bg-court-blue' },
+  ],
 };
 
 /** Resolve the mat class for a sport + stored choice (unknown ids fall back

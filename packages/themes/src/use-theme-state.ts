@@ -355,6 +355,19 @@ export function useStatusPill(stateRef: Ref<RacquetState>) {
         tone: 'accent',
         side: pointSide(s.setPoint),
       };
+    // Both sides one rally from the game: broadcasts name it rather than
+    // flagging GAME POINT against both.
+    if (s.decidingPoint)
+      return {
+        label:
+          s.decidingPoint === 'golden'
+            ? 'GOLDEN POINT'
+            : s.decidingPoint === 'star'
+              ? 'STAR POINT'
+              : 'DECIDING POINT',
+        tone: 'accent',
+        side: null,
+      };
     if (s.isGamePoint)
       return {
         label: 'GAME POINT',

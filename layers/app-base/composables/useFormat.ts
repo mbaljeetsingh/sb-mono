@@ -191,6 +191,8 @@ export function useFormat(
     'padel-golden': 'Padel · GP',
     'table-tennis': 'TT 11',
     'table-tennis-21': 'TT 21',
+    'squash-par11': 'PAR 11',
+    'squash-classic': 'Classic 9',
   };
 
   const presetLabel = computed(

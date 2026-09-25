@@ -31,6 +31,7 @@ import type {
 } from '../racquet-shared';
 import {
   computeAlternatingServer,
+  effectiveConfig,
   initialRacquetState,
   isDeuceScore,
   isGameWon,
@@ -91,7 +92,14 @@ const freshGameFields = (
   receiverSwap: null,
   points: { a: 0, b: 0 },
   atInterval: false,
+  // Squash: every game opens a fresh hand from the right box, target reset.
+  serveRun: 0,
+  handBox: 'right',
+  gameTarget: null,
 });
+
+/** A change of server (a new hand): squash's box choice and run reset. */
+const newHand = { serveRun: 0, handBox: 'right' } as const;
 
 function applyEvent(
   state: RacquetState,
@@ -143,6 +151,53 @@ function applyEvent(
     case 'undo':
       // No-op here; undo is handled at the event-list level via applyUndo().
       return state;
+
+    case 'serve.box': {
+      // Squash only, and only at the start of a hand — choosing mid-hand
+      // would move where the rallies already played were served from.
+      if (
+        state.matchOver ||
+        cfg.serveBox !== 'choice' ||
+        state.serveRun !== 0
+      ) {
+        return state;
+      }
+      return { ...state, handBox: ev.court };
+    }
+
+    case 'game.target': {
+      // Classic squash set one / set two, only while the game is level at the
+      // choice score. Clamped to the two legal targets.
+      const at = cfg.setChoiceAt;
+      const game = liveGame(state);
+      if (state.matchOver || !at || game.a !== at || game.b !== at)
+        return state;
+      const to = Math.min(at + 2, Math.max(at + 1, Math.round(ev.to)));
+      return { ...state, gameTarget: to };
+    }
+
+    case 'serve.choose': {
+      // Table-tennis doubles only, and only before the game's first rally —
+      // a choice made mid-game would rewrite who served every rally so far.
+      const game = liveGame(state);
+      if (
+        state.matchOver ||
+        !state.doubles ||
+        cfg.scoring !== 'rally' ||
+        cfg.serveRule !== 'alternate' ||
+        game.a !== 0 ||
+        game.b !== 0
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        firstServerByGame: {
+          ...state.firstServerByGame,
+          [liveGameIndex(state)]: ev.slot,
+        },
+      };
+    }
 
     case 'walkover':
       // First terminal event wins, like every other ending below. Without this
@@ -325,10 +380,17 @@ function applyRallyPoint(
     (next.a === cfg.intervalAt || next.b === cfg.intervalAt);
   if (reachedInterval) intervalSeen.add(gameIdx);
 
-  const winner = isGameWon(next, cfg);
+  // Squash: the server keeps the hand while winning rallies; losing one is a
+  // change of server and a fresh box choice.
+  const run =
+    working.servingSide === side
+      ? { serveRun: working.serveRun + 1, handBox: working.handBox }
+      : newHand;
+
+  const winner = isGameWon(next, effectiveConfig(working, cfg));
   if (winner) {
     return closeGame(
-      { ...working, servingSide, partnerOnRight },
+      { ...working, ...run, servingSide, partnerOnRight },
       winner,
       newGames,
       cfg
@@ -339,6 +401,7 @@ function applyRallyPoint(
   const crossedEnds = crossedMidpoint(working, next, endsAt, cfg);
   return {
     ...working,
+    ...run,
     games: newGames,
     servingSide,
     partnerOnRight,
@@ -396,10 +459,11 @@ function rotatePartners(
  */
 function sideOut(working: RacquetState): RacquetState {
   if (working.doubles && working.serverNumber === 1) {
-    return { ...working, serverNumber: 2, serverIsPartner: true };
+    return { ...working, ...newHand, serverNumber: 2, serverIsPartner: true };
   }
   return {
     ...working,
+    ...newHand,
     servingSide: other(working.servingSide),
     serverNumber: 1,
     serverIsPartner: false,
@@ -427,12 +491,22 @@ function creditSideOutPoint(
     working.servingSide === side,
     cfg
   );
-  const winner = isGameWon(next, cfg);
+  // A point on serve extends the hand (squash alternates boxes on it); a
+  // penalty point to the receivers doesn't touch the server's run.
+  const serveRun =
+    working.servingSide === side ? working.serveRun + 1 : working.serveRun;
+  const winner = isGameWon(next, effectiveConfig(working, cfg));
   if (winner) {
-    return closeGame({ ...working, partnerOnRight }, winner, newGames, cfg);
+    return closeGame(
+      { ...working, serveRun, partnerOnRight },
+      winner,
+      newGames,
+      cfg
+    );
   }
   return {
     ...working,
+    serveRun,
     games: newGames,
     partnerOnRight,
     endsChange: crossedMidpoint(working, next, cfg.endsChangeAt, cfg),
@@ -554,11 +628,17 @@ function applyCorrection(
   // under side-out, the "0–0–2" opening. Otherwise the correction is only
   // about the score and the service turn carries on.
   const atGameStart = cur.a === 0 && cur.b === 0;
+  // A set-one/set-two choice only survives a correction that leaves the game
+  // past the choice score; otherwise it would be applied to a game that
+  // never reached 8–all.
+  const keepsTarget =
+    !!cfg.setChoiceAt && Math.min(cur.a, cur.b) >= cfg.setChoiceAt;
   return {
     ...base,
     ...(atGameStart ? freshGameFields(cfg, state.doubles) : {}),
     points: { a: 0, b: 0 },
     inTiebreak: false,
+    gameTarget: keepsTarget ? state.gameTarget : null,
   };
 }
 
@@ -594,6 +674,11 @@ function seat(s: RacquetState, cfg: RacquetConfig): RacquetState {
   if (cfg.scoring === 'tennis') return seatTennis(s, cfg);
   if (cfg.scoring === 'rally' && cfg.serveRule === 'alternate') {
     return seatAlternating(s, cfg);
+  }
+  if (cfg.serveBox === 'choice') {
+    // Squash: the chosen box, alternating with every rally won this hand.
+    const court = s.serveRun % 2 === 0 ? s.handBox : flip(s.handBox);
+    return { ...s, serverCourt: court, serverSlot: 1, receiverSlot: 1 };
   }
 
   // Badminton, pickleball (both modes): the server stands in the court their
@@ -698,15 +783,21 @@ function seatAlternating(s: RacquetState, cfg: RacquetConfig): RacquetState {
     };
   }
 
-  // Build the cycle for this game from game 0.
+  // Build the cycle for this game from game 0. Each game's first server is the
+  // serving pair's choice (slot 1 unless they said otherwise); in game 1 the
+  // receiving pair's choice is made at the toss, which orders their slots.
   const init = s.matchInitialServer;
+  const chosen = (g: number): 1 | 2 => s.firstServerByGame[g] ?? 1;
   let cycle: Player[] = [
-    { side: init, slot: 1 },
+    { side: init, slot: chosen(0) },
     { side: other(init), slot: 1 },
   ];
   cycle = [cycle[0]!, cycle[1]!, partner(cycle[0]!), partner(cycle[1]!)];
   for (let g = 1; g <= gameIdx; g++) {
-    const first: Player = { side: g % 2 === 0 ? init : other(init), slot: 1 };
+    const first: Player = {
+      side: g % 2 === 0 ? init : other(init),
+      slot: chosen(g),
+    };
     const i = cycle.findIndex(
       (p) => p.side === first.side && p.slot === first.slot
     );
@@ -760,13 +851,21 @@ function flags(s: RacquetState, cfg: RacquetConfig): RacquetState {
       matchPoint: NO,
       setPoint: NO,
       isDeuce: false,
+      decidingPoint: null,
+      awaitingSetChoice: false,
     };
   }
   const game = liveGame(s);
   const toMatch = (side: SideId) => s.gamesWon[key(side)] + 1 >= cfg.gamesToWin;
+  const awaitingSetChoice =
+    !!cfg.setChoiceAt &&
+    s.gameTarget === null &&
+    game.a === cfg.setChoiceAt &&
+    game.b === cfg.setChoiceAt;
 
   let gp: { a: boolean; b: boolean };
   let sp = NO;
+  let decidingPoint: RacquetState['decidingPoint'] = null;
   let mp: { a: boolean; b: boolean };
   let isDeuce: boolean;
 
@@ -785,15 +884,25 @@ function flags(s: RacquetState, cfg: RacquetConfig): RacquetState {
       s.points.a >= tier.pointsToWin - 1 &&
       !gp.a &&
       !gp.b;
+    // Level and either side takes the game with the next rally.
+    if (gp.a && gp.b && s.points.a === s.points.b) {
+      decidingPoint =
+        !s.inTiebreak && 'suddenDeathAtDeuce' in tier && tier.suddenDeathAtDeuce
+          ? 'star'
+          : !s.inTiebreak && cfg.sport === 'padel'
+            ? 'golden'
+            : 'deciding';
+    }
   } else {
+    const eff = effectiveConfig(s, cfg);
     const canScore = (side: SideId) =>
       cfg.scoring !== 'side-out' || s.servingSide === side;
     gp = {
-      a: canScore('A') && wouldWinGameWithPoint(game, 'A', cfg),
-      b: canScore('B') && wouldWinGameWithPoint(game, 'B', cfg),
+      a: canScore('A') && wouldWinGameWithPoint(game, 'A', eff),
+      b: canScore('B') && wouldWinGameWithPoint(game, 'B', eff),
     };
     mp = { a: gp.a && toMatch('A'), b: gp.b && toMatch('B') };
-    isDeuce = isDeuceScore(game, cfg);
+    isDeuce = isDeuceScore(game, eff);
   }
 
   return {
@@ -804,6 +913,8 @@ function flags(s: RacquetState, cfg: RacquetConfig): RacquetState {
     matchPoint: mp,
     setPoint: sp,
     isDeuce,
+    decidingPoint,
+    awaitingSetChoice,
   };
 }
 

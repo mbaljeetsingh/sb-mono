@@ -35,6 +35,7 @@ import GameOverModal from '~/components/control/GameOverModal.vue';
 import MatchOverModal from '~/components/control/MatchOverModal.vue';
 import MatchStateSheet from '~/components/control/MatchStateSheet.vue';
 import ScoreCorrectSheet from '~/components/control/ScoreCorrectSheet.vue';
+import SquashCourt from '~/components/control/SquashCourt.vue';
 import TeamRow from '~/components/control/TeamRow.vue';
 import TossSheet from '~/components/control/TossSheet.vue';
 import { courtColorVariants, courtSurfaceClass } from '~/lib/court-colors';
@@ -584,10 +585,75 @@ const canSwapSidesVisible = computed(
 // there.
 // `players` and the joined `teamNames` string are two views of the same fact
 // and must move together — see lib/partner-swap.ts for why.
+/** Squash is drawn by SquashCourt: one shared court, no net, no halves. */
+const isSquash = computed(() => sport.value === 'squash');
+
+/**
+ * Squash: the server picks a service box at the start of every hand (WSF 2025
+ * rule 5) and then alternates while holding serve. The choice is offered only
+ * before the hand's first rally — the engine ignores it anywhere else.
+ */
+const canChooseServeBox = computed(
+  () =>
+    config.value.serveBox === 'choice' &&
+    state.value.serveRun === 0 &&
+    !state.value.matchOver
+);
+const otherBox = computed(() =>
+  state.value.serverCourt === 'right' ? 'left' : 'right'
+);
+const chooseServeBox = () => {
+  if (!guardActive()) return;
+  vibrate(10);
+  append({
+    type: 'serve.box',
+    court: otherBox.value,
+  } as Omit<RacquetEvent, 'id' | 'ts'>);
+};
+
+/**
+ * Classic squash at 8–all: the RECEIVER chooses set one (to 9) or set two (to
+ * 10). Until they do the game plays as set one, so a missed prompt can't hang
+ * the match.
+ */
+const setChooserName = computed(() =>
+  state.value.servingSide === 'A' ? displayNameB.value : displayNameA.value
+);
+const chooseGameTarget = (to: number) => {
+  if (!guardActive()) return;
+  vibrate(10);
+  append({ type: 'game.target', to } as Omit<RacquetEvent, 'id' | 'ts'>);
+};
+
+/** Table-tennis doubles: a four-player serving cycle rather than service
+ * courts, so the pair's choice of first server is its own event. */
+const isTTDoubles = computed(
+  () => config.value.serveRule === 'alternate' && state.value.doubles
+);
+/**
+ * Before a later game of a table-tennis doubles match, the serving pair
+ * chooses which of them serves first (ITTF 2.14.2). That is recorded as a
+ * `serve.choose` event, NOT by renaming the pair's players: the first receiver
+ * is derived from who served to whom in the previous game, so swapping names
+ * would silently re-assign the previous game too. Pre-match, the name swap is
+ * still right — nothing has been played that it could rewrite.
+ */
+const isTTServeChoice = computed(
+  () => isTTDoubles.value && !canSwapInitial.value
+);
 const swapPlayers = (side: SideId) => {
   if (!canSwapInitial.value && !canSwapAtGameStart.value) return;
   const isDoubles = matchMeta.value.isDoubles ?? false;
   if (!isDoubles) return;
+  if (isTTServeChoice.value) {
+    if (side !== state.value.servingSide || !guardActive()) return;
+    vibrate(10);
+    append({
+      type: 'serve.choose',
+      slot: state.value.serverSlot === 1 ? 2 : 1,
+    } as Omit<RacquetEvent, 'id' | 'ts'>);
+    return;
+  }
   vibrate(10);
   const { players, teamNames } = swapTeamPlayers(
     matchMeta.value.players ?? { a1: '', a2: '', b1: '', b2: '' },
@@ -601,13 +667,16 @@ const swapPlayers = (side: SideId) => {
 // (or anyone on an anon match) can persist it; co-scorers' edits would
 // silently fail under RLS. Hide the arrow rather than letting them perform
 // a local-only swap that never syncs to the owner.
-const canSwapPlayersA = computed(
-  () =>
-    canEditMeta.value &&
-    (canSwapInitial.value || canSwapAtGameStart.value) &&
-    (matchMeta.value.isDoubles ?? false)
-);
-const canSwapPlayersB = canSwapPlayersA;
+const canSwapPlayersFor = (side: SideId) =>
+  (canSwapInitial.value || canSwapAtGameStart.value) &&
+  (matchMeta.value.isDoubles ?? false) &&
+  // The table-tennis choice is an event any scorer can write, and only the
+  // SERVING pair has one; the first receiver follows from it by rule.
+  (isTTServeChoice.value
+    ? side === state.value.servingSide
+    : canEditMeta.value);
+const canSwapPlayersA = computed(() => canSwapPlayersFor('A'));
+const canSwapPlayersB = computed(() => canSwapPlayersFor('B'));
 
 // Pre-match setup lives in the footer bar rather than as pills floating over
 // the court: the pills were live targets sitting inside the score button, and
@@ -628,6 +697,22 @@ const showSetupBar = computed(
 const serveFirstLabel = computed(() =>
   state.value.servingSide === 'A' ? displayNameB.value : displayNameA.value
 );
+
+/** The chip on a team's half when it is a point away, naming the tier: match
+ * over set over the deciding-point names over plain game point. */
+const DECIDING_CHIP = {
+  golden: 'GOLDEN PT',
+  star: 'STAR PT',
+  deciding: 'DECIDING PT',
+} as const;
+const pointChipFor = (side: SideId): string | null => {
+  const s = state.value;
+  const k = side === 'A' ? 'a' : 'b';
+  if (s.matchPoint[k]) return 'MATCH PT';
+  if (s.setPoint[k]) return 'SET PT';
+  if (s.decidingPoint && s.gamePoint[k]) return DECIDING_CHIP[s.decidingPoint];
+  return s.gamePoint[k] ? 'GAME PT' : null;
+};
 
 // Glow the team(s) actually at game/match point — under rally scoring the
 // receiver can be at game point, so this must not follow servingSide. Both
@@ -879,11 +964,27 @@ const swapLabel = (cells: { label: string }[], reversed: boolean) => {
   return (reversed ? [...names].reverse() : names).join(' ⇄ ');
 };
 const isZoneFlowReversed = (o: string) => o === 'top' || o === 'right';
+// For the table-tennis choice, name the player who would serve first instead.
+const serveChoiceLabel = (side: SideId) => {
+  const p = teamMeta.value.players;
+  const other = state.value.serverSlot === 1 ? 2 : 1;
+  const name = (side === 'A' ? [p.a1, p.a2] : [p.b1, p.b2])[other - 1]?.trim();
+  return name ? `${name} serves first` : 'Other partner serves';
+};
 const swapLabelA = computed(() =>
-  swapLabel(cellsA.value, isZoneFlowReversed(orientationA.value))
+  isTTServeChoice.value
+    ? serveChoiceLabel('A')
+    : swapLabel(cellsA.value, isZoneFlowReversed(orientationA.value))
 );
 const swapLabelB = computed(() =>
-  swapLabel(cellsB.value, isZoneFlowReversed(orientationB.value))
+  isTTServeChoice.value
+    ? serveChoiceLabel('B')
+    : swapLabel(cellsB.value, isZoneFlowReversed(orientationB.value))
+);
+const swapTitle = computed(() =>
+  isTTServeChoice.value
+    ? 'Choose which partner serves first this game'
+    : 'Swap which partner starts in the right service court'
 );
 </script>
 
@@ -1031,6 +1132,17 @@ const swapLabelB = computed(() =>
                 : `Interval${intervalClock ? ` · ${intervalClock}` : ''}`
             }}
           </span>
+          <span
+            v-if="state.gameTarget && !state.betweenGames && !state.matchOver"
+            class="text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-sm text-warning bg-warning-soft"
+          >
+            {{
+              state.gameTarget === (config.setChoiceAt ?? 8) + 2
+                ? 'Set two'
+                : 'Set one'
+            }}
+            · to {{ state.gameTarget }}
+          </span>
           <!-- The sport's ends change is due (see canSwapAtDecider). A tap
                target rather than a label: it is the swap itself. -->
           <Button
@@ -1093,6 +1205,7 @@ const swapLabelB = computed(() =>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button
+            v-if="!isSquash"
             variant="ghost"
             size="icon-sm"
             class="size-6"
@@ -1144,16 +1257,41 @@ const swapLabelB = computed(() =>
         <div
           class="relative flex h-full w-full gap-1 overflow-hidden rounded-lg bg-foreground/50"
           :class="
-            layout === 'sideBySide'
-              ? 'flex-row'
-              : [
-                  'flex-col sm:w-auto sm:min-w-[20rem] sm:max-w-full',
-                  courtAspectClass[sport],
-                ]
+            isSquash
+              ? 'flex-col sm:max-w-md'
+              : layout === 'sideBySide'
+                ? 'flex-row'
+                : [
+                    'flex-col sm:w-auto sm:min-w-[20rem] sm:max-w-full',
+                    courtAspectClass[sport],
+                  ]
           "
         >
+          <!-- Squash: no net, one shared court — see SquashCourt for why the
+               tap targets and the court diagram are separate. -->
+          <SquashCourt
+            v-if="isSquash"
+            :order="sidesSwapped ? ['B', 'A'] : ['A', 'B']"
+            :names="{ a: displayNameA, b: displayNameB }"
+            :scores="{ a: currentUnit('A'), b: currentUnit('B') }"
+            :games-won="gamesWon"
+            :total-slots="config.gamesToWin + 1"
+            :point-chip="{ a: pointChipFor('A'), b: pointChipFor('B') }"
+            :glowing="{ a: isGlowingA, b: isGlowingB }"
+            :last-winner="lastPointWinner"
+            :serving-side="state.servingSide"
+            :server-court="state.serverCourt"
+            :cards="state.cards"
+            :match-over="state.matchOver"
+            :surface-class="courtSurface"
+            @tap="onTap"
+          />
           <template
-            v-for="team in sidesSwapped ? ['B', 'A'] : ['A', 'B']"
+            v-for="team in isSquash
+              ? []
+              : sidesSwapped
+                ? ['B', 'A']
+                : ['A', 'B']"
             :key="team"
           >
             <TeamRow
@@ -1168,6 +1306,7 @@ const swapLabelB = computed(() =>
               :total-slots="config.gamesToWin + 1"
               :is-match-point="state.matchPoint.a"
               :is-game-point="state.gamePoint.a"
+              :point-chip="pointChipFor('A')"
               :cells="cellsA"
               :match-over="state.matchOver"
               :is-glowing="isGlowingA"
@@ -1192,6 +1331,7 @@ const swapLabelB = computed(() =>
               :total-slots="config.gamesToWin + 1"
               :is-match-point="state.matchPoint.b"
               :is-game-point="state.gamePoint.b"
+              :point-chip="pointChipFor('B')"
               :cells="cellsB"
               :match-over="state.matchOver"
               :is-glowing="isGlowingB"
@@ -1267,7 +1407,11 @@ const swapLabelB = computed(() =>
         class="min-h-14 flex-shrink-0 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex flex-wrap items-center gap-2 border-t border-border"
       >
         <template v-if="showSetupBar">
+          <!-- Not for squash: both players share one court, so there are no
+               ends — and this button also re-picks the first server, which
+               "Switch server" beside it already does. -->
           <Button
+            v-if="!isSquash"
             variant="outline"
             class="flex-1 min-w-[7rem]"
             title="Put the other team on the other court"
@@ -1327,11 +1471,42 @@ const swapLabelB = computed(() =>
              AND at the start of any later game (score back to 0-0), and that
              second window is in-play, where the bar is showing Undo. Scoping it
              to the setup branch made it unreachable exactly there. -->
+        <!-- Squash: the server's box, choosable at the start of every hand. -->
+        <Button
+          v-if="canChooseServeBox"
+          variant="outline"
+          class="flex-1 min-w-[9rem]"
+          title="The server chooses a box at the start of each hand"
+          @click="chooseServeBox"
+        >
+          <ArrowLeftRight class="size-4" />
+          Serve from {{ otherBox }} box
+        </Button>
+        <!-- Classic squash at 8–all: the receiver sets the game to 9 or 10. -->
+        <template v-if="state.awaitingSetChoice && !state.matchOver">
+          <span class="w-full text-[11px] font-semibold text-fg-muted">
+            8–all · {{ setChooserName }} chooses
+          </span>
+          <Button
+            variant="outline"
+            class="flex-1"
+            @click="chooseGameTarget((config.setChoiceAt ?? 8) + 1)"
+          >
+            Set one · to {{ (config.setChoiceAt ?? 8) + 1 }}
+          </Button>
+          <Button
+            variant="outline"
+            class="flex-1"
+            @click="chooseGameTarget((config.setChoiceAt ?? 8) + 2)"
+          >
+            Set two · to {{ (config.setChoiceAt ?? 8) + 2 }}
+          </Button>
+        </template>
         <Button
           v-if="canSwapPlayersA"
           variant="outline"
           class="flex-1 min-w-[9rem]"
-          title="Swap which partner starts in the right service court"
+          :title="swapTitle"
           @click="swapPlayers('A')"
         >
           <ArrowLeftRight class="size-4 text-team-a" />
@@ -1341,7 +1516,7 @@ const swapLabelB = computed(() =>
           v-if="canSwapPlayersB"
           variant="outline"
           class="flex-1 min-w-[9rem]"
-          title="Swap which partner starts in the right service court"
+          :title="swapTitle"
           @click="swapPlayers('B')"
         >
           <ArrowLeftRight class="size-4 text-team-b" />
@@ -1367,6 +1542,7 @@ const swapLabelB = computed(() =>
         :match-score="gamesWon"
         :next-game-number="games.length + 1"
         :sides-swapped="sidesSwapped"
+        :show-ends="!isSquash"
         @start-next="onStartNextGame"
         @swap-sides="swapSidesVisualOnly"
       />

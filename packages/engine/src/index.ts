@@ -27,6 +27,7 @@ export type {
 export {
   formatDetail,
   formatHeadline,
+  effectiveConfig,
   gameTierOf,
   isMatchTiebreakSet,
   isTiebreakScore,
@@ -65,6 +66,8 @@ export {
   pickleballRally,
   presetsForSport,
   sportPresets,
+  squashClassic,
+  squashPar11,
   tableTennis,
   tableTennis21,
   tennisBasic,
