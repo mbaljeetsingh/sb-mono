@@ -104,6 +104,49 @@ export default defineNuxtConfig({
           name: 'apple-mobile-web-app-status-bar-style',
           content: 'black-translucent',
         },
+        // Link previews. Without these, every share of a scoreboard URL
+        // renders as a bare card with just the domain.
+        {
+          name: 'description',
+          content:
+            'Live scorecards for badminton, tennis, pickleball and table tennis. Score from your phone courtside and show the overlay in OBS, Streamlabs or full screen on a TV.',
+        },
+        { property: 'og:type', content: 'website' },
+        { property: 'og:site_name', content: 'Scoreboard' },
+        {
+          property: 'og:title',
+          content: 'Scoreboard — live scorecards for racquet sports',
+        },
+        {
+          property: 'og:description',
+          content:
+            'Score from your phone courtside. Show the overlay in OBS, Streamlabs or full screen on a TV. Free and open source, no sign-up needed.',
+        },
+        { property: 'og:url', content: 'https://scoreboard.beejaysoft.com/' },
+        {
+          property: 'og:image',
+          content: 'https://scoreboard.beejaysoft.com/og-image.png',
+        },
+        { property: 'og:image:width', content: '1200' },
+        { property: 'og:image:height', content: '630' },
+        {
+          property: 'og:image:alt',
+          content: 'Scoreboard — a live scorecard for racquet sports',
+        },
+        { name: 'twitter:card', content: 'summary_large_image' },
+        {
+          name: 'twitter:title',
+          content: 'Scoreboard — live scorecards for racquet sports',
+        },
+        {
+          name: 'twitter:description',
+          content:
+            'Score from your phone courtside. Show the overlay in OBS, Streamlabs or full screen on a TV.',
+        },
+        {
+          name: 'twitter:image',
+          content: 'https://scoreboard.beejaysoft.com/og-image.png',
+        },
       ],
       link: [
         { rel: 'icon', type: 'image/png', href: '/favicon.png' },
