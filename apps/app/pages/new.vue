@@ -568,7 +568,7 @@ const createMatch = async () => {
     </h1>
 
     <div
-      class="grid gap-7 px-4 pt-2 pb-48 md:pb-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-10"
+      class="grid grid-cols-1 gap-7 px-4 pt-2 pb-48 md:pb-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-10"
     >
       <!-- Format: sport → scoring → players & length. Top to bottom in the
            order each choice constrains the next. -->
