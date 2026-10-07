@@ -21,15 +21,22 @@ import { isNativePlatform } from '~/lib/native';
  */
 export function useKeepAwake() {
   if (isNativePlatform()) {
+    // Both hooks await an import before reaching the plugin, so a page left
+    // before the mount-side import resolves would otherwise call allowSleep()
+    // first and keepAwake() after it — holding the screen on app-wide.
+    let isMounted = false;
     onMounted(async () => {
+      isMounted = true;
       try {
         const { KeepAwake } = await import('@capacitor-community/keep-awake');
+        if (!isMounted) return;
         await KeepAwake.keepAwake();
       } catch (err) {
         console.warn('keep-awake:', err);
       }
     });
     onUnmounted(async () => {
+      isMounted = false;
       try {
         const { KeepAwake } = await import('@capacitor-community/keep-awake');
         await KeepAwake.allowSleep();

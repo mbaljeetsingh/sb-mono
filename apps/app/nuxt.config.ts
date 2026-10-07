@@ -43,6 +43,13 @@ if (
 ) {
   nativeEnv.NUXT_PUBLIC_SUPABASE_KEY = NATIVE_ENV.NUXT_PUBLIC_SUPABASE_KEY;
 }
+// A dev-loop build must never report into production analytics: the shell
+// skips posthog.client.ts's localhost guard (its origin is always localhost),
+// so the only thing standing between emulator taps and prod PostHog is the
+// key. Use .env's (usually empty) instead of falling back to production's.
+if (isNativeDev) {
+  nativeEnv.NUXT_PUBLIC_POSTHOG_KEY = process.env.NUXT_PUBLIC_POSTHOG_KEY ?? '';
+}
 
 export default defineNuxtConfig({
   extends: ['../../layers/app-base', '../../layers/ui'],

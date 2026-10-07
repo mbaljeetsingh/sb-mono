@@ -5,9 +5,9 @@
  * np-mono's DeleteAccountCard.
  *
  * What happens (see supabase/migrations/*_delete_my_account.sql):
- *   - avatar files are removed here first (storage rejects SQL deletes);
  *   - the delete_my_account RPC deletes the user's matches (events cascade)
  *     and the auth user, in one transaction;
+ *   - avatar files are then removed here (storage rejects SQL deletes);
  *   - this device's copies of those matches and the operator's saved player
  *     names are cleared, then the session is dropped.
  * The copy states this before the user confirms.
@@ -58,16 +58,24 @@ function open() {
   isOpen.value = true;
 }
 
-async function removeAvatarFiles(userId: string) {
-  // Best effort — the avatars bucket is public-read, so leftover files stay
-  // fetchable, but a storage hiccup must not block the deletion asked for.
+async function listAvatarPaths(userId: string): Promise<string[]> {
   try {
     const { data: files } = await supabase.storage.from('avatars').list(userId);
-    if (files?.length) {
-      await supabase.storage
-        .from('avatars')
-        .remove(files.map((file) => `${userId}/${file.name}`));
-    }
+    return (files ?? []).map((file) => `${userId}/${file.name}`);
+  } catch {
+    return [];
+  }
+}
+
+async function removeAvatarFiles(paths: string[]) {
+  // Best effort — the avatars bucket is public-read, so leftover files stay
+  // fetchable, but a storage hiccup must not undo a completed deletion.
+  // Runs AFTER the RPC: removing first meant a failed RPC left a live account
+  // pointing at a deleted photo. The caller's JWT is still valid here, and
+  // avatars_delete_own only checks auth.uid() against the folder.
+  if (!paths.length) return;
+  try {
+    await supabase.storage.from('avatars').remove(paths);
   } catch (err) {
     console.warn('avatar cleanup:', err);
   }
@@ -106,14 +114,14 @@ async function confirmDelete() {
       .select('id')
       .eq('owner_id', userId);
     const matchIds = (owned ?? []).map((row) => row.id);
-
-    await removeAvatarFiles(userId);
+    const avatarPaths = await listAvatarPaths(userId);
 
     // Idempotent: a retry after a lost response finds nothing left to delete
     // and still succeeds, so the teardown below always runs.
     const { error } = await supabase.rpc('delete_my_account');
     if (error) throw error;
 
+    await removeAvatarFiles(avatarPaths);
     await clearLocalData(matchIds);
     // Local scope: the server-side session died with the user row.
     await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
