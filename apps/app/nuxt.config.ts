@@ -104,9 +104,8 @@ export default defineNuxtConfig({
         // discover them lazily and re-optimise mid-session (np-mono saw that
         // reload bundle a second vue-router instance and kill app init).
         '@capacitor-community/keep-awake',
-        '@capacitor/app',
+        '@capacitor/core',
         '@capacitor/splash-screen',
-        '@capacitor/status-bar',
         'idb-keyval',
         'lucide-vue-next',
         'modern-screenshot',

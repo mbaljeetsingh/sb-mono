@@ -44,8 +44,16 @@ export function useKeepAwake() {
   const wakeLock = useWakeLock();
   let isRequesting = false;
 
+  // Not `wakeLock.isActive`: after the browser drops the lock, VueUse keeps
+  // the released sentinel in its ref, so isActive stays true and no tap would
+  // ever re-acquire. Ask the sentinel itself.
+  const isHeld = () => {
+    const sentinel = wakeLock.sentinel.value;
+    return !!sentinel && !sentinel.released;
+  };
+
   const acquire = async () => {
-    if (!wakeLock.isSupported.value || wakeLock.isActive.value) return;
+    if (!wakeLock.isSupported.value || isHeld()) return;
     if (isRequesting || document.visibilityState !== 'visible') return;
     isRequesting = true;
     try {
