@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 // directory name is not part of the auto-import name — and the surrounding
 // pages import their components explicitly regardless.
 import MatchSlot from '~/components/overlay/MatchSlot.vue';
+import { useKeepAwake } from '~/composables/useKeepAwake';
 
 // The OBS-facing half of a dynamic URL. Pasted into a browser source once and
 // never edited again; the operator rebinds it from the app between matches and
@@ -16,6 +17,10 @@ import MatchSlot from '~/components/overlay/MatchSlot.vue';
 definePageMeta({ layout: false, colorMode: 'light' });
 
 const route = useRoute();
+
+// Overlay URLs also get opened full-screen on a venue TV or tablet, which
+// must not dim mid-match. A no-op inside OBS's browser source.
+useKeepAwake();
 const dynamicId = computed(() => String(route.params.id ?? ''));
 const { boundMatchId, loaded: bindingLoaded } = useDynamicBinding(dynamicId);
 

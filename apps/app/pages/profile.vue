@@ -9,6 +9,7 @@ import { toast } from 'vue-sonner';
 // this into `import type`; it only resolves at runtime via Nuxt auto-import).
 import ProfilePhotoUpload from '~/components/common/ProfilePhotoUpload.vue';
 import ObsUrls from '~/components/stream/ObsUrls.vue';
+import DeleteAccountCard from '~/components/profile/DeleteAccountCard.vue';
 import { useAuth } from '~/composables/useAuth';
 import { useUserStore } from '~/stores/user';
 
@@ -207,5 +208,7 @@ const savePassword = async () => {
         </Button>
       </form>
     </section>
+
+    <DeleteAccountCard />
   </div>
 </template>

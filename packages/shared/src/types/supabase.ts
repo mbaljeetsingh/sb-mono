@@ -287,6 +287,7 @@ export type Database = {
         Args: { p_event_ids: string[]; p_match_id: string; p_token: string }
         Returns: undefined
       }
+      delete_my_account: { Args: never; Returns: undefined }
       get_my_permissions: { Args: never; Returns: string[] }
       regenerate_write_token: { Args: { p_match_id: string }; Returns: string }
     }

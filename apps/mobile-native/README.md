@@ -70,8 +70,6 @@ serves a cached web build for the native task.
   Apple buttons render disabled on both forms. Enabling them needs np-mono's
   `native-auth.ts` deep-link flow (`@capacitor/browser` +
   `com.beejaysoft.scoreboard://auth/callback`, allow-listed in Supabase).
-- **In-app account deletion** — required by App Store 5.1.1(v) for any app
-  that lets users create accounts; not built yet.
 - **Password reset** in the app opens the web `/auth/forgot-password` in the
   system browser: the PKCE verifier lives in the WebView, so a reset link
   (which opens in the browser) can only be completed if it started there.

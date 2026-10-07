@@ -424,6 +424,8 @@ Auth is **optional**. Anonymous scoring is the default; sign-in unlocks ownershi
 - `get_my_permissions()` RPC — returns the role's permission list for the client.
 - `handle_new_user()` trigger — creates `public.users` row + grants default `free` role; pulls `display_name` + `avatar_url` from `raw_user_meta_data` (Google auto-populates).
 
+**Account deletion:** `/profile` → `DeleteAccountCard` removes the avatar files, then calls the `delete_my_account()` RPC (security definer, caller-only), which deletes the user's matches (events cascade) and the `auth.users` row in one transaction; profile, roles and dynamic URLs cascade. Required by App Store 5.1.1(v) / Play.
+
 **Avatar upload:** drag-drop or click in `ProfilePhotoUpload.vue` → `browser-image-compression` (≤200KB / ≤512px / WebP) → `supabase.storage.from('avatars').upload(`{userId}/{ts}.{ext}`)` → `public.users.avatar_url`. Bucket is public-read, owner-write under `{user_id}/...` (folder-prefix RLS in migration `20260505000002_avatars_storage`).
 
 ## 13. Monorepo + apps split

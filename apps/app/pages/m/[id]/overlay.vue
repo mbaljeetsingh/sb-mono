@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { getTheme } from '@sb/themes';
+import { useKeepAwake } from '~/composables/useKeepAwake';
 
 definePageMeta({ layout: false, colorMode: 'light' });
 
 const route = useRoute();
+
+// Overlay URLs also get opened full-screen on a venue TV or tablet, which
+// must not dim mid-match. A no-op inside OBS's browser source.
+useKeepAwake();
 const matchId = computed(() => String(route.params.id ?? ''));
 
 // Theme resolution order: ?theme= query param (per-link override) → the
