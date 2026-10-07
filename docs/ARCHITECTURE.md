@@ -263,7 +263,7 @@ Initial mount
 
 **Global pending pill.** `useSyncStatus` is a module-scoped reactive store fed by `useEvents.reportPending()`. `AppHeader` renders a `SyncStatusPill` showing "Syncing N…" (online with pending) or "Offline — N queued" (offline with pending). The pill hides when `total === 0`.
 
-**Capacitor / SQLite (deferred — E2.9).** When mobile native ships, swap the storage layer to `@capacitor-community/sqlite` behind a thin `Storage` interface. The diff-based reconciliation logic stays unchanged.
+**Capacitor / SQLite (deferred).** The native shell (E2.9) ships on the same IDB store, which persists in both WebViews. If it ever proves insufficient, swap the storage layer to `@capacitor-community/sqlite` behind a thin `Storage` interface. The diff-based reconciliation logic stays unchanged.
 
 ## 5. The three rendering surfaces
 
@@ -401,6 +401,7 @@ If `p75 LCP > 4s` for 30 minutes → alert. If error rate > 1% of sessions for 3
 |---|---|---|
 | `apps/app` | Netlify | Existing pipeline, edge functions, Git-driven deploys |
 | `apps/web` (marketing) | Netlify | Same |
+| `apps/mobile-native` | App Store + Play Store | Capacitor 8 shell around a `NUXT_NATIVE=1 nuxt generate` static bundle of `apps/app` (no PWA/SW, localStorage-backed Supabase session, prod backend baked from `native-env.ts`); see its README |
 | Supabase project | Supabase managed | Postgres + Realtime + Auth as one service |
 | `@sb/engine` | npm | Public consumption from third-party apps |
 | Theme bundles | Static, served from `apps/app/public/themes/` | No CDN needed at v1 scale |

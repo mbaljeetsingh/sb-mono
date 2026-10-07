@@ -1,5 +1,6 @@
 {
   "$schema": "https://turborepo.com/schema.json",
+  "globalEnv": ["NUXT_NATIVE", "NATIVE_DEV"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

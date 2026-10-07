@@ -1,6 +1,7 @@
 import { ulid } from 'ulid';
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useUserStore } from '~/stores/user';
+import { publicOrigin } from '~/lib/native';
 
 // Operator side of dynamic overlay URLs — the account's stable OBS pointers.
 // The overlay's read-only half lives in useDynamicBinding.
@@ -245,12 +246,10 @@ export function useDynamicUrls(opts?: { realtime?: boolean }) {
   }
 
   const urlFor = (id: string) =>
-    typeof window === 'undefined'
-      ? ''
-      : `${window.location.origin}/d/${id}/overlay`;
+    typeof window === 'undefined' ? '' : `${publicOrigin()}/d/${id}/overlay`;
 
   const setupUrlFor = (id: string) =>
-    typeof window === 'undefined' ? '' : `${window.location.origin}/d/${id}`;
+    typeof window === 'undefined' ? '' : `${publicOrigin()}/d/${id}`;
 
   // Which of the operator's URLs is currently showing this match, if any.
   // Drives the match-page row's "Showing on <name>" state.

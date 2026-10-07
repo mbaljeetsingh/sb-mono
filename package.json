@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "build:native": "NUXT_NATIVE=1 turbo run generate --filter=@sb/app",
     "test": "turbo test",
     "typecheck": "turbo typecheck",
     "lint": "biome lint .",

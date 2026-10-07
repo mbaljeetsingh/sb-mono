@@ -32,6 +32,9 @@ const meta = computed(() => ({
 }));
 
 const themeEntry = computed(() => getTheme(themeId.value, 'scoreboard'));
+
+// A courtside tablet showing the score must not dim between points.
+useKeepAwake();
 </script>
 
 <template>

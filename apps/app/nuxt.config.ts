@@ -1,18 +1,57 @@
 // @sb/app — the operator-facing PWA hosting control / overlay / scoreboard surfaces.
 // Extends shared layers: app-base (theme, composables, stores) + ui (shadcn-vue primitives).
 
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
+import { NATIVE_ENV } from './native-env';
 
 const appPkg = createRequire(import.meta.url)('./package.json');
+
+// Native (Capacitor) build target — `NUXT_NATIVE=1 nuxt generate` emits the
+// static bundle apps/mobile-native wraps for the App Store / Play Store.
+// Additive: unset, everything below is the Netlify web build unchanged.
+const isNative = process.env.NUXT_NATIVE === '1';
+// NATIVE_DEV=1 keeps the .env (local Supabase) backend for an on-device dev
+// loop. Never for a store build — capacitor.config.ts refuses to sync one.
+const isNativeDev = process.env.NATIVE_DEV === '1';
+
+// apps/app/.env points at the local stack, and a bundle built from it ships
+// as an app with no data. So a native build resolves its backend here, once:
+// any dev-shaped value is replaced with the production one from
+// native-env.ts, while a real override (CI, staging) passes through. The
+// result is written straight into the config below — NOT back into
+// process.env, because dotenv re-applies .env after this file is evaluated
+// and the NUXT_* runtime override would bake the local URL right back in
+// (that's what the first build here did). See `nitro.envPrefix` below.
+const isDevShaped = (value: string | undefined) =>
+  !value || /localhost|127\.0\.0\.1|10\.0\.2\.2/.test(value);
+const nativeEnv = Object.fromEntries(
+  Object.entries(NATIVE_ENV).map(([key, value]) => [
+    key,
+    isNativeDev || !isDevShaped(process.env[key])
+      ? (process.env[key] ?? value)
+      : value,
+  ])
+) as Record<keyof typeof NATIVE_ENV, string>;
+// URL and key are a pair: a local publishable key has no loopback host to
+// detect, so if the URL resolved to production the key must too — prod URL +
+// local key 401s every request with no visible error.
+if (
+  nativeEnv.NUXT_PUBLIC_SUPABASE_URL === NATIVE_ENV.NUXT_PUBLIC_SUPABASE_URL
+) {
+  nativeEnv.NUXT_PUBLIC_SUPABASE_KEY = NATIVE_ENV.NUXT_PUBLIC_SUPABASE_KEY;
+}
 
 export default defineNuxtConfig({
   extends: ['../../layers/app-base', '../../layers/ui'],
   modules: [
     '@nuxtjs/supabase',
     'shadcn-nuxt',
-    '@vite-pwa/nuxt',
+    // No service worker in the shell: every asset is already in the binary,
+    // and WKWebView refuses SW registration on capacitor:// anyway.
+    ...(isNative ? [] : ['@vite-pwa/nuxt']),
     '@nuxtjs/color-mode',
   ],
   // Dark-mode handling. Broadcast surfaces (scoreboard / overlay / control)
@@ -61,6 +100,13 @@ export default defineNuxtConfig({
     // Optimize Dep" 504s / mid-session reloads when Vite discovers them late.
     optimizeDeps: {
       include: [
+        // Reached only behind isNativePlatform(); listed so Vite doesn't
+        // discover them lazily and re-optimise mid-session (np-mono saw that
+        // reload bundle a second vue-router instance and kill app init).
+        '@capacitor-community/keep-awake',
+        '@capacitor/app',
+        '@capacitor/splash-screen',
+        '@capacitor/status-bar',
         'idb-keyval',
         'lucide-vue-next',
         'modern-screenshot',
@@ -74,6 +120,11 @@ export default defineNuxtConfig({
     },
     define: {
       __APP_VERSION__: JSON.stringify(appPkg.version),
+      // Build-target constants, not runtime detection — see lib/native.ts.
+      __NUXT_NATIVE__: JSON.stringify(isNative),
+      __PUBLIC_APP_URL__: JSON.stringify(
+        isNative ? nativeEnv.NUXT_PUBLIC_APP_URL : ''
+      ),
     },
   },
   // shadcn-vue: no prefix, no auto-import. Components are imported explicitly:
@@ -158,11 +209,24 @@ export default defineNuxtConfig({
   // anonymous scoring works against the same DB via permissive RLS for owner_id IS NULL.
   // Middleware handles redirects, not the module's built-in redirect.
   supabase: {
+    ...(isNative
+      ? {
+          url: nativeEnv.NUXT_PUBLIC_SUPABASE_URL,
+          key: nativeEnv.NUXT_PUBLIC_SUPABASE_KEY,
+        }
+      : {}),
     redirect: false,
     redirectOptions: {
       login: '/auth/signin',
       callback: '/auth/callback',
     },
+    // Native: the session cookie doesn't survive a cold start on
+    // capacitor://, so the shell came back signed out. `false` switches to
+    // localStorage-backed storage, which persists in the WebView. A plain
+    // createClient defaults to the implicit flow, so pin PKCE explicitly
+    // (web's browser client forces PKCE regardless).
+    useSsrCookies: !isNative,
+    clientOptions: { auth: { flowType: 'pkce' } },
     cookieOptions: {
       maxAge: 60 * 60 * 24 * 30, // 30 days
       sameSite: 'lax' as const, // PKCE requires lax for top-level cross-site OAuth redirects
@@ -229,9 +293,37 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      environment: 'development',
-      posthogKey: '',
+      environment: isNative ? nativeEnv.NUXT_PUBLIC_ENVIRONMENT : 'development',
+      posthogKey: isNative ? nativeEnv.NUXT_PUBLIC_POSTHOG_KEY : '',
     },
+    // Native: the values above are final. Moving the env-override prefix off
+    // NUXT_ stops apps/app/.env's NUXT_PUBLIC_* from replacing them when the
+    // static bundle is prerendered.
+    ...(isNative ? { nitro: { envPrefix: 'SB_NATIVE_UNUSED_' } } : {}),
   },
+  // Native: a plain static SPA bundle for Capacitor's webDir, plus a stamp
+  // capacitor.config.ts checks so a web build (or a dev-backend build) can
+  // never be synced into the store app by accident.
+  ...(isNative
+    ? {
+        nitro: { preset: 'static' },
+        hooks: {
+          'nitro:build:public-assets'(nitro: {
+            options: { output: { publicDir: string } };
+          }) {
+            const dir = nitro.options.output.publicDir;
+            mkdirSync(dir, { recursive: true });
+            writeFileSync(
+              `${dir}/native-build.json`,
+              JSON.stringify({
+                native: true,
+                version: appPkg.version,
+                supabaseUrl: nativeEnv.NUXT_PUBLIC_SUPABASE_URL,
+              })
+            );
+          },
+        },
+      }
+    : {}),
   compatibilityDate: '2024-10-01',
 });

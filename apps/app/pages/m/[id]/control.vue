@@ -13,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@sb/layer-ui/components/ui/dropdown-menu';
-import { onLongPress, useStorage, useVibrate, useWakeLock } from '@vueuse/core';
+import { onLongPress, useStorage, useVibrate } from '@vueuse/core';
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -786,10 +786,9 @@ const headerLabel = computed(() => {
   return `${displayNameA.value} vs ${displayNameB.value}`;
 });
 
-// Wake-lock keeps the phone screen on during a match.
-const wakeLock = useWakeLock();
-onMounted(() => wakeLock.request('screen'));
-onUnmounted(() => wakeLock.release());
+// Keep the phone screen on during a match (re-acquired on every tap if the
+// browser dropped it — see useKeepAwake).
+useKeepAwake();
 
 // Layout — operator picks based on where they sit relative to the court.
 //   stacked    — phone portrait, A on top / B on bottom (default).

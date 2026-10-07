@@ -1,13 +1,17 @@
 import posthog from 'posthog-js';
 import { defineNuxtPlugin, useRouter, useRuntimeConfig } from '#app';
+import { isNativePlatform } from '../lib/native';
 import { setPostHog } from '../lib/posthog';
 
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig();
 
+  // The native shell is served from capacitor://localhost (iOS) /
+  // https://localhost (Android) — that's the store app, not a dev box.
   const isLocalhost =
-    window.location.href.includes('localhost') ||
-    window.location.href.includes('127.0.0.1');
+    !isNativePlatform() &&
+    (window.location.href.includes('localhost') ||
+      window.location.href.includes('127.0.0.1'));
 
   if (!config.public.posthogKey || isLocalhost) {
     return;
