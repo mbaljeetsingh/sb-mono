@@ -66,9 +66,11 @@ serves a cached web build for the native task.
 
 - **Signing + store listings** — Apple team / provisioning, Play upload key.
   Signing material is gitignored; never commit it.
-- **Google sign-in** is disabled in the web app today. When it's enabled,
-  Google refuses OAuth inside a WebView: port np-mono's `native-auth.ts`
-  (`@capacitor/browser` + `com.beejaysoft.scoreboard://auth/callback` deep
-  link) and add that scheme to the production Supabase redirect allow-list.
+- **Social sign-in is out of scope for v1** — email/password only. Adding
+  Google means adding Sign in with Apple too (App Store 4.8), plus np-mono's
+  `native-auth.ts` deep-link flow (`@capacitor/browser` +
+  `com.beejaysoft.scoreboard://auth/callback`, allow-listed in Supabase).
+- **In-app account deletion** — required by App Store 5.1.1(v) for any app
+  that lets users create accounts; not built yet.
 - **Real-device QA** — keep-awake, keyboard resize on `/new`, landscape
   control layout, offline scoring through a venue WiFi drop.
