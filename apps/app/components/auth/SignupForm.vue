@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { Button } from "@sb/layer-ui/components/ui/button";
-import { Input } from "@sb/layer-ui/components/ui/input";
-import { Label } from "@sb/layer-ui/components/ui/label";
-import { Separator } from "@sb/layer-ui/components/ui/separator";
-import GoogleIcon from "~/components/icons/GoogleIcon.vue";
-import AppLogo from "~/components/common/AppLogo.vue";
-import { useAuth } from "~/composables/useAuth";
+import { ref } from 'vue';
+import { Button } from '@sb/layer-ui/components/ui/button';
+import { Input } from '@sb/layer-ui/components/ui/input';
+import { Label } from '@sb/layer-ui/components/ui/label';
+import { Separator } from '@sb/layer-ui/components/ui/separator';
+import GoogleIcon from '~/components/icons/GoogleIcon.vue';
+import AppleIcon from '~/components/icons/AppleIcon.vue';
+import AppLogo from '~/components/common/AppLogo.vue';
+import { useAuth } from '~/composables/useAuth';
 
 const {
   email,
@@ -116,7 +117,7 @@ const handleSignup = async () => {
               {{ errorMessage }}
             </p>
             <Button type="submit" :disabled="isSubmitting" class="w-full">
-              {{ isSubmitting ? "Creating account..." : "Sign up" }}
+              {{ isSubmitting ? 'Creating account...' : 'Sign up' }}
             </Button>
 
             <div class="my-2 flex items-center gap-3">
@@ -127,16 +128,29 @@ const handleSignup = async () => {
               <Separator class="flex-1" />
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              class="w-full"
-              :disabled="true"
-              :title="'Google sign-in coming soon'"
-            >
-              <GoogleIcon :size="16" class="mr-2" />
-              Continue with Google
-            </Button>
+            <!-- Disabled until social sign-in lands (np-mono's native-auth
+                 flow). Google and Apple ship together: App Store 4.8 requires
+                 Sign in with Apple wherever another social login is offered. -->
+            <div class="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                :disabled="true"
+                :title="'Google sign-in coming soon'"
+              >
+                <GoogleIcon :size="16" class="mr-2" />
+                Google
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                :disabled="true"
+                :title="'Apple sign-in coming soon'"
+              >
+                <AppleIcon :size="16" class="mr-2" />
+                Apple
+              </Button>
+            </div>
           </div>
           <div class="mt-4 text-center text-sm">
             Already have an account?

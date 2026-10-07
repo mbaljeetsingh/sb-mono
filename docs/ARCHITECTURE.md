@@ -263,7 +263,7 @@ Initial mount
 
 **Global pending pill.** `useSyncStatus` is a module-scoped reactive store fed by `useEvents.reportPending()`. `AppHeader` renders a `SyncStatusPill` showing "Syncing N…" (online with pending) or "Offline — N queued" (offline with pending). The pill hides when `total === 0`.
 
-**Capacitor / SQLite (deferred — E2.9).** When mobile native ships, swap the storage layer to `@capacitor-community/sqlite` behind a thin `Storage` interface. The diff-based reconciliation logic stays unchanged.
+**Capacitor / SQLite (deferred).** The native shell (E2.9) ships on the same IDB store, which persists in both WebViews. If it ever proves insufficient, swap the storage layer to `@capacitor-community/sqlite` behind a thin `Storage` interface. The diff-based reconciliation logic stays unchanged.
 
 ## 5. The three rendering surfaces
 
@@ -401,6 +401,7 @@ If `p75 LCP > 4s` for 30 minutes → alert. If error rate > 1% of sessions for 3
 |---|---|---|
 | `apps/app` | Netlify | Existing pipeline, edge functions, Git-driven deploys |
 | `apps/web` (marketing) | Netlify | Same |
+| `apps/mobile-native` | App Store + Play Store | Capacitor 8 shell around a `NUXT_NATIVE=1 nuxt generate` static bundle of `apps/app` (no PWA/SW, localStorage-backed Supabase session, prod backend baked from `native-env.ts`); see its README |
 | Supabase project | Supabase managed | Postgres + Realtime + Auth as one service |
 | `@sb/engine` | npm | Public consumption from third-party apps |
 | Theme bundles | Static, served from `apps/app/public/themes/` | No CDN needed at v1 scale |
@@ -422,6 +423,8 @@ Auth is **optional**. Anonymous scoring is the default; sign-in unlocks ownershi
 - `authorize(permission)` — RLS helper reading `auth.jwt() ->> 'user_role'`.
 - `get_my_permissions()` RPC — returns the role's permission list for the client.
 - `handle_new_user()` trigger — creates `public.users` row + grants default `free` role; pulls `display_name` + `avatar_url` from `raw_user_meta_data` (Google auto-populates).
+
+**Account deletion:** `/profile` → `DeleteAccountCard` removes the avatar files, then calls the `delete_my_account()` RPC (security definer, caller-only), which deletes the user's matches (events cascade) and the `auth.users` row in one transaction; profile, roles and dynamic URLs cascade. Required by App Store 5.1.1(v) / Play.
 
 **Avatar upload:** drag-drop or click in `ProfilePhotoUpload.vue` → `browser-image-compression` (≤200KB / ≤512px / WebP) → `supabase.storage.from('avatars').upload(`{userId}/{ts}.{ext}`)` → `public.users.avatar_url`. Bucket is public-read, owner-write under `{user_id}/...` (folder-prefix RLS in migration `20260505000002_avatars_storage`).
 

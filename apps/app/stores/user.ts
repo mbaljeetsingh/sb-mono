@@ -2,12 +2,13 @@
 // Mirrors np-mono's user store shape (currentUser / userRole / permissions / initAuth) so the
 // downstream auth pages, middleware, and v-permission directive can be ported nearly verbatim.
 
-import { defineStore } from "pinia";
-import { computed, ref, watch } from "vue";
-import { useDocumentVisibility } from "@vueuse/core";
-import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
-import { toast } from "vue-sonner";
-import { claimAnonymousMatches } from "~/lib/localMatches";
+import { defineStore } from 'pinia';
+import { computed, ref, watch } from 'vue';
+import { useDocumentVisibility } from '@vueuse/core';
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
+import { toast } from 'vue-sonner';
+import { claimAnonymousMatches } from '~/lib/localMatches';
+import { publicOrigin } from '~/lib/native';
 
 interface UserProfile {
   id: string;
@@ -16,11 +17,11 @@ interface UserProfile {
   avatar_url: string | null;
 }
 
-type AppRole = "admin" | "free" | "pro";
+type AppRole = 'admin' | 'free' | 'pro';
 
 type UserWithProfile = User & { profile?: UserProfile };
 
-export const useUserStore = defineStore("user", () => {
+export const useUserStore = defineStore('user', () => {
   const supabase = useSupabaseClient();
   const visibility = useDocumentVisibility();
 
@@ -36,11 +37,11 @@ export const useUserStore = defineStore("user", () => {
   // Fetch profile row from public.users.
   const fetchProfile = async (authUser: User): Promise<UserWithProfile> => {
     const { data, error: profileError } = await supabase
-      .from("users")
-      .select("id, email, display_name, avatar_url")
-      .eq("id", authUser.id)
+      .from('users')
+      .select('id, email, display_name, avatar_url')
+      .eq('id', authUser.id)
       .maybeSingle();
-    if (profileError) console.error("profile fetch:", profileError);
+    if (profileError) console.error('profile fetch:', profileError);
     return { ...authUser, profile: (data as UserProfile | null) ?? undefined };
   };
 
@@ -49,9 +50,9 @@ export const useUserStore = defineStore("user", () => {
     const token = session?.access_token;
     if (!token) return null;
     try {
-      const payload = JSON.parse(atob(token.split(".")[1] ?? ""));
+      const payload = JSON.parse(atob(token.split('.')[1] ?? ''));
       const claim = payload?.user_role;
-      return claim === "admin" || claim === "free" || claim === "pro"
+      return claim === 'admin' || claim === 'free' || claim === 'pro'
         ? claim
         : null;
     } catch {
@@ -65,9 +66,9 @@ export const useUserStore = defineStore("user", () => {
       permissions.value = [];
       return;
     }
-    const { data, error: rpcError } = await supabase.rpc("get_my_permissions");
+    const { data, error: rpcError } = await supabase.rpc('get_my_permissions');
     if (rpcError) {
-      console.error("permissions fetch:", rpcError);
+      console.error('permissions fetch:', rpcError);
       permissions.value = [];
       return;
     }
@@ -78,7 +79,7 @@ export const useUserStore = defineStore("user", () => {
   const synchronizeUserState = async () => {
     const { data, error: sessionError } = await supabase.auth.getSession();
     if (sessionError) {
-      console.error("session fetch:", sessionError);
+      console.error('session fetch:', sessionError);
       clearData();
       return;
     }
@@ -93,7 +94,7 @@ export const useUserStore = defineStore("user", () => {
 
   const signInWithPassword = async (email: string, password: string) => {
     if (!email || !password)
-      throw new Error("Please enter both email and password");
+      throw new Error('Please enter both email and password');
     isLoading.value = true;
     error.value = null;
     try {
@@ -114,14 +115,14 @@ export const useUserStore = defineStore("user", () => {
   const signUp = async (
     email: string,
     password: string,
-    displayName?: string,
+    displayName?: string
   ) => {
     isLoading.value = true;
     error.value = null;
     try {
       const redirectTo =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/auth/callback`
+        typeof window !== 'undefined'
+          ? `${publicOrigin()}/auth/callback`
           : undefined;
       const { error: authError } = await supabase.auth.signUp({
         email,
@@ -143,13 +144,13 @@ export const useUserStore = defineStore("user", () => {
   // Google OAuth — wired but UI button is disabled in v1. Keeping the code so flipping
   // [auth.external.google].enabled in supabase/config.toml is the only change needed.
   const signInWithGoogle = async () => {
-    if (typeof window === "undefined") return;
+    if (typeof window === 'undefined') return;
     isLoading.value = true;
     error.value = null;
     try {
       const { error: authError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
+        provider: 'google',
+        options: { redirectTo: `${publicOrigin()}/auth/callback` },
       });
       if (authError) throw authError;
     } catch (err) {
@@ -162,14 +163,14 @@ export const useUserStore = defineStore("user", () => {
 
   const resetPassword = async (email: string) => {
     const redirectTo =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/auth/reset-password`
+      typeof window !== 'undefined'
+        ? `${publicOrigin()}/auth/reset-password`
         : undefined;
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(
       email,
       {
         redirectTo,
-      },
+      }
     );
     if (resetError) throw resetError;
   };
@@ -182,14 +183,14 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const updateProfile = async (
-    patch: Partial<Pick<UserProfile, "display_name" | "avatar_url">>,
+    patch: Partial<Pick<UserProfile, 'display_name' | 'avatar_url'>>
   ) => {
-    if (!currentUser.value?.id) throw new Error("Not signed in");
+    if (!currentUser.value?.id) throw new Error('Not signed in');
     const { data, error: updateError } = await supabase
-      .from("users")
+      .from('users')
       .update(patch)
-      .eq("id", currentUser.value.id)
-      .select("id, email, display_name, avatar_url")
+      .eq('id', currentUser.value.id)
+      .select('id, email, display_name, avatar_url')
       .single();
     if (updateError) throw updateError;
     if (currentUser.value) {
@@ -199,7 +200,7 @@ export const useUserStore = defineStore("user", () => {
 
   const signOut = async () => {
     const { error: signOutError } = await supabase.auth.signOut();
-    if (signOutError) console.error("signout:", signOutError);
+    if (signOutError) console.error('signout:', signOutError);
     clearData();
   };
 
@@ -224,28 +225,28 @@ export const useUserStore = defineStore("user", () => {
             // SIGNED_IN fires on every fresh sign-in / token refresh after a sign-in;
             // the UPDATE is idempotent (rows already claimed are filtered by the
             // `owner_id IS NULL` guard inside claimAnonymousMatches).
-            if (event === "SIGNED_IN" && session?.user?.id) {
+            if (event === 'SIGNED_IN' && session?.user?.id) {
               claimAnonymousMatches(supabase, session.user.id)
                 .then((claimed) => {
                   if (claimed > 0) {
                     toast.success(
                       claimed === 1
-                        ? "Claimed 1 match from this device"
+                        ? 'Claimed 1 match from this device'
                         : `Claimed ${claimed} matches from this device`,
                       {
                         description:
                           "They're now linked to your account and synced across devices.",
-                      },
+                      }
                     );
                   }
                 })
                 .catch(console.error);
             }
           }, 0);
-        },
+        }
       );
       watch(visibility, (v) => {
-        if (v === "visible" && isAuthenticated.value) {
+        if (v === 'visible' && isAuthenticated.value) {
           synchronizeUserState().catch(console.error);
         }
       });

@@ -83,7 +83,7 @@ Phase gates from BRD §13 control progression. Don't start phase N+1 until phase
 | **E2.6 · Paid theme packs** | Gumroad / Lemon Squeezy integration. 5–10 premium themes at launch. |
 | **E2.7 · Pro subscription billing** | Razorpay (India) + Stripe (rest of world). Price tier, billing portal. |
 | **E2.8 · Multi-scorekeeper per match** | Operator passes a write-token to a co-scorekeeper. Conflict resolution from event log. |
-| **E2.9 · Capacitor mobile app** | Wrap Nuxt PWA, ship to App Store + Play Store. |
+| **E2.9 · Capacitor mobile app** | Wrap Nuxt PWA, ship to App Store + Play Store. Shell scaffolded 2026-10-07 in `apps/mobile-native` (runs on iOS simulator + Android emulator); left: signing, store listings, real-device QA, native Google sign-in once the web button is enabled. |
 | **E2.10 · Post-production video burn-in** | Upload MP4 → FFmpeg + event log → MP4 with overlay rendered into pixels. |
 | **E2.11 · Custom email templates** | Confirmation / magic-link / password-reset templates branded. |
 | **E2.12 · Broadcast-grade match + per-game timer** | Pulled from E1.28 to here — broadcast convention more than club need. `useMatchTiming(events)` derives total + per-game durations from event timestamps (anchored on `match.start`, boundary on `game.end`, subtracts `suspension.*` windows, keeps `timeout.*` in per TV convention). `formatDuration()` helper in `@sb/shared`. Wire to `MatchOverModal` + saved-result page; optional `<MatchClock />` slot themes opt into. Live ticking via `useNow({ interval: 1000 })`, frozen when `matchEndTs` set or `isSuspended`. Unit-test the suspension subtraction. Premium feature alongside the paid theme packs. |

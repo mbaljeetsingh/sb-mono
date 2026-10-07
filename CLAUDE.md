@@ -7,6 +7,7 @@ This file is loaded automatically into every Claude session in this repo. Treat 
 Scoreboard is a free, OSS-first live scoring tool for racquet sports (badminton first; tennis / padel / pickleball / table tennis / squash sharing the engine). Two surfaces:
 
 - **`apps/app`** — operator-facing PWA. `/new`, `/m/[id]/{control,scoreboard,overlay}`, `/d/[id]/overlay`, `/t/[id]/overlay`, `/profile`, `/auth/*`. Anonymous scoring is allowed (Option A). Sign-in is optional and unlocks ownership / history / Pro features later.
+- **`apps/mobile-native`** — Capacitor iOS/Android shell around `apps/app` (no Vue code). `pnpm --filter @sb/mobile-native sync:app` builds the `NUXT_NATIVE=1` bundle and syncs it; see its README. URLs that leave the device go through `publicOrigin()` (`apps/app/lib/native.ts`), never `window.location.origin` — in the shell that's the phone itself.
 - **`apps/web`** — marketing site (currently empty). Plan: public landing, theme gallery, free anonymous scorer alongside marketing. See ROADMAP §"Marketing site".
 
 Shared layers + packages:

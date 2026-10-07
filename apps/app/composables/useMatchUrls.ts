@@ -1,4 +1,5 @@
-import { computed, type Ref } from "vue";
+import { computed, type Ref } from 'vue';
+import { publicOrigin } from '~/lib/native';
 
 // Build the shareable per-match URLs in one place. Themes are now stored on
 // the matches row in Supabase, so the canonical URLs don't need `?theme=`
@@ -7,9 +8,9 @@ import { computed, type Ref } from "vue";
 // (preview / "force this theme" scenarios), but they're no longer part of
 // the URL we put on the operator's clipboard.
 export function useMatchUrls(matchId: Ref<string>) {
-  const baseUrl = computed(() =>
-    typeof window === "undefined" ? "" : window.location.origin,
-  );
+  // publicOrigin, not window.location.origin: inside the native shell the
+  // origin is the phone itself, and these URLs are pasted into OBS elsewhere.
+  const baseUrl = computed(() => publicOrigin());
   return computed(() => {
     const base = `${baseUrl.value}/m/${matchId.value}`;
     return {

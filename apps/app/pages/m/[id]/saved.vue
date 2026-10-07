@@ -3,6 +3,7 @@ import { Button } from '@sb/layer-ui/components/ui/button';
 import { useClipboard } from '@vueuse/core';
 import { Clipboard, X } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
+import { publicOrigin } from '~/lib/native';
 
 definePageMeta({ layout: false });
 
@@ -45,7 +46,7 @@ const winner = computed(() => {
 
 const shareUrl = computed(() => {
   if (typeof window === 'undefined') return '';
-  return `${window.location.origin}/m/${matchId.value}/scoreboard`;
+  return `${publicOrigin()}/m/${matchId.value}/scoreboard`;
 });
 
 const { copy: clipboardCopy } = useClipboard({ legacy: true });

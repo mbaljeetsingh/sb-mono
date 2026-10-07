@@ -1,0 +1,34 @@
+{
+  "name": "@sb/mobile-native",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Capacitor shell wrapping apps/app for the App Store and Play Store. No Vue UI — only the native projects and their tooling.",
+  "scripts": {
+    "build:web": "cd ../.. && pnpm build:native",
+    "clean:output": "rm -rf ../app/.output",
+    "sync": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 cap sync",
+    "sync:app": "pnpm clean:output && pnpm build:web && pnpm sync",
+    "open:ios": "cap open ios",
+    "open:android": "cap open android",
+    "run:ios": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 cap run ios",
+    "run:android": "JAVA_HOME=$(/usr/libexec/java_home -v 21) cap run android",
+    "assets": "capacitor-assets generate --ios --android --iconBackgroundColor '#001b4c' --iconBackgroundColorDark '#001b4c' --splashBackgroundColor '#001b4c' --splashBackgroundColorDark '#001b4c'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@capacitor-community/keep-awake": "^8.0.1",
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/ios": "^8.3.4",
+    "@capacitor/keyboard": "^8.0.3",
+    "@capacitor/splash-screen": "^8.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.3.4",
+    "@types/node": "^22.9.0",
+    "typescript": "~5.9.3"
+  }
+}
