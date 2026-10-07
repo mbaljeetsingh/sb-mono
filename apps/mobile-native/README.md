@@ -66,11 +66,14 @@ serves a cached web build for the native task.
 
 - **Signing + store listings** — Apple team / provisioning, Play upload key.
   Signing material is gitignored; never commit it.
-- **Social sign-in is out of scope for v1** — email/password only. Adding
-  Google means adding Sign in with Apple too (App Store 4.8), plus np-mono's
+- **Social sign-in is out of scope for v1** — email/password only; Google and
+  Apple buttons render disabled on both forms. Enabling them needs np-mono's
   `native-auth.ts` deep-link flow (`@capacitor/browser` +
   `com.beejaysoft.scoreboard://auth/callback`, allow-listed in Supabase).
 - **In-app account deletion** — required by App Store 5.1.1(v) for any app
   that lets users create accounts; not built yet.
+- **Password reset** in the app opens the web `/auth/forgot-password` in the
+  system browser: the PKCE verifier lives in the WebView, so a reset link
+  (which opens in the browser) can only be completed if it started there.
 - **Real-device QA** — keep-awake, keyboard resize on `/new`, landscape
   control layout, offline scoring through a venue WiFi drop.

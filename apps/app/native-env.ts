@@ -5,8 +5,9 @@
  * at each developer's LOCAL Supabase. A store binary built from those values
  * is broken for everyone else, and silently so — on Android the WebView
  * refuses cleartext to 127.0.0.1 and the app just shows empty lists. So the
- * flag that creates the need supplies the values; nuxt.config.ts assigns them
- * to process.env when the inherited value is dev-shaped.
+ * flag that creates the need supplies the values; nuxt.config.ts swaps any
+ * dev-shaped inherited value for these and writes the result straight into
+ * the config (not process.env — dotenv would re-apply .env over it).
  *
  * NOT secrets — every value here already ships in the public runtime config
  * of the deployed web app (the publishable key is client-visible by design;

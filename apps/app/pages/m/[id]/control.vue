@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@sb/layer-ui/components/ui/dropdown-menu';
 import { onLongPress, useStorage, useVibrate } from '@vueuse/core';
+import { useKeepAwake } from '~/composables/useKeepAwake';
 import {
   ArrowLeft,
   ArrowLeftRight,

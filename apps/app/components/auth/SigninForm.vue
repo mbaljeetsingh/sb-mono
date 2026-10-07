@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { useRoute, useRouter } from "vue-router";
-import { Button } from "@sb/layer-ui/components/ui/button";
-import { Input } from "@sb/layer-ui/components/ui/input";
-import { Label } from "@sb/layer-ui/components/ui/label";
-import { Separator } from "@sb/layer-ui/components/ui/separator";
-import GoogleIcon from "~/components/icons/GoogleIcon.vue";
-import AppLogo from "~/components/common/AppLogo.vue";
-import { useAuth } from "~/composables/useAuth";
+import { useRoute, useRouter } from 'vue-router';
+import { Button } from '@sb/layer-ui/components/ui/button';
+import { Input } from '@sb/layer-ui/components/ui/input';
+import { Label } from '@sb/layer-ui/components/ui/label';
+import { Separator } from '@sb/layer-ui/components/ui/separator';
+import GoogleIcon from '~/components/icons/GoogleIcon.vue';
+import AppleIcon from '~/components/icons/AppleIcon.vue';
+import AppLogo from '~/components/common/AppLogo.vue';
+import { useAuth } from '~/composables/useAuth';
+import { isNativePlatform, publicOrigin } from '~/lib/native';
 
 const { email, password, isSubmitting, errorMessage, signInWithPassword } =
   useAuth();
@@ -14,10 +16,20 @@ const { email, password, isSubmitting, errorMessage, signInWithPassword } =
 const route = useRoute();
 const router = useRouter();
 
+// In the native shell the reset runs entirely on the web: the app's PKCE
+// verifier lives in the WebView, so a reset link (which opens in the phone's
+// browser) could never be exchanged there. Starting the request in that same
+// browser keeps verifier and link together; the user then signs in here with
+// the new password.
+const isNative = isNativePlatform();
+const forgotPasswordTo = isNative
+  ? `${publicOrigin()}/auth/forgot-password`
+  : '/auth/forgot-password';
+
 const handleSignin = async () => {
   const result = await signInWithPassword();
   if (result.success) {
-    const redirect = (route.query.redirect as string) || "/";
+    const redirect = (route.query.redirect as string) || '/';
     await router.push(redirect);
   }
 };
@@ -57,7 +69,9 @@ const handleSignin = async () => {
               <div class="flex items-center">
                 <Label for="password">Password</Label>
                 <NuxtLink
-                  to="/auth/forgot-password"
+                  :to="forgotPasswordTo"
+                  :external="isNative"
+                  :target="isNative ? '_blank' : undefined"
                   class="ml-auto inline-block text-sm underline-offset-4 hover:underline"
                 >
                   Forgot your password?
@@ -74,7 +88,7 @@ const handleSignin = async () => {
               {{ errorMessage }}
             </p>
             <Button type="submit" :disabled="isSubmitting" class="w-full">
-              {{ isSubmitting ? "Signing in..." : "Sign in" }}
+              {{ isSubmitting ? 'Signing in...' : 'Sign in' }}
             </Button>
 
             <div class="my-2 flex items-center gap-3">
@@ -85,16 +99,29 @@ const handleSignin = async () => {
               <Separator class="flex-1" />
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              class="w-full"
-              :disabled="true"
-              :title="'Google sign-in coming soon'"
-            >
-              <GoogleIcon :size="16" class="mr-2" />
-              Continue with Google
-            </Button>
+            <!-- Disabled until social sign-in lands (np-mono's native-auth
+                 flow). Google and Apple ship together: App Store 4.8 requires
+                 Sign in with Apple wherever another social login is offered. -->
+            <div class="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                :disabled="true"
+                :title="'Google sign-in coming soon'"
+              >
+                <GoogleIcon :size="16" class="mr-2" />
+                Google
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                :disabled="true"
+                :title="'Apple sign-in coming soon'"
+              >
+                <AppleIcon :size="16" class="mr-2" />
+                Apple
+              </Button>
+            </div>
           </div>
           <div class="mt-4 text-center text-sm">
             Don't have an account?

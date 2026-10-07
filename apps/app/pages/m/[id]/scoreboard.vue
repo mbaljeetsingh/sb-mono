@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { getTheme } from '@sb/themes';
+import { useKeepAwake } from '~/composables/useKeepAwake';
 
 definePageMeta({ layout: false, colorMode: 'light' });
 
