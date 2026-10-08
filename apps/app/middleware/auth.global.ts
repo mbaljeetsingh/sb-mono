@@ -27,7 +27,15 @@ const PUBLIC_PREFIXES = [
 
 // Anonymous-OK paths. The scorer is free — anyone can score without signing up.
 // Sign-in is optional and unlocks ownership, history, and Pro features later.
-const PUBLIC_EXACT = new Set<string>(['/', '/new', '/matches']);
+// Legal pages are linked from the store listings, so they must load signed out.
+const PUBLIC_EXACT = new Set<string>([
+  '/',
+  '/new',
+  '/matches',
+  '/privacy',
+  '/terms',
+  '/delete-account',
+]);
 
 // Suffix-based public surfaces — the viewer-facing routes broadcasters and audience hit.
 // e.g. /m/abc/scoreboard, /m/abc/overlay, /d/abc/overlay
