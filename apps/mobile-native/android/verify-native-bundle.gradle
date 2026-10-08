@@ -1,0 +1,44 @@
+// Release-build guard, applied from app/build.gradle. Ported from np-mono.
+//
+// The stamp checks in capacitor.config.ts only run under the Capacitor CLI,
+// but `gradlew bundleRelease` packages whatever was last synced, with no cap
+// step in the path. So a NATIVE_DEV sync (local backend, allowMixedContent)
+// followed by a release build would ship an app pointed at a laptop. This
+// asserts on the artifact actually being packaged. Debug builds are exempt.
+
+import groovy.json.JsonSlurper
+
+def verifyNativeBundle = tasks.register('verifyNativeBundle') {
+    group = 'verification'
+    description = 'Refuses release builds whose synced web bundle is a dev/local build.'
+    doLast {
+        def assets = file("${projectDir}/src/main/assets")
+        def stampFile = new File(assets, 'public/native-build.json')
+        def capConfigFile = new File(assets, 'capacitor.config.json')
+        def remedy = 'Run: pnpm --filter @sb/mobile-native sync:app'
+
+        if (!stampFile.exists()) {
+            throw new GradleException(
+                "[verify-native-bundle] ${stampFile} is missing — the synced web bundle " +
+                "is not a native build (or nothing was synced). ${remedy}")
+        }
+        def url = (new JsonSlurper().parse(stampFile).supabaseUrl ?: '') as String
+        if (!url.startsWith('https://') || (url =~ /localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.|\.ngrok|\.local(:|\/|$)/)) {
+            throw new GradleException(
+                "[verify-native-bundle] synced bundle points at '${url}' — not a production " +
+                "backend; it would ship as an app with no data. ${remedy}")
+        }
+        if (capConfigFile.exists() && new JsonSlurper().parse(capConfigFile)?.android?.allowMixedContent == true) {
+            throw new GradleException(
+                "[verify-native-bundle] capacitor.config.json has allowMixedContent: true — " +
+                "a NATIVE_DEV sync left it behind. ${remedy}")
+        }
+        logger.lifecycle("[verify-native-bundle] ok — bundle -> ${url}")
+    }
+}
+
+afterEvaluate {
+    tasks.matching { it.name == 'preReleaseBuild' }.configureEach {
+        dependsOn verifyNativeBundle
+    }
+}

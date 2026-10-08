@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.beejaysoft.scoreboard",
+      "sha256_cert_fingerprints": [
+        "PLAY_APP_SIGNING_SHA256_REPLACE_ME",
+        "7F:CF:57:6A:E9:42:FD:20:42:66:D8:70:94:CE:28:C7:51:E6:F0:E1:E8:05:B5:F7:62:A3:AB:6B:40:F9:2D:94"
+      ]
+    }
+  }
+]

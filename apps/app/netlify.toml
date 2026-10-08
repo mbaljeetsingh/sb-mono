@@ -21,3 +21,10 @@
     # `screen-wake-lock` is the spec name; `wake-lock` is rejected by Chrome
     # as an unrecognized feature and the header becomes a no-op for it.
     Permissions-Policy = "screen-wake-lock=*, fullscreen=*"
+
+# Universal Links (iOS): the AASA file has no extension, and iOS only accepts
+# it served as JSON. assetlinks.json gets the right type from its extension.
+[[headers]]
+  for = "/.well-known/apple-app-site-association"
+  [headers.values]
+    Content-Type = "application/json"

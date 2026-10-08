@@ -1,0 +1,96 @@
+// Release signing, applied from app/build.gradle. Ported from np-mono.
+//
+// Without this, `gradlew bundleRelease` succeeds and emits an UNSIGNED aab —
+// buildTypes.release has no signingConfig, and AGP does not consider that an
+// error. Play rejects the upload at the end of a long path, and nothing before
+// that point complains. Debug builds never need any of this.
+
+// WHERE THE SECRETS LIVE — searched in this order, first hit wins:
+//   1. $SB_KEYSTORE_DIR/scoreboard-keystore.properties          (override)
+//   2. ~/.config/beejaysoft/keys/scoreboard-keystore.properties (the default)
+//   3. android/keystore.properties                (in-repo, one-off builds)
+//
+// Not just in-repo: android/ is tracked, so every worktree gets its own copy
+// while .gitignore keeps the secrets out — a keystore made in one worktree
+// exists in no other. Not just an env var: Gradle launched from Android
+// Studio's UI does not inherit shell exports.
+def home = System.getProperty('user.home')
+def expandTilde = { String raw -> raw?.replaceFirst('^~', home) }
+
+def keystoreDirEnv = System.getenv('SB_KEYSTORE_DIR')
+def candidates = []
+if (keystoreDirEnv) {
+    candidates << new File(expandTilde(keystoreDirEnv), 'scoreboard-keystore.properties')
+}
+candidates << new File("${home}/.config/beejaysoft/keys", 'scoreboard-keystore.properties')
+candidates << rootProject.file('keystore.properties')
+
+def keystorePropsFile = candidates.find { it.exists() } ?: candidates.first()
+
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
+// A bare storeFile resolves against the properties file's own directory, so
+// the keys directory is self-contained. Absolute and ~ paths also work.
+def resolveStore = { String raw ->
+    if (!raw) return null
+    def f = new File(expandTilde(raw))
+    return f.isAbsolute() ? f : new File(keystorePropsFile.parentFile, raw)
+}
+
+def storeFileValue = resolveStore(keystoreProps['storeFile']?.toString()?.trim())
+def storePasswordValue = keystoreProps['storePassword']?.toString()
+def keyAliasValue = keystoreProps['keyAlias']?.toString()?.trim()
+def keyPasswordValue = keystoreProps['keyPassword']?.toString()
+
+// Blank vs missing: the committed .example has every key present with empty
+// values, so "the file exists" is not evidence it was filled in.
+def missing = []
+if (!keystorePropsFile.exists()) {
+    missing << "${keystorePropsFile.name} does not exist"
+} else {
+    if (!storeFileValue) missing << 'storeFile is blank'
+    else if (!storeFileValue.exists()) missing << "storeFile '${storeFileValue}' does not exist"
+    if (!storePasswordValue) missing << 'storePassword is blank'
+    if (!keyAliasValue) missing << 'keyAlias is blank'
+    if (!keyPasswordValue) missing << 'keyPassword is blank'
+}
+
+if (missing.isEmpty()) {
+    android {
+        signingConfigs {
+            release {
+                storeFile storeFileValue
+                storePassword storePasswordValue
+                keyAlias keyAliasValue
+                keyPassword keyPasswordValue
+            }
+        }
+        buildTypes {
+            release {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+} else {
+    // Registered, not thrown: a missing keystore must not break debug builds.
+    def requireReleaseSigning = tasks.register('requireReleaseSigning') {
+        group = 'verification'
+        description = 'Refuses release builds that would produce an unsigned artifact.'
+        doLast {
+            throw new GradleException(
+                "[release-signing] cannot sign the release build — " +
+                missing.join('; ') + ".\n" +
+                "  Looked in: ${keystorePropsFile}\n" +
+                "  See the Release section of apps/mobile-native/README.md and\n" +
+                "  android/keystore.properties.example.")
+        }
+    }
+    afterEvaluate {
+        tasks.matching { it.name == 'preReleaseBuild' }.configureEach {
+            dependsOn requireReleaseSigning
+        }
+    }
+}

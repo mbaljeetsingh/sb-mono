@@ -27,3 +27,32 @@ export function publicOrigin(): string {
   if (typeof window === 'undefined') return '';
   return isNativePlatform() ? __PUBLIC_APP_URL__ : window.location.origin;
 }
+
+/**
+ * Paths the shell claims as Universal Links / App Links. Mirrors
+ * `public/.well-known/apple-app-site-association` and the `autoVerify`
+ * intent-filter in AndroidManifest.xml — change all three together. Overlay
+ * links (for OBS) and `/auth/*` (PKCE must finish in the browser that started
+ * it) are deliberately not claimed.
+ */
+const DEEP_LINK_PATHS = [
+  /^\/m\/[^/]+\/control\/?$/,
+  /^\/m\/[^/]+\/scoreboard\/?$/,
+];
+
+/**
+ * In-app route for an incoming deep link, or null if it isn't one we handle.
+ * The URL comes from outside the app, so only our own host and the claimed
+ * paths get through.
+ */
+export function deepLinkRoute(raw: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.host !== new URL(__PUBLIC_APP_URL__).host) return null;
+  if (!DEEP_LINK_PATHS.some((re) => re.test(url.pathname))) return null;
+  return url.pathname + url.search + url.hash;
+}
