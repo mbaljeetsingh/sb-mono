@@ -147,9 +147,12 @@ const handleSignOut = async () => {
     explicit height all set, bottom is ignored when top is valid. Keep the
     calc in sync with h-14 here and the content padding in
     layouts/default.vue.
+    Its lower edge overlaps the home-indicator strip (as iOS's own floating
+    tab bars do): the tap targets sit higher, clear of the swipe, without the
+    bar floating a full inset + gap above the bottom.
   -->
   <nav
-    class="fixed left-3 right-3 z-40 h-14 rounded-full border border-border bg-background/85 shadow-lg backdrop-blur-xl bottom-[calc(0.75rem+env(safe-area-inset-bottom))] top-[calc(100dvh_-_3.5rem_-_0.75rem_-_env(safe-area-inset-bottom))] md:hidden transition-transform duration-300 ease-out motion-reduce:transition-none"
+    class="fixed left-3 right-3 z-40 h-14 rounded-full border border-border bg-background/85 shadow-lg backdrop-blur-xl bottom-[max(0.5rem,calc(env(safe-area-inset-bottom)-0.75rem))] top-[calc(100dvh_-_3.5rem_-_max(0.5rem,calc(env(safe-area-inset-bottom)_-_0.75rem)))] md:hidden transition-transform duration-300 ease-out motion-reduce:transition-none"
     :class="isBarHidden && 'translate-y-[200%] pointer-events-none'"
     :inert="isBarHidden"
   >
