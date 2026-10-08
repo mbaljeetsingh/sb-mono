@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["QWB397TGN2.com.beejaysoft.scoreboard"],
+        "components": [
+          { "/": "/m/*/control", "comment": "Scorer handoff link / QR" },
+          { "/": "/m/*/scoreboard", "comment": "Courtside display on a phone or tablet" }
+        ]
+      }
+    ]
+  }
+}

@@ -31,6 +31,34 @@ current sources were upscaled from the 512px PWA icon — replace
 `assets/icon-*.png` and `splash*.png` with 1024px / 2732px masters before
 submission.
 
+## Release
+
+Native versions move only on store uploads, never with the web
+`package.json`: iOS `MARKETING_VERSION` + `CURRENT_PROJECT_VERSION` (Xcode
+project), Android `versionName` + `versionCode` (`android/app/build.gradle`).
+Build number / versionCode must go up on every upload.
+
+```bash
+pnpm --filter @sb/mobile-native sync:app     # always: clean production bundle
+
+# iOS: Product → Archive (scheme App, "Any iOS Device") → Distribute → App Store Connect
+pnpm --filter @sb/mobile-native open:ios
+
+# Android: signed AAB → Play Console
+cd apps/mobile-native/android && JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew bundleRelease
+# → app/build/outputs/bundle/release/app-release.aab
+```
+
+Release builds on both platforms refuse a bundle that isn't a production
+native build (`verify-native-bundle` — Gradle task and Xcode run-script
+phase), since neither path goes through `cap`. Android release builds also
+refuse to run unsigned (`android/release-signing.gradle`): the upload
+keystore lives outside the repo at
+`~/.config/beejaysoft/keys/scoreboard-keystore.properties` (setup in
+`android/keystore.properties.example`), so it survives worktrees.
+
+Ship to TestFlight / Play internal testing first; real-device QA happens there.
+
 ## How the native build differs from web
 
 `NUXT_NATIVE=1` is an additive branch in `apps/app/nuxt.config.ts`:
@@ -59,10 +87,25 @@ serves a cached web build for the native task.
   `@capacitor-community/keep-awake` (OS idle-timer flag), through
   `useKeepAwake()`. On web the same composable uses the Wake Lock API and
   re-acquires on every tap / visibility change.
+- **Deep links** — `/m/*/control` and `/m/*/scoreboard` links on
+  `scoreboard.beejaysoft.com` open the app when it's installed (iOS Universal
+  Links, Android App Links), and the website otherwise. Claimed in
+  `apps/app/public/.well-known/` (served by Netlify), `App.entitlements` and
+  `AndroidManifest.xml`; routed by `deepLinkRoute()` in `apps/app/lib/native.ts`.
+  Overlay and `/auth/*` links are deliberately left to the browser. iOS ignores
+  Universal Links typed into Safari's address bar — test from Messages, Notes
+  or a camera QR scan.
 - **Splash** is held until the Nuxt app mounts (`plugins/native.client.ts`),
   which also matches status-bar icons to the color mode.
 
 ## Open items
+
+- **Android deep-link fingerprint** — replace
+  `PLAY_APP_SIGNING_SHA256_REPLACE_ME` in `apps/app/public/.well-known/assetlinks.json`
+  with the Play App Signing key's SHA-256 (Play Console → App integrity; add
+  the upload/debug key's too for sideloaded builds). Android links fall back to
+  the website until then. iOS also needs Associated Domains enabled on the
+  App ID in the Apple Developer portal.
 
 - **Signing + store listings** — Apple team / provisioning, Play upload key.
   Signing material is gitignored; never commit it.

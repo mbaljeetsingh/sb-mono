@@ -18,6 +18,19 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- App Links: control / scoreboard URLs open here when installed.
+                 Verified against https://scoreboard.beejaysoft.com/.well-known/assetlinks.json;
+                 keep the paths in sync with apple-app-site-association and
+                 plugins/native.client.ts. Overlay and /auth links stay in the browser. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="scoreboard.beejaysoft.com" />
+                <data android:pathPattern="/m/.*/control" />
+                <data android:pathPattern="/m/.*/scoreboard" />
+            </intent-filter>
         </activity>
 
         <provider

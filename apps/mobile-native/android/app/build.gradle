@@ -1,4 +1,6 @@
 apply plugin: 'com.android.application'
+apply from: '../verify-native-bundle.gradle'
+apply from: '../release-signing.gradle'
 
 android {
     namespace = "com.beejaysoft.scoreboard"

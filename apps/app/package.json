@@ -1,6 +1,6 @@
 {
   "name": "@sb/app",
-  "version": "0.5.46",
+  "version": "0.5.47",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^8.0.1",
+    "@capacitor/app": "^8.1.0",
     "@capacitor/core": "^8.3.4",
     "@capacitor/splash-screen": "^8.0.1",
     "@nuxtjs/color-mode": "^4.0.0",
