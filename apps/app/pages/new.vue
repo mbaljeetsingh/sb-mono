@@ -26,6 +26,7 @@ import LookAndFeelCards from '~/components/match/LookAndFeelCards.vue';
 import PlayerChips from '~/components/match/PlayerChips.vue';
 import SportPicker from '~/components/match/SportPicker.vue';
 import ThemePickerDialog from '~/components/match/ThemePickerDialog.vue';
+import { useTabBarHidden } from '~/composables/useTabBarHidden';
 import { joinNames } from '~/lib/partner-swap';
 import { namesInPlay } from '~/lib/recent-players';
 import {
@@ -456,6 +457,7 @@ const formatSummary = computed(() => {
 // useSupabaseUser() — the latter can lag on first paint and result in
 // owner_id=null even when the user is signed in.
 const userStore = useUserStore();
+const isTabBarHidden = useTabBarHidden();
 
 // Persist meta + format + create the matches row, then navigate. This is the
 // only writer to the `matches` row — no lazy-create path elsewhere. If this
@@ -844,11 +846,14 @@ const createMatch = async () => {
 
         <!-- Mobile: anchored to the bottom edge and padded to clear the tab
              bar (MobileTabBar is a detached pill that hides on scroll-down).
-             Desktop: no tab bar and a short form, so the CTA rejoins the flow
-             under the players. The summary line restates what Start will
-             create. -->
+             When the bar hides, the footer slides down by the bar's
+             footprint in step with it (same duration/easing), so no empty
+             bar-sized strip is left under the CTA. Desktop: no tab bar and a
+             short form, so the CTA rejoins the flow under the players. The
+             summary line restates what Start will create. -->
         <footer
-          class="fixed inset-x-0 bottom-0 z-10 space-y-2 border-t border-border bg-background px-4 pt-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:static md:border-t-0 md:px-0 md:pt-2 md:pb-10"
+          class="fixed inset-x-0 bottom-0 z-10 space-y-2 border-t border-border bg-background px-4 pt-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] transition-transform duration-300 ease-out motion-reduce:transition-none md:static md:translate-y-0 md:border-t-0 md:px-0 md:pt-2 md:pb-10"
+          :class="isTabBarHidden && 'translate-y-16'"
         >
           <p class="text-center text-xs text-muted-foreground">
             {{ formatSummary }}

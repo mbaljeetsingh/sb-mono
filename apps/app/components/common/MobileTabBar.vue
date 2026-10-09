@@ -24,6 +24,7 @@ import {
 import type { Component } from 'vue';
 import { computed, ref, watch } from 'vue';
 import { useAuth } from '~/composables/useAuth';
+import { useTabBarHidden } from '~/composables/useTabBarHidden';
 import { useUserStore } from '~/stores/user';
 
 const route = useRoute();
@@ -67,7 +68,7 @@ const isActive = (tabRoute: string) => {
 // shown. Programmatic jumps (route scroll restoration) re-anchor via the
 // route watcher instead of counting as gestures.
 const { y: scrollY } = useWindowScroll();
-const isBarHidden = ref(false);
+const isBarHidden = useTabBarHidden();
 const SHOW_NEAR_TOP = 80;
 const TRIGGER_DISTANCE = 24;
 const SETTLE_MS = 700;
