@@ -41,7 +41,10 @@ const PUBLIC_EXACT = new Set<string>([
 // e.g. /m/abc/scoreboard, /m/abc/overlay, /d/abc/overlay
 const PUBLIC_SUFFIXES = ['/scoreboard', '/overlay'];
 
-const isPublicRoute = (path: string): boolean => {
+// The static host 301s /privacy to /privacy/ (one prerendered dir per page),
+// so compare without the trailing slash or the legal pages get gated.
+const isPublicRoute = (rawPath: string): boolean => {
+  const path = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : rawPath;
   if (PUBLIC_EXACT.has(path)) return true;
   if (PUBLIC_PREFIXES.some((p) => path.startsWith(p))) return true;
   if (PUBLIC_SUFFIXES.some((s) => path.endsWith(s))) return true;
