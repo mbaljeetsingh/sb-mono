@@ -117,3 +117,7 @@ When you do update, do it in the same commit as the code, and keep the entry con
 ## When in doubt
 
 Ask one question at a time when scope is ambiguous. The user prefers incremental decisions over batched plans on architecture-level forks.
+
+## Git
+
+Never commit or stage; leave changes unstaged for the owner.
